@@ -105,6 +105,12 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Named starting policy (see policies.py); explicit --policy fields override it. "
         f"Choices: {sorted(_PRESET_NAMES)}.",
     )
+    p_execute.add_argument(
+        "--evidence-dir",
+        help="Directory for execute's own reports/receipt.json (default: ./reports, same default as "
+        "`receipt` — FIX_PROMPT P2-5. Previously always output_path.parent/'reports', which put the "
+        "receipt somewhere different than `receipt`'s default for the exact same input/output).",
+    )
     p_execute.add_argument("--dry-run", action="store_true")
     common(p_execute)
 
@@ -258,7 +264,13 @@ def _cmd_execute(args: argparse.Namespace) -> int:
     policy = _resolve_policy_arg(args)
     input_path = Path(args.input)
     output_path = Path(args.output) if args.output else default_output_path(input_path, args.operation)
-    evidence_dir = output_path.parent / "reports"
+    # FIX_PROMPT P2-5: default is now cwd-relative "./reports", matching
+    # `receipt`'s own default exactly, instead of output_path.parent /
+    # "reports" - the latter put an `--output /tmp/out.pdf` execute's
+    # receipt.json at /tmp/reports, a different place than `receipt`'s
+    # default for the exact same input/output, which could read as "no
+    # receipt was written" to an agent checking the conventional location.
+    evidence_dir = Path(args.evidence_dir) if args.evidence_dir else Path("reports")
 
     result = run_lifecycle(
         input_path, args.operation, op_args, output_path,

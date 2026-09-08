@@ -72,7 +72,14 @@ def test_contract_schema_and_exit_codes_present():
 # ARGS, not a silent ignore (additionalProperties: false rejected it
 # outright). It's now a real input_schema property on those four tools,
 # so it's checked like any other property in both directions below.
-_CLI_ONLY_FLAGS = {"json", "evidence_dir", "help"}
+#
+# "evidence_dir" is NOT here either (FIX_PROMPT P2-5): `receipt`'s CLI
+# flag already existed, but the property didn't - the MCP handler read
+# args.get("evidence_dir", ...) yet additionalProperties:false meant no
+# real MCP caller could ever reach that branch. `execute` gained the same
+# flag/property pair for the first time in the same fix, so both are now
+# real schema properties with matching CLI flags.
+_CLI_ONLY_FLAGS = {"json", "help"}
 
 
 def test_cli_flags_match_input_schema_properties_in_both_directions():

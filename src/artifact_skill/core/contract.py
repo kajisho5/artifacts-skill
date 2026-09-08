@@ -246,6 +246,11 @@ TOOLS: list[ToolContract] = [
                     "description": "Named starting policy from policies.py (e.g. \"print-a4\", "
                     "\"web-no-external\"); 'policy' fields override it on conflict. See docs/verification.md.",
                 },
+                "evidence_dir": {
+                    "type": "string",
+                    "description": "Directory for execute's own reports/receipt.json (default: "
+                    "\"./reports\", same default as `receipt` — FIX_PROMPT P2-5).",
+                },
                 "dry_run": {
                     "type": "boolean",
                     "description": "Run the identical plan/validation path but perform no I/O and spawn "
@@ -399,6 +404,13 @@ TOOLS: list[ToolContract] = [
                     "description": "Fix-loop retry cap. Default (when omitted): Limits.max_fix_iterations "
                     "(currently 3) - omitting this does NOT mean 'don't retry.' Meaningless without "
                     "'operation' (there is no fix loop for a verify-only receipt).",
+                },
+                "evidence_dir": {
+                    "type": "string",
+                    "description": "Directory for the receipt and evidence (default: \"./reports\"). "
+                    "FIX_PROMPT P2-5/self-audit: this was already read by the MCP handler but was never a "
+                    "declared schema property, so additionalProperties:false silently rejected every real "
+                    "MCP caller that tried to pass it — dead code in practice, now reachable.",
                 },
                 "dry_run": {
                     "type": "boolean",

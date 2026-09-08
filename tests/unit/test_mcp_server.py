@@ -122,6 +122,38 @@ def test_look_dry_run_is_accepted_and_performs_no_render(good_pdf, tmp_path):
     assert not out_dir.exists()
 
 
+def test_execute_evidence_dir_is_accepted_and_overrides_the_default(good_pdf, tmp_path, monkeypatch):
+    """FIX_PROMPT P2-5: execute's evidence_dir property (and default,
+    unified with receipt's) is now reachable over MCP too."""
+    monkeypatch.chdir(tmp_path)
+    out_dir = tmp_path / "elsewhere"
+    out_dir.mkdir()
+    result = call_tool(
+        f"{CAPABILITY_PREFIX}.execute",
+        {
+            "input": str(good_pdf), "operation": "metadata_set", "args": {"title": "x"},
+            "output": str(out_dir / "out.pdf"), "evidence_dir": "custom_evidence",
+        },
+    )
+    assert result["isError"] is False
+    assert (tmp_path / "custom_evidence" / "receipt.json").exists()
+
+
+def test_receipt_evidence_dir_is_accepted_not_rejected_as_an_unknown_property(good_pdf, tmp_path, monkeypatch):
+    """Self-audit finding while wiring P2-4: _h_receipt already read
+    args.get("evidence_dir", ...) but the property was never declared in
+    receipt's input_schema, so additionalProperties:false rejected every
+    real MCP caller that tried to pass it — confirmed by direct
+    reproduction before this fix (ARTIFACT_INVALID_ARGS on the exact same
+    call this test makes)."""
+    monkeypatch.chdir(tmp_path)
+    result = call_tool(
+        f"{CAPABILITY_PREFIX}.receipt", {"input": str(good_pdf), "evidence_dir": "custom_evidence"}
+    )
+    assert result["isError"] is False
+    assert (tmp_path / "custom_evidence" / "receipt.json").exists()
+
+
 def test_receipt_dry_run_is_accepted_and_performs_no_mutation(good_pdf, tmp_path):
     out = tmp_path / "out.pdf"
     result = call_tool(

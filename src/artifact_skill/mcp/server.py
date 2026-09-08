@@ -178,7 +178,10 @@ def _h_execute(args: dict[str, Any]) -> dict[str, Any]:
     input_path = Path(args["input"])
     operation = args["operation"]
     output_path = Path(args["output"]) if args.get("output") else default_output_path(input_path, operation)
-    evidence_dir = output_path.parent / "reports"
+    # FIX_PROMPT P2-5: default is now cwd-relative "./reports", matching
+    # `receipt`'s own default exactly, instead of output_path.parent /
+    # "reports" - mirrors cli/main.py::_cmd_execute's identical fix.
+    evidence_dir = Path(args["evidence_dir"]) if args.get("evidence_dir") else Path("reports")
     policy = _resolve_policy_arg(args)
     # FIX_PROMPT P2-4: the contract advertises dry_run_supported=true for
     # this tool, but until this fix the MCP input_schema had no "dry_run"

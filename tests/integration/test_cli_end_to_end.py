@@ -197,6 +197,36 @@ def test_execute_gates_its_own_receipt_with_an_explicit_policy(good_pdf, tmp_pat
     assert data["receipt"]["status"] == "fail"
 
 
+def test_execute_default_evidence_dir_matches_receipts_default(good_pdf, tmp_path):
+    """FIX_PROMPT P2-5: execute used to always write its receipt to
+    output_path.parent/'reports', which diverged from `receipt`'s own
+    cwd-relative './reports' default whenever --output pointed outside
+    cwd - confirmed by direct reproduction before this fix that an
+    absolute --output path put the receipt somewhere an agent checking
+    the conventional ./reports location would never find it."""
+    out_dir = tmp_path / "elsewhere"
+    out_dir.mkdir()
+    proc = run_cli(
+        ["execute", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}',
+         "--output", str(out_dir / "out.pdf"), "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 0
+    assert (tmp_path / "reports" / "receipt.json").exists()
+    assert not (out_dir / "reports" / "receipt.json").exists()
+
+
+def test_execute_evidence_dir_flag_overrides_the_default(good_pdf, tmp_path):
+    proc = run_cli(
+        ["execute", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}',
+         "--output", "out.pdf", "--evidence-dir", "custom_evidence", "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 0
+    assert (tmp_path / "custom_evidence" / "receipt.json").exists()
+    assert not (tmp_path / "reports" / "receipt.json").exists()
+
+
 def test_execute_accepts_policy_preset(good_pdf, tmp_path):
     proc = run_cli(
         ["execute", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}',
