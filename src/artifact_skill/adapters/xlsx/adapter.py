@@ -49,6 +49,7 @@ from artifact_skill.core.verification import Check, CheckStatus, VerificationRes
 from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.office_convert import convert_to_pdf, soffice_binary
 from artifact_skill.rendering.pdf_pages import render_pdf_pages
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import atomic_copy, check_input_size
 from artifact_skill.security.xml_safety import reject_xml_entities_in_zip
 
@@ -321,9 +322,9 @@ class XlsxAdapter(ArtifactAdapter):
 
     # ---- render ----------------------------------------------------
 
-    def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
+    def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
         with tempfile.TemporaryDirectory(prefix="artifact-skill-xlsx-render-") as tmp:
-            pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf")
+            pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf", limits=limits)
             return render_pdf_pages(pdf_path, out_dir)
 
     # ---- verify ------------------------------------------------------

@@ -205,7 +205,7 @@ def test_render_propagates_backend_failure(good_pptx, adapter, tmp_path, monkeyp
     helper and doesn't swallow or reshape its error."""
     import artifact_skill.adapters.pptx.adapter as adapter_module
 
-    def _fake_convert(input_path, pdf_out_dir):
+    def _fake_convert(input_path, pdf_out_dir, **kwargs):
         raise ArtifactExecutionError(
             code="ARTIFACT_RENDER_BACKEND_FAILED", message="fake failure for testing",
             evidence={"stderr": "fake soffice failure for testing"},

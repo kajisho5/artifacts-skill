@@ -17,6 +17,7 @@ from artifact_skill.core.artifact import ArtifactRef, ArtifactType, InspectionRe
 from artifact_skill.core.capability import Capability
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import VerificationResult
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 
 
 @dataclass(frozen=True)
@@ -108,8 +109,15 @@ class ArtifactAdapter(ABC):
     ) -> ArtifactRef:
         """Perform `operation`, writing only to `output_path` (never to `ref.path`)."""
 
-    def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
+    def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
         """Produce a visual representation for Agent/human inspection.
+
+        `limits` governs whatever this adapter's render backend needs a
+        timeout for (Chromium for HTML/SVG, LibreOffice for PPTX/DOCX/XLSX
+        — see `security/limits.py::Limits.render_timeout_seconds`); an
+        adapter with no timeout-governed render step (PDF, Image) accepts
+        and ignores it rather than omitting the parameter, so every
+        override shares one real interface.
 
         Default: not implemented. Adapters that can render must override.
         """

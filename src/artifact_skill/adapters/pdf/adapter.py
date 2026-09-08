@@ -22,6 +22,7 @@ from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
 from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.pdf_pages import render_pdf_pages
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import atomic_write_bytes, check_input_size
 
 _PT_PER_INCH = 72.0
@@ -660,7 +661,11 @@ class PdfAdapter(ArtifactAdapter):
 
     # ---- render ----------------------------------------------------
 
-    def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
+    def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
+        # pypdfium2 renders in-process with no timeout-governed step —
+        # `limits` is accepted (not omitted) so every adapter's render()
+        # shares one real interface (see adapters/base.py), but unused here.
+        del limits
         return render_pdf_pages(ref.path, out_dir)
 
     # ---- verify ------------------------------------------------------

@@ -201,7 +201,19 @@ A single `Limits` dataclass (`DEFAULT_LIMITS`) is the only place any of
 these numbers live. No adapter hardcodes its own "too big" constant. A
 caller who genuinely needs to raise a limit does so by passing a different
 `Limits` instance explicitly (visible in code review), never by a hidden
-per-format exception.
+per-format exception. This claim used to be aspirational for one field:
+`render_timeout_seconds` was declared here but never actually read
+anywhere — `rendering/chromium_render.py` had its own separate, hardcoded
+30s module constant instead, completely disconnected from `Limits` (Issue
+#28). Fixed by threading `limits: Limits = DEFAULT_LIMITS` through
+`ArtifactAdapter.render()` and every override down to the two render
+backends that actually have a timeout to govern: `render_timeout_seconds`
+for the Chromium-backed path (HTML/SVG) and `subprocess_timeout_seconds`
+for the LibreOffice-backed one (PPTX/DOCX/XLSX, via
+`rendering/office_convert.py::convert_to_pdf()`). PDF and Image accept the
+same `limits` parameter for interface consistency (every `render()`
+override shares one real signature) but ignore it — neither backend
+(pypdfium2, Pillow) has a timeout-governed step to control.
 
 ## Network policy
 

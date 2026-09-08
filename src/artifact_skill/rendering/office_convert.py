@@ -16,6 +16,7 @@ import tempfile
 from pathlib import Path
 
 from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactExecutionError
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.subprocess_exec import run as run_subprocess
 
 SOFFICE_ALLOWLIST = {"soffice", "libreoffice"}
@@ -41,9 +42,16 @@ def require_soffice_binary(capability_id: str) -> str:
     return binary
 
 
-def convert_to_pdf(input_path: Path, pdf_out_dir: Path) -> Path:
+def convert_to_pdf(input_path: Path, pdf_out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> Path:
     """Convert `input_path` to PDF via LibreOffice headless, returning the
     produced PDF's path (inside a fresh, per-call `pdf_out_dir`).
+
+    `limits.subprocess_timeout_seconds` governs the soffice call, via
+    `run_subprocess()`'s own `limits` parameter — passed through explicitly
+    here (rather than left to `run_subprocess()`'s default) so a caller's
+    own `Limits` override actually reaches this subprocess, the same way
+    the Chromium-backed render path now honors `render_timeout_seconds`
+    (Issue #28).
 
     Raises `ArtifactCapabilityError` if no soffice binary is on PATH, or
     `ArtifactExecutionError` (code `ARTIFACT_RENDER_BACKEND_FAILED`,
@@ -62,6 +70,7 @@ def convert_to_pdf(input_path: Path, pdf_out_dir: Path) -> Path:
                 "--convert-to", "pdf", "--outdir", str(pdf_out_dir), str(input_path),
             ],
             allowlist=SOFFICE_ALLOWLIST,
+            limits=limits,
         )
         produced = list(pdf_out_dir.glob("*.pdf"))
         if result.returncode != 0 or not produced:

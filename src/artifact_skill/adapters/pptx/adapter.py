@@ -34,6 +34,7 @@ from artifact_skill.core.verification import Check, CheckStatus, VerificationRes
 from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.office_convert import convert_to_pdf, soffice_binary
 from artifact_skill.rendering.pdf_pages import render_pdf_pages
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import atomic_copy, check_input_size
 
 _EMU_PER_INCH = 914400
@@ -314,9 +315,9 @@ class PptxAdapter(ArtifactAdapter):
 
     # ---- render ----------------------------------------------------
 
-    def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
+    def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
         with tempfile.TemporaryDirectory(prefix="artifact-skill-pptx-render-") as tmp:
-            pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf")
+            pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf", limits=limits)
             # render_pdf_pages needs the intermediate PDF to survive past
             # this `with` block's cleanup, so render directly from it now
             # rather than returning a path that's about to be deleted.

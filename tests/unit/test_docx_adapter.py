@@ -134,7 +134,7 @@ def test_capabilities_report_never_lies_about_probe_result(adapter):
 def test_render_propagates_backend_failure(good_docx, adapter, tmp_path, monkeypatch):
     import artifact_skill.adapters.docx.adapter as adapter_module
 
-    def _fake_convert(input_path, pdf_out_dir):
+    def _fake_convert(input_path, pdf_out_dir, **kwargs):
         raise ArtifactExecutionError(
             code="ARTIFACT_RENDER_BACKEND_FAILED", message="fake failure for testing",
             evidence={"stderr": "fake soffice failure for testing"},

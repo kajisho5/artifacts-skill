@@ -117,7 +117,8 @@ def run_lifecycle(
         # all, rather than an agent hand-assembling one from separate
         # inspect/render/verify calls.
         return _run_verify_only_lifecycle(
-            input_path, policy=policy, evidence_dir=evidence_dir, dry_run=dry_run, capability_report=capability_report
+            input_path, policy=policy, evidence_dir=evidence_dir, dry_run=dry_run,
+            capability_report=capability_report, limits=limits,
         )
 
     if output_path is None:
@@ -190,6 +191,7 @@ def run_lifecycle(
         visual, rendered = _visual_evidence_result(
             adapter=adapter, ref=output_ref, evidence_dir=evidence_dir,
             capability_report=capability_report, spec_render_required=bool(spec and spec.render_required),
+            limits=limits,
         )
         if rendered is not None:
             render_result = rendered
@@ -254,6 +256,7 @@ def _run_verify_only_lifecycle(
     evidence_dir: Path,
     dry_run: bool,
     capability_report: CapabilityReport | None,
+    limits: Limits = DEFAULT_LIMITS,
 ) -> LifecycleResult:
     ref = ArtifactRef.from_path(input_path)
     adapter = adapter_for(ref)
@@ -289,7 +292,7 @@ def _run_verify_only_lifecycle(
     # geometry). A missing render capability reports SKIPPED, not UNKNOWN.
     visual, rendered = _visual_evidence_result(
         adapter=adapter, ref=ref, evidence_dir=evidence_dir,
-        capability_report=capability_report, spec_render_required=False,
+        capability_report=capability_report, spec_render_required=False, limits=limits,
     )
     structural = adapter.refine_structural_with_render(structural, rendered)
     builder.set_structural(structural)
@@ -312,6 +315,7 @@ def _visual_evidence_result(
     evidence_dir: Path,
     capability_report: CapabilityReport,
     spec_render_required: bool,
+    limits: Limits = DEFAULT_LIMITS,
 ) -> tuple[VerificationResult, RenderResult | None]:
     """Returns the visual VerificationResult plus the real RenderResult (or
     None if nothing was rendered) — the caller must use the latter's own
@@ -341,7 +345,7 @@ def _visual_evidence_result(
             None,
         )
     try:
-        rendered = adapter.render(ref, evidence_dir / "rendered")
+        rendered = adapter.render(ref, evidence_dir / "rendered", limits=limits)
     except ArtifactError as exc:
         return (
             VerificationResult(
