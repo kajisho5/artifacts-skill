@@ -1,0 +1,36 @@
+{
+  "name": "artifact-skill",
+  "version": "0.1.0",
+  "description": "A local-first verification and evidence-generation engine for AI-generated documents: inspect, plan, execute, render, verify, and receipt PDF/PPTX/DOCX/XLSX/image/HTML/SVG artifacts, locally.",
+  "bin": {
+    "artifact-skill": "bin/artifact-skill.js"
+  },
+  "files": [
+    "bin",
+    "src/artifact_skill",
+    "schemas",
+    "pyproject.toml",
+    "SKILL.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "postinstall": "node bin/postinstall.js"
+  },
+  "keywords": [
+    "agent-skill",
+    "mcp",
+    "pdf",
+    "document-verification",
+    "ai-agent",
+    "claude-code"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kajisho5/artifacts-skill"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
