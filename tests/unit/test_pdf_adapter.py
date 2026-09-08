@@ -456,6 +456,30 @@ def test_verify_page_size_requirement_carries_fixer_evidence(good_pdf, adapter, 
     assert check.evidence["actual_width_pt"] == pytest.approx(612, abs=0.5)
 
 
+def test_verify_page_size_requirement_checks_every_page_not_just_the_first(adapter, tmp_path):
+    """External-review finding (verified by direct reproduction before
+    this fix): only page_sizes[0] was checked - a document whose first
+    page matched the requirement but whose other pages didn't (e.g. an A4
+    cover page followed by US Letter body pages) reported
+    page_size_requirement=PASS regardless, even though fit_page_size's own
+    fixer (see execute()) already scales every page, not just the first -
+    this was purely a verification gap."""
+    import pypdf
+
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=595, height=842)  # A4
+    writer.add_blank_page(width=612, height=792)  # US Letter - mismatched
+    path = tmp_path / "mixed.pdf"
+    with open(path, "wb") as f:
+        writer.write(f)
+
+    ref = ArtifactRef.from_path(path)
+    result = adapter.verify_structural(ref, {"require_page_size_pt": (595, 842), "page_size_tolerance_pt": 1.0})
+    check = next(c for c in result.checks if c.id == "page_size_requirement")
+    assert check.status == CheckStatus.FAIL
+    assert check.evidence["mismatched_pages"] == [{"page": 2, "width_pt": 612.0, "height_pt": 792.0}]
+
+
 def test_fix_returns_corrected_args_for_page_size_mismatch(adapter, good_pdf):
     """Given the exact failed_result shape verify_structural() produces,
     fix() must read the expected size and hand back args that would fix it —

@@ -807,23 +807,44 @@ class PdfAdapter(ArtifactAdapter):
         if "require_page_size_pt" in policy and details["page_sizes"]:
             expected_w, expected_h = policy["require_page_size_pt"]
             tolerance = policy.get("page_size_tolerance_pt", 1.0)
+            # Self-audit finding (external review, verified by direct
+            # reproduction): this used to check only page_sizes[0] - a
+            # document whose first page matched the requirement but whose
+            # other pages didn't (e.g. an A4 cover page followed by US
+            # Letter body pages) reported page_size_requirement=PASS
+            # regardless, even under a policy explicitly requiring every
+            # page match one size. Checked against every page now; the
+            # fixer (fit_page_size, see fix() below) already scales every
+            # page, not just the first, so this was purely a verification
+            # gap, not a mismatch with what the fixer actually does.
+            mismatched = [
+                {"page": i + 1, "width_pt": s["width_pt"], "height_pt": s["height_pt"]}
+                for i, s in enumerate(details["page_sizes"])
+                if abs(s["width_pt"] - expected_w) > tolerance or abs(s["height_pt"] - expected_h) > tolerance
+            ]
             first = details["page_sizes"][0]
-            ok = abs(first["width_pt"] - expected_w) <= tolerance and abs(first["height_pt"] - expected_h) <= tolerance
             checks.append(
                 Check(
                     id="page_size_requirement",
                     name="Page size matches requirement",
-                    status=CheckStatus.PASS if ok else CheckStatus.FAIL,
-                    message=f"expected ({expected_w}, {expected_h})pt, got "
-                    f"({first['width_pt']}, {first['height_pt']})pt.",
+                    status=CheckStatus.FAIL if mismatched else CheckStatus.PASS,
+                    message=f"expected every page at ({expected_w}, {expected_h})pt; "
+                    f"{len(mismatched)}/{len(details['page_sizes'])} page(s) did not match."
+                    if mismatched else f"All {len(details['page_sizes'])} page(s) match ({expected_w}, {expected_h})pt.",
                     # width_pt/height_pt here (not a nested pair) is what
                     # PdfAdapter.fix() reads to build corrected fit_page_size
                     # args — keep this shape stable, it's a fixer contract.
+                    # actual_width_pt/actual_height_pt report the first
+                    # page's size regardless of which page(s) mismatched
+                    # (fix()/fit_page_size scales every page uniformly, so
+                    # there is only ever one "current" target size to
+                    # retry with); mismatched_pages carries the full detail.
                     evidence={
                         "expected_width_pt": expected_w,
                         "expected_height_pt": expected_h,
                         "actual_width_pt": first["width_pt"],
                         "actual_height_pt": first["height_pt"],
+                        "mismatched_pages": mismatched,
                     },
                 )
             )
