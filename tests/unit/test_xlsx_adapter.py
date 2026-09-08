@@ -6,7 +6,7 @@ import pytest
 
 from artifact_skill.adapters.xlsx.adapter import XlsxAdapter
 from artifact_skill.core.artifact import ArtifactRef, ArtifactType
-from artifact_skill.core.errors import ArtifactExecutionError, ArtifactInputError
+from artifact_skill.core.errors import ArtifactExecutionError, ArtifactInputError, ArtifactSecurityError
 from artifact_skill.core.verification import CheckStatus
 
 
@@ -42,6 +42,25 @@ def test_inspect_corrupt_xlsx_raises_structured_error(corrupt_xlsx, adapter):
     with pytest.raises(ArtifactInputError) as exc_info:
         adapter.inspect(ref)
     assert exc_info.value.code == "ARTIFACT_XLSX_UNREADABLE"
+
+
+def test_inspect_rejects_entity_declaration_before_opening(entity_bomb_xlsx, adapter):
+    """Issue #21: openpyxl's worksheet reader resolves and amplifies a
+    DOCTYPE-declared entity when nothing intercepts it first (confirmed by
+    direct testing against this project's own dependency set, where the
+    `xlsx` extra alone pulls in neither lxml nor defusedxml) - the guard
+    must reject the file before openpyxl.load_workbook() is ever called."""
+    ref = ArtifactRef.from_path(entity_bomb_xlsx)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.inspect(ref)
+    assert exc_info.value.code == "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED"
+
+
+def test_execute_rejects_entity_declaration_before_opening(entity_bomb_xlsx, adapter, tmp_path):
+    ref = ArtifactRef.from_path(entity_bomb_xlsx)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.execute(ref, "metadata_set", {"title": "x"}, tmp_path / "out.xlsx")
+    assert exc_info.value.code == "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED"
 
 
 def test_verify_no_formula_workbook_skips_formula_checks(no_formula_xlsx, adapter):

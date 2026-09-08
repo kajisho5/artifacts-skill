@@ -184,8 +184,18 @@ agent reading the error can tell "we haven't built this yet" apart from
 - **Structural checks**: XLSX readability, sheet count (+ optional exact/
   range requirement, optional required-sheet-names check), external
   workbook links (`WARN` by default — not fetched, per `docs/security.md`'s
-  network-off-by-default policy), `formula_cached_errors`, and
+  network-off-by-default policy), leftover generation-artifact text across
+  every cell's string value (`leftover_placeholder_text`, `WARN` by
+  default, `FAIL` under `forbid_placeholder_text` — shared
+  `leftover_text.py` marker list), `formula_cached_errors`, and
   `formula_recalculation`.
+- **XML entity-expansion guard (Issue #21)**: unlike python-pptx/
+  python-docx, `openpyxl` only hardens its XML parsing when `lxml` or
+  `defusedxml` happens to be importable — neither of which this project's
+  own `xlsx` extra installs. `inspect()`/`execute()` both call
+  `security/xml_safety.py::reject_xml_entities_in_zip()` before
+  `openpyxl.load_workbook()` ever runs; see `docs/security.md` for the
+  full audit (including why PPTX/DOCX did *not* need the same guard).
 - **The recalculation decision (Issue #5)**: `openpyxl` cannot evaluate
   formulas — it can only read whatever cached result (if any) the last
   application to save the file computed. This adapter deliberately does

@@ -183,6 +183,13 @@ def corrupt_xlsx(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
+def entity_bomb_xlsx(tmp_path: Path) -> Path:
+    dst = tmp_path / "entity_bomb.xlsx"
+    shutil.copy(XLSX_FIXTURES_DIR / "entity_bomb.xlsx", dst)
+    return dst
+
+
+@pytest.fixture()
 def external_link_xlsx(tmp_path: Path) -> Path:
     dst = tmp_path / "external_link.xlsx"
     shutil.copy(XLSX_FIXTURES_DIR / "external_link.xlsx", dst)

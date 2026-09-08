@@ -329,6 +329,33 @@ def make_no_formula_xlsx() -> None:
     wb.save(str(path))
 
 
+def make_entity_bomb_xlsx() -> None:
+    """A DOCTYPE declaring a custom entity, injected into the worksheet
+    XML part — not an actual expansion bomb (a real one would be
+    unpleasant to keep in a test fixture directory), just enough to prove
+    security/xml_safety.py's reject_xml_entities_in_zip() catches the
+    pattern before openpyxl ever opens the file (Issue #21: confirmed by
+    direct testing that openpyxl's worksheet reader resolves and amplifies
+    exactly this shape when nothing intercepts it first)."""
+    path = XLSX_OUT_DIR / "entity_bomb.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws["A1"] = "hello"
+    wb.save(str(path))
+    with zipfile.ZipFile(path, "r") as zf:
+        items = {name: zf.read(name) for name in zf.namelist()}
+    sheet_xml = items["xl/worksheets/sheet1.xml"].decode("utf-8")
+    injected = sheet_xml.replace(
+        "<worksheet ",
+        '<!DOCTYPE worksheet [<!ENTITY xxe "PWNED">]>\n<worksheet ',
+        1,
+    )
+    items["xl/worksheets/sheet1.xml"] = injected.encode("utf-8")
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, data in items.items():
+            zf.writestr(name, data)
+
+
 def make_leftover_placeholder_xlsx() -> None:
     """A cell still holds unreviewed placeholder text - leftover_placeholder_text
     must WARN (or FAIL under forbid_placeholder_text), the XLSX equivalent
@@ -628,6 +655,7 @@ if __name__ == "__main__":
     make_no_formula_xlsx()
     make_leftover_placeholder_xlsx()
     make_external_link_xlsx()
+    make_entity_bomb_xlsx()
     make_corrupt_xlsx()
     make_mislabeled_pdf_as_xlsx()
 

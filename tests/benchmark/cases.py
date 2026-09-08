@@ -197,6 +197,12 @@ EXCEPTION_CASES: list[ExceptionCase] = [
         "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED",
         "XML entity-expansion DoS payload; rejected before parsing, not reported as a Check.",
     ),
+    ExceptionCase(
+        "xlsx/entity_bomb.xlsx",
+        "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED",
+        "XML entity-expansion DoS payload in xl/worksheets/sheet1.xml (Issue #21) — rejected before "
+        "openpyxl.load_workbook() is ever called, not reported as a Check.",
+    ),
 ]
 
 KNOWN_GOOD_CASES: list[KnownGoodCase] = [
