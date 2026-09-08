@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+node_modules/
+reports/
+*.tmp
+
+# Scratch outputs from manual smoke-testing; fixtures under tests/ are tracked.
+/scratch/

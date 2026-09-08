@@ -1,0 +1,35 @@
+{
+  "name": "artifact-skill",
+  "version": "0.1.0",
+  "description": "Give your coding agent a production-grade artifact pipeline: inspect, plan, execute, render, verify, and receipt AI-generated documents, locally.",
+  "bin": {
+    "artifact-skill": "bin/artifact-skill.js"
+  },
+  "files": [
+    "bin",
+    "src/artifact_skill",
+    "pyproject.toml",
+    "SKILL.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "postinstall": "node bin/postinstall.js"
+  },
+  "keywords": [
+    "agent-skill",
+    "mcp",
+    "pdf",
+    "document-verification",
+    "ai-agent",
+    "claude-code"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kajisho5/artifacts-skill"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

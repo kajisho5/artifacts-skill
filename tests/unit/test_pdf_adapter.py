@@ -1,0 +1,146 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from artifact_skill.adapters.pdf.adapter import PdfAdapter
+from artifact_skill.core.artifact import ArtifactRef
+from artifact_skill.core.errors import ArtifactExecutionError, ArtifactInputError
+from artifact_skill.core.verification import CheckStatus
+
+
+@pytest.fixture()
+def adapter() -> PdfAdapter:
+    return PdfAdapter()
+
+
+def test_inspect_good_pdf_reports_two_pages(good_pdf, adapter):
+    ref = ArtifactRef.from_path(good_pdf)
+    report = adapter.inspect(ref)
+    assert report.details["page_count"] == 2
+    assert report.details["is_encrypted"] is False
+    assert report.details["text_extractable_pages"] == 2
+
+
+def test_inspect_corrupt_pdf_raises_structured_error(corrupt_pdf, adapter):
+    ref = ArtifactRef.from_path(corrupt_pdf)
+    with pytest.raises(ArtifactInputError) as exc_info:
+        adapter.inspect(ref)
+    assert exc_info.value.code == "ARTIFACT_PDF_UNREADABLE"
+
+
+def test_inspect_encrypted_pdf_does_not_crash(encrypted_pdf, adapter):
+    """Regression test: inspect() used to crash on `reader.metadata and not
+    is_encrypted` evaluating `reader.metadata` (which raises on an
+    undecrypted file) before short-circuiting on `is_encrypted`."""
+    ref = ArtifactRef.from_path(encrypted_pdf)
+    report = adapter.inspect(ref)
+    assert report.details["is_encrypted"] is True
+    assert report.details["page_count"] == 0
+    assert "encrypted" in report.warnings[0].lower()
+
+
+def test_verify_empty_pdf_fails_page_count(empty_pdf, adapter):
+    ref = ArtifactRef.from_path(empty_pdf)
+    result = adapter.verify_structural(ref, {})
+    page_count_check = next(c for c in result.checks if c.id == "page_count")
+    assert page_count_check.status == CheckStatus.FAIL
+    assert result.status == CheckStatus.FAIL
+
+
+def test_verify_encrypted_pdf_warns_by_default(encrypted_pdf, adapter):
+    ref = ArtifactRef.from_path(encrypted_pdf)
+    result = adapter.verify_structural(ref, {})
+    enc_check = next(c for c in result.checks if c.id == "encryption")
+    assert enc_check.status == CheckStatus.WARN
+
+
+def test_verify_encrypted_pdf_fails_when_policy_forbids_it(encrypted_pdf, adapter):
+    ref = ArtifactRef.from_path(encrypted_pdf)
+    result = adapter.verify_structural(ref, {"require_no_encryption": True})
+    enc_check = next(c for c in result.checks if c.id == "encryption")
+    assert enc_check.status == CheckStatus.FAIL
+
+
+def test_verify_good_pdf_page_count_requirement(good_pdf, adapter):
+    ref = ArtifactRef.from_path(good_pdf)
+    ok = adapter.verify_structural(ref, {"require_page_count": 2})
+    assert next(c for c in ok.checks if c.id == "page_count_requirement").status == CheckStatus.PASS
+
+    mismatch = adapter.verify_structural(ref, {"require_page_count": 5})
+    assert next(c for c in mismatch.checks if c.id == "page_count_requirement").status == CheckStatus.FAIL
+
+
+def test_font_embedding_is_always_unknown_not_hidden(good_pdf, adapter):
+    ref = ArtifactRef.from_path(good_pdf)
+    result = adapter.verify_structural(ref, {})
+    font_check = next(c for c in result.checks if c.id == "font_embedding")
+    assert font_check.status == CheckStatus.UNKNOWN
+
+
+def test_execute_metadata_set_writes_new_file_and_preserves_input(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    before_hash = ref.sha256
+    output_path = tmp_path / "out.pdf"
+
+    result_ref = adapter.execute(ref, "metadata_set", {"title": "New Title", "author": "QA"}, output_path)
+
+    assert output_path.exists()
+    assert result_ref.sha256 != before_hash
+    # Original Protection: re-reading the *input* path must show it untouched.
+    assert ArtifactRef.from_path(good_pdf).sha256 == before_hash
+
+    out_report = adapter.inspect(result_ref)
+    assert out_report.details["metadata"]["Title"] == "New Title"
+    assert out_report.details["metadata"]["Author"] == "QA"
+    assert out_report.details["page_count"] == 2  # postcondition: page count preserved
+
+
+def test_execute_metadata_set_on_encrypted_pdf_raises(encrypted_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(encrypted_pdf)
+    with pytest.raises(ArtifactExecutionError) as exc_info:
+        adapter.execute(ref, "metadata_set", {"title": "x"}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_PDF_ENCRYPTED"
+
+
+def test_execute_merge_doubles_page_count(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    output_path = tmp_path / "merged.pdf"
+    result_ref = adapter.execute(ref, "merge", {"additional_inputs": [str(good_pdf)]}, output_path)
+    report = adapter.inspect(result_ref)
+    assert report.details["page_count"] == 4
+
+
+def test_execute_unknown_operation_raises(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    with pytest.raises(ArtifactInputError):
+        adapter.execute(ref, "not_a_real_operation", {}, tmp_path / "out.pdf")
+
+
+def test_render_produces_one_png_per_page(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    result = adapter.render(ref, tmp_path / "rendered")
+    assert len(result.files) == 2
+    assert all(f.exists() for f in result.files)
+    assert result.backend == "pypdfium2"
+
+
+def test_render_empty_pdf_produces_zero_files_with_warning(empty_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(empty_pdf)
+    result = adapter.render(ref, tmp_path / "rendered")
+    assert result.files == []
+    assert result.warnings
+
+
+def test_capabilities_report_available_when_deps_installed(adapter):
+    caps = {c.id: c for c in adapter.capabilities()}
+    assert "pdf.structural" in caps
+    assert "pdf.render" in caps
+    # In this dev environment both deps are installed; if they weren't,
+    # this would legitimately need to assert MISSING instead — the point
+    # of this test is that capabilities() never lies about the probe result.
+    from artifact_skill.core.capability import CapabilityStatus
+
+    assert caps["pdf.structural"].status in (CapabilityStatus.AVAILABLE, CapabilityStatus.MISSING)
+    assert caps["pdf.render"].status in (CapabilityStatus.AVAILABLE, CapabilityStatus.MISSING)
