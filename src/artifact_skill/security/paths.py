@@ -13,6 +13,50 @@ from artifact_skill.core.errors import ArtifactSecurityError
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 
 
+def reject_output_overwrites_input(input_path: Path, output_path: Path) -> None:
+    """Refuse an `output_path` that would overwrite `input_path`.
+
+    Original Protection is documented everywhere (README, SKILL.md,
+    docs/security.md) as an absolute guarantee: the input file is never
+    modified, no matter what `--output` a caller passes. Before this
+    check, that guarantee only held by accident — every adapter's
+    `execute()` writes straight to whatever `output_path` it's given, so
+    `--output` equal to the input path (or a relative/absolute pair that
+    resolves to it, or a pre-existing hard link/symlink aliasing the same
+    file) silently overwrote the input instead of being rejected.
+
+    Two independent checks, since a symlink at `output_path` pointing at
+    `input_path` already collapses to equal strings under `.resolve()`
+    (which follows symlinks), but a *hard* link doesn't — same inode,
+    different path text:
+    - `.resolve()` equality catches the literal-same-path and
+      relative/absolute/symlink-aliasing cases.
+    - `(st_dev, st_ino)` equality (checked only when both paths already
+      exist as real files) catches a hard link `.resolve()` can't see.
+    """
+    input_resolved = input_path.resolve()
+    output_resolved = output_path.resolve()
+    same_path = input_resolved == output_resolved
+
+    same_inode = False
+    if not same_path and input_path.exists() and output_path.exists():
+        try:
+            in_stat = input_path.stat()
+            out_stat = output_path.stat()
+            same_inode = (in_stat.st_dev, in_stat.st_ino) == (out_stat.st_dev, out_stat.st_ino)
+        except OSError:
+            same_inode = False
+
+    if same_path or same_inode:
+        raise ArtifactSecurityError(
+            code="ARTIFACT_OUTPUT_OVERWRITES_INPUT",
+            message=f"Output path '{output_path}' would overwrite the input file '{input_path}'.",
+            remediation="Choose a different --output path. Original Protection never lets an operation "
+            "write back to its own input, even via a symlink, a hard link, or an equivalent relative path.",
+            evidence={"input_path": str(input_path), "output_path": str(output_path)},
+        )
+
+
 def resolve_within(base_dir: Path, candidate: Path) -> Path:
     """Resolve `candidate` and assert it stays inside `base_dir`.
 

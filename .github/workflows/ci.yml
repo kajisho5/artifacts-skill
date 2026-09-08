@@ -92,17 +92,51 @@ jobs:
               data = json.load(f)
           packed_paths = [e["path"] for e in data[0]["files"]]
 
-          # Every entry in package.json's `files` list must have actually
-          # landed in the tarball - a directory entry (e.g. "schemas",
-          # "src/artifact_skill") is satisfied by any packed path under
-          # that prefix, a file entry by an exact match. This checks the
-          # declaration and the real tarball agree, not a fixed subset
+          # Every *inclusion* entry in package.json's `files` list must have
+          # actually landed in the tarball - a directory entry (e.g.
+          # "schemas", "src/artifact_skill") is satisfied by any packed path
+          # under that prefix, a file entry by an exact match. This checks
+          # the declaration and the real tarball agree, not a fixed subset
           # hand-picked when this CI step was first written (that subset
           # silently stopped covering `schemas/` once it was added to
           # `files` without updating this check).
-          for entry in declared:
+          inclusions = [e for e in declared if not e.startswith("!")]
+          for entry in inclusions:
               matches = [p for p in packed_paths if p == entry or p.startswith(entry + "/")]
               assert matches, f"'{entry}' (from package.json's files list) has nothing packed under it: {sorted(packed_paths)}"
 
+          # Self-audit finding: npm's `files` field ignores .gitignore/
+          # .npmignore entirely once it's declared at all - a real `npm
+          # pack` run leaked every stale Python __pycache__/*.pyc under
+          # src/artifact_skill/ (present after any local pytest/module run,
+          # a completely ordinary state for whoever's machine runs `npm
+          # publish`) straight into the published tarball before the
+          # negation entries below were added. Assert the exclusion
+          # actually holds, not just that the negation patterns are present
+          # in package.json - a typo'd pattern would silently do nothing.
+          leaked = [p for p in packed_paths if "__pycache__" in p or p.endswith(".pyc")]
+          assert not leaked, f"stale Python bytecode leaked into the npm package: {leaked}"
+
           assert "bin/artifacts-skill.js" in packed_paths, "bin/artifacts-skill.js missing from npm package"
           EOF
+
+      - name: Install the npm package for real and run the CLI through it
+        run: |
+          # Everything above only checks the tarball's *contents* (npm pack
+          # --dry-run) - it never actually installs the package or executes
+          # bin/artifacts-skill.js, so a broken PYTHONPATH fallback (the
+          # path a real `npx artifacts-skill` hits before any `pip install`
+          # has ever run) could ship silently. Nothing on this runner has
+          # put a pip-installed "artifacts-skill" console script on PATH
+          # (the wheel install above is confined to /tmp/wheel-venv, never
+          # added to PATH), so this exercises the real fallback path, not
+          # the already-pip-installed shortcut.
+          npm pack
+          tarball=$(ls artifacts-skill-*.tgz)
+          mkdir -p /tmp/npm-install-test
+          cd /tmp/npm-install-test
+          npm init -y >/dev/null
+          npm install "$GITHUB_WORKSPACE/$tarball"
+          ! command -v artifacts-skill  # sanity: nothing else on PATH could make this pass by accident
+          node_modules/.bin/artifacts-skill --version
+          node_modules/.bin/artifacts-skill doctor --json > /dev/null

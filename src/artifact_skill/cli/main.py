@@ -28,13 +28,21 @@ from artifact_skill.adapters.registry import adapter_for
 from artifact_skill.core.artifact import ArtifactRef
 from artifact_skill.core.contract import build_contract
 from artifact_skill.core.engine import build_plan, run_lifecycle
-from artifact_skill.core.errors import EXIT_CODE_BY_CATEGORY, EXIT_FAIL, EXIT_OK, ArtifactError, ErrorCategory
+from artifact_skill.core.errors import (
+    EXIT_CODE_BY_CATEGORY,
+    EXIT_FAIL,
+    EXIT_OK,
+    ArtifactError,
+    ArtifactInputError,
+    ErrorCategory,
+)
 from artifact_skill.core.operation import default_output_path
 from artifact_skill.core.verification import CheckStatus
 from artifact_skill.doctor.detect import detect_environment
 from artifact_skill.policies import PRESETS as _PRESET_NAMES
 from artifact_skill.policies import resolve_policy
 from artifact_skill.rendering.contact_sheet import build_before_after, build_contact_sheet
+from artifact_skill.security.limits import DEFAULT_LIMITS
 from artifact_skill.security.subprocess_exec import treat_sigterm_as_interrupt
 
 
@@ -105,6 +113,12 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Named starting policy (see policies.py); explicit --policy fields override it. "
         f"Choices: {sorted(_PRESET_NAMES)}.",
     )
+    p_execute.add_argument(
+        "--evidence-dir",
+        help="Directory for execute's own reports/receipt.json (default: ./reports, same default as "
+        "`receipt` — FIX_PROMPT P2-5. Previously always output_path.parent/'reports', which put the "
+        "receipt somewhere different than `receipt`'s default for the exact same input/output).",
+    )
     p_execute.add_argument("--dry-run", action="store_true")
     common(p_execute)
 
@@ -149,7 +163,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_receipt.add_argument(
         "--max-iterations", type=int, default=None,
-        help="Fix-loop retry cap (default: Limits.max_fix_iterations, currently 3).",
+        help=f"Fix-loop retry cap, must be in [1, {DEFAULT_LIMITS.max_fix_iterations}] "
+        f"(default when omitted: {DEFAULT_LIMITS.max_fix_iterations}).",
     )
     p_receipt.add_argument("--evidence-dir", help="Directory for the receipt and evidence (default: ./reports).")
     p_receipt.add_argument("--dry-run", action="store_true")
@@ -159,12 +174,33 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _load_json_arg(raw: str, flag: str) -> dict[str, Any]:
+    # Self-audit finding (CLI/MCP parity audit): this used to raise a bare
+    # SystemExit(str) - a plain-text message to stderr that completely
+    # ignores --json, unlike every other error path in this CLI (which
+    # flows through main()'s `except ArtifactError` and honors --json by
+    # emitting structured {"error": {...}} JSON). Confirmed by direct
+    # reproduction: `verify doc.pdf --policy 'not json' --json` printed a
+    # plain "error: --policy is not valid JSON: ..." line, not JSON, even
+    # though --json was explicitly requested - the exact inconsistency an
+    # agent parsing this CLI's output as JSON would trip over. Raising
+    # ArtifactInputError here instead routes through the same structured
+    # path every other input-validation failure already uses.
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise SystemExit(f"error: {flag} is not valid JSON: {exc}") from exc
+        raise ArtifactInputError(
+            code="ARTIFACT_INVALID_ARGS",
+            message=f"{flag} is not valid JSON: {exc}",
+            remediation=f"{flag} must be a JSON object, e.g. '{{\"key\": \"value\"}}'.",
+            evidence={"flag": flag, "raw": raw},
+        ) from exc
     if not isinstance(value, dict):
-        raise SystemExit(f"error: {flag} must be a JSON object.")
+        raise ArtifactInputError(
+            code="ARTIFACT_INVALID_ARGS",
+            message=f"{flag} must be a JSON object, got {type(value).__name__}.",
+            remediation=f"{flag} must be a JSON object, e.g. '{{\"key\": \"value\"}}'.",
+            evidence={"flag": flag, "raw": raw},
+        )
     return value
 
 
@@ -173,7 +209,7 @@ def _resolve_policy_arg(args: argparse.Namespace) -> dict[str, Any]:
     try:
         return resolve_policy(getattr(args, "policy_preset", None), policy)
     except KeyError as exc:
-        raise SystemExit(f"error: {exc}") from exc
+        raise ArtifactInputError(code="ARTIFACT_INVALID_ARGS", message=str(exc)) from exc
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -258,7 +294,13 @@ def _cmd_execute(args: argparse.Namespace) -> int:
     policy = _resolve_policy_arg(args)
     input_path = Path(args.input)
     output_path = Path(args.output) if args.output else default_output_path(input_path, args.operation)
-    evidence_dir = output_path.parent / "reports"
+    # FIX_PROMPT P2-5: default is now cwd-relative "./reports", matching
+    # `receipt`'s own default exactly, instead of output_path.parent /
+    # "reports" - the latter put an `--output /tmp/out.pdf` execute's
+    # receipt.json at /tmp/reports, a different place than `receipt`'s
+    # default for the exact same input/output, which could read as "no
+    # receipt was written" to an agent checking the conventional location.
+    evidence_dir = Path(args.evidence_dir) if args.evidence_dir else Path("reports")
 
     result = run_lifecycle(
         input_path, args.operation, op_args, output_path,
@@ -333,7 +375,14 @@ def _cmd_receipt(args: argparse.Namespace) -> int:
     input_path = Path(args.input)
     if args.operation is None:
         if args.output:
-            raise SystemExit("error: --output requires --operation (nothing is written without a mutation).")
+            # Same CLI/MCP parity bug as _load_json_arg() above: a bare
+            # SystemExit(str) ignores --json, while MCP's _h_receipt
+            # already raises this as a structured ArtifactInputError for
+            # the identical condition.
+            raise ArtifactInputError(
+                code="ARTIFACT_INVALID_ARGS",
+                message="--output requires --operation (nothing is written without a mutation).",
+            )
         output_path = None
     else:
         output_path = Path(args.output) if args.output else default_output_path(input_path, args.operation)

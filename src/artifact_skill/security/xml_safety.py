@@ -58,12 +58,17 @@ from pathlib import Path
 
 from artifact_skill.core.errors import ArtifactSecurityError
 
-_SCAN_WINDOW_BYTES = 65536
-# A legitimate OOXML XML part (worksheet, slide, document body, etc.) is
-# KB-sized. A member far larger than that is not this function's job to
-# flag - the zip-bomb question is a separate, not-yet-addressed concern
-# (see docs/security.md) - so it's skipped rather than scanned.
-_MAX_MEMBER_SCAN_BYTES = 10 * 1024 * 1024
+# Self-audit finding (FIX_PROMPT P1-2): this used to only scan the first
+# 64KB of a document, and skip any zip member over 10MB entirely -
+# confirmed exploitable both ways (a DOCTYPE/ENTITY declaration pushed
+# past 64KB by a large-but-legal leading XML comment, or placed inside a
+# >10MB member, went completely unscanned). Measured directly before
+# removing both limits: scanning a full in-memory buffer for these two
+# short literal substrings is cheap even at real-world scale (~0.2s for
+# 200MB), so there is no meaningful cost to scanning every byte this
+# function is ever handed instead of a bounded prefix - the caller (via
+# `security/paths.py::check_input_size()`) already bounds how much data
+# can reach here in the first place.
 
 
 def reject_xml_entity_declaration(data: bytes, source: str) -> None:
@@ -72,10 +77,10 @@ def reject_xml_entity_declaration(data: bytes, source: str) -> None:
     the formats this project handles essentially never declare a custom
     DTD entity, so refusing outright — rather than attempting to parse
     and hoping the underlying parser's own limits save it — is a simple,
-    safe default.
+    safe default. Scans the entire input, not a bounded prefix — see this
+    module's docstring for why that's fine performance-wise.
     """
-    head = data[:_SCAN_WINDOW_BYTES]
-    if b"<!ENTITY" in head or (b"<!DOCTYPE" in head and b"[" in head.split(b"<!DOCTYPE", 1)[1][:2048]):
+    if b"<!ENTITY" in data or (b"<!DOCTYPE" in data and b"[" in data.split(b"<!DOCTYPE", 1)[1]):
         raise ArtifactSecurityError(
             code="ARTIFACT_XML_ENTITY_DECLARATION_REJECTED",
             message=f"'{source}' declares a DOCTYPE/ENTITY, which this adapter refuses to parse "
@@ -87,7 +92,7 @@ def reject_xml_entity_declaration(data: bytes, source: str) -> None:
 
 def reject_xml_entities_in_file(path: Path) -> None:
     """Convenience wrapper for a single on-disk XML file (e.g. SVG)."""
-    reject_xml_entity_declaration(path.read_bytes()[:_SCAN_WINDOW_BYTES], str(path))
+    reject_xml_entity_declaration(path.read_bytes(), str(path))
 
 
 def reject_xml_entities_in_zip(path: Path) -> None:
@@ -100,7 +105,5 @@ def reject_xml_entities_in_zip(path: Path) -> None:
     with zipfile.ZipFile(path) as zf:
         for info in zf.infolist():
             if not info.filename.endswith(".xml"):
-                continue
-            if info.file_size > _MAX_MEMBER_SCAN_BYTES:
                 continue
             reject_xml_entity_declaration(zf.read(info), f"{path}!{info.filename}")

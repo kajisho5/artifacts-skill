@@ -46,6 +46,7 @@ project constructs itself (as `rendering/office_convert.py` does for
 from __future__ import annotations
 
 import importlib.util
+import re
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
@@ -62,7 +63,57 @@ from artifact_skill.rendering.chromium_render import render_local_file
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import check_input_size
 
-_RESOURCE_ATTRS = {"img": "src", "script": "src", "link": "href", "iframe": "src", "source": "src"}
+# Self-audit finding (FIX_PROMPT P1-4): this used to cover only img/script/
+# link/iframe/source's single-URL attribute each - a real browser also
+# fetches resources through srcset, video/audio/poster, object/embed, and
+# CSS url()/@import (inline `style="..."` and <style> block bodies alike),
+# none of which were detected at all, so `verify_structural()`'s
+# `external_resources` check (and the `web-no-external` preset built on
+# it) undercounted what a page actually references. This is a *reporting*
+# gap only, not a security bypass: render()'s network blocking
+# (rendering/chromium_render.py) intercepts every real outgoing request at
+# the Playwright/Chromium layer regardless of which HTML construct
+# triggered it, so nothing here ever affected what render() actually lets
+# through - only what verify_structural() tells the caller about up
+# front. Deliberately not a full CSS parser (see limitations() below) -
+# a plain `url(...)`/`@import` regex catches the common, real-world shapes
+# without the cost/risk of a real CSS engine.
+_RESOURCE_ATTRS = {
+    "img": "src",
+    "script": "src",
+    "link": "href",
+    "iframe": "src",
+    "source": "src",
+    "video": "src",
+    "audio": "src",
+    "track": "src",
+    "embed": "src",
+    "object": "data",
+}
+# A second attribute some of the above tags can *also* carry a resource
+# reference in - _RESOURCE_ATTRS only holds one attribute per tag.
+_EXTRA_RESOURCE_ATTRS = {"video": "poster"}
+_SRCSET_TAGS = {"img", "source"}
+_CSS_URL_RE = re.compile(r"url\(\s*['\"]?([^'\")]+?)['\"]?\s*\)", re.IGNORECASE)
+_CSS_IMPORT_RE = re.compile(r"@import\s+(?:url\(\s*)?['\"]([^'\"]+)['\"]", re.IGNORECASE)
+
+
+def _urls_from_srcset(value: str) -> list[str]:
+    """`srcset="a.jpg 1x, b.jpg 2x"` -> ["a.jpg", "b.jpg"] - each
+    comma-separated candidate is a URL followed by an optional descriptor
+    (width or pixel-density); only the URL matters here."""
+    urls = []
+    for candidate in value.split(","):
+        token = candidate.strip().split(None, 1)
+        if token:
+            urls.append(token[0])
+    return urls
+
+
+def _urls_from_css_text(css: str) -> list[str]:
+    urls = [m.group(1).strip() for m in _CSS_URL_RE.finditer(css)]
+    urls += [m.group(1).strip() for m in _CSS_IMPORT_RE.finditer(css)]
+    return [u for u in urls if u and not u.startswith("#")]  # bare CSS custom-property refs etc.
 
 
 def _has(module: str) -> bool:
@@ -75,6 +126,8 @@ class _ResourceCollector(HTMLParser):
         self.title: str | None = None
         self._in_title = False
         self._in_skip_tag = False  # script/style content is code, not document text
+        self._in_style_tag = False
+        self._current_style_text: list[str] = []
         self.resources: list[tuple[str, str]] = []  # (tag, url)
         self.parse_errors = 0
         self.text_parts: list[str] = []
@@ -85,20 +138,48 @@ class _ResourceCollector(HTMLParser):
             self._in_title = True
         if tag in ("script", "style"):
             self._in_skip_tag = True
+        if tag == "style":
+            self._in_style_tag = True
+            self._current_style_text = []
         target_attr = _RESOURCE_ATTRS.get(tag)
         url = attr_map.get(target_attr) if target_attr else None
         if url:
             self.resources.append((tag, url))
+        extra_attr = _EXTRA_RESOURCE_ATTRS.get(tag)
+        extra_url = attr_map.get(extra_attr) if extra_attr else None
+        if extra_url:
+            self.resources.append((f"{tag}[{extra_attr}]", extra_url))
+        if tag in _SRCSET_TAGS:
+            srcset = attr_map.get("srcset")
+            if srcset:
+                self.resources.extend((f"{tag}[srcset]", u) for u in _urls_from_srcset(srcset))
+        style_attr = attr_map.get("style")
+        if style_attr:
+            self.resources.extend((f"{tag}[style]", u) for u in _urls_from_css_text(style_attr))
+        if tag == "meta" and (attr_map.get("http-equiv") or "").lower() == "refresh":
+            content = attr_map.get("content") or ""
+            _delay, _sep, url_part = content.partition(";")
+            url_part = url_part.strip()
+            if url_part[:4].lower() == "url=":
+                refresh_url = url_part[4:].strip("'\" ")
+                if refresh_url:
+                    self.resources.append(("meta[refresh]", refresh_url))
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "title":
             self._in_title = False
         if tag in ("script", "style"):
             self._in_skip_tag = False
+        if tag == "style":
+            self._in_style_tag = False
+            css_text = "".join(self._current_style_text)
+            self.resources.extend(("style", u) for u in _urls_from_css_text(css_text))
 
     def handle_data(self, data: str) -> None:
         if self._in_title and data.strip():
             self.title = (self.title or "") + data
+        if self._in_style_tag:
+            self._current_style_text.append(data)
         if not self._in_skip_tag and data.strip():
             self.text_parts.append(data)
 
@@ -160,6 +241,12 @@ class HtmlAdapter(ArtifactAdapter):
             "render() waits for the 'load' event, not arbitrary client-side rendering completion.",
             "External resources are never fetched (network policy default-off); a page relying on them "
             "will render with those elements visibly missing/broken, by design.",
+            "external_resources detection covers markup attributes (img/script/link/iframe/source/video/"
+            "audio/track/embed/object, srcset, meta refresh) and a plain regex over CSS url()/@import "
+            "(inline style= and <style> blocks) — not a full CSS parser, so a computed/CSS-custom-property-"
+            "derived URL or one injected by JavaScript is not detected. This only affects what "
+            "verify_structural() reports up front, not what render() actually lets through: the network "
+            "block during rendering intercepts every real request at the Chromium layer regardless.",
         ]
 
     def recognized_policy_keys(self) -> frozenset[str]:
@@ -203,9 +290,13 @@ class HtmlAdapter(ArtifactAdapter):
                 try:
                     candidate.relative_to(html_dir.resolve())
                 except ValueError:
-                    # Escapes the HTML file's own directory — not a
-                    # rendering concern (render() blocks nothing local,
-                    # only external), but worth surfacing as a warning.
+                    # Escapes the HTML file's own directory - render()
+                    # actively blocks this file:// reference too (Grok
+                    # review P0-2: it used to let any file:// through,
+                    # this local one included), so this warning is about
+                    # an element that will show up broken/missing in the
+                    # rendered evidence, the same as a missing local
+                    # resource, not merely a theoretical risk.
                     warnings.append(f"Local resource reference escapes the document's directory: {url}")
                     continue
                 if candidate.is_file():

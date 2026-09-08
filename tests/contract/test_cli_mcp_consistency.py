@@ -65,7 +65,21 @@ def test_contract_schema_and_exit_codes_present():
 # be a schema property, in both directions — see core/contract.py's module
 # docstring for why this test exists (unlike MCP's inputSchema, generated
 # straight from TOOLS, cli/main.py's flags are hand-declared).
-_CLI_ONLY_FLAGS = {"json", "dry_run", "evidence_dir", "help"}
+#
+# "dry_run" is NOT here (FIX_PROMPT P2-4): it used to be CLI-only despite
+# dry_run_supported=true implying MCP support too — a caller passing
+# "dry_run" to execute/render/look/receipt over MCP got ARTIFACT_INVALID_
+# ARGS, not a silent ignore (additionalProperties: false rejected it
+# outright). It's now a real input_schema property on those four tools,
+# so it's checked like any other property in both directions below.
+#
+# "evidence_dir" is NOT here either (FIX_PROMPT P2-5): `receipt`'s CLI
+# flag already existed, but the property didn't - the MCP handler read
+# args.get("evidence_dir", ...) yet additionalProperties:false meant no
+# real MCP caller could ever reach that branch. `execute` gained the same
+# flag/property pair for the first time in the same fix, so both are now
+# real schema properties with matching CLI flags.
+_CLI_ONLY_FLAGS = {"json", "help"}
 
 
 def test_cli_flags_match_input_schema_properties_in_both_directions():

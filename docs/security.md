@@ -96,9 +96,20 @@ any more than it would require wrapping `pypdfium2`'s internal calls into
 PDFium. What this project *is* responsible for at that boundary — and
 does enforce — is what the browser process is allowed to do once running:
 `render()` installs a Playwright route handler that aborts every request
-that isn't `file://`/`data:`/`about:`, so navigating to an HTML page can
-never trigger a real network fetch, matching the network-off-by-default
-policy below in an actively-enforced way, not just a documented one.
+that isn't `data:`/`about:`, or a `file://` reference that stays inside
+the source document's own directory (`rendering/chromium_render.py::
+_file_url_is_within()`), so navigating to an HTML page can never trigger
+a real network fetch, matching the network-off-by-default policy below in
+an actively-enforced way, not just a documented one. The directory
+restriction on `file://` itself closes a real local-file-disclosure path
+(external review, "P0-2"), not a hypothetical one: before it existed,
+*any* `file://` URL was allowed through unconditionally, so a hostile
+document referencing `file:///etc/passwd` (or anything else outside its
+own directory) would have that file's content end up in the rendered PNG
+evidence — reproduced directly against a real Chromium launch. A symlink
+placed inside the document's directory but pointing outside it is caught
+the same way, since the check resolves the requested path before
+comparing it.
 
 ## Filesystem — `security/paths.py`
 
@@ -115,10 +126,25 @@ policy below in an actively-enforced way, not just a documented one.
 - **`atomic_write_bytes` / `atomic_copy`** — write to a same-directory temp
   file, `fsync`, then `os.replace`. No partial file is ever left at the
   target path, including on a crash mid-write.
-- **`safe_extract_zip`** — the entry point for any zip-based container
-  (used today by the OOXML content-type sniff in `core/artifact.py`'s type
-  detection, and reserved for the PPTX/DOCX/XLSX adapters' own extraction).
-  Rejects, before extracting anything:
+- **`safe_extract_zip`** — a real, tested utility for extracting a zip
+  archive to disk with path-escape and zip-bomb protection. Originally
+  declared but not called from any production code path (self-audit
+  finding, FIX_PROMPT P1-1 — a prior version of this doc claimed it was
+  "used today by the OOXML content-type sniff," which was never true:
+  `core/artifact.py`'s `_sniff_zip_container()` reads directly via
+  `zipfile.ZipFile`/`zf.read()`, and PPTX/DOCX/XLSX's structural
+  read/write goes through python-pptx/python-docx/openpyxl's own
+  internal zip handling, neither of which calls this function). **Now
+  wired into one production path**: the EPUB adapter's `render()`
+  (`adapters/epub/adapter.py`, added in a later self-audit round) calls
+  it to safely extract the whole archive into a private staging
+  directory before rendering each spine document — the one adapter
+  operation that genuinely needs real files on disk (Chromium navigates
+  via `file://`), unlike `inspect()`, which still reimplements just the
+  decompression-bomb subset in memory (see that adapter's module
+  docstring for why `inspect()` specifically can't call this function:
+  its own contract says it must never write to disk). Rejects, before
+  extracting anything:
   - more members than `Limits.max_zip_members` (default 20,000),
   - any member with an absolute path or a `..` segment,
   - any symlink member (these can point extraction output outside the
@@ -141,13 +167,28 @@ DoS ("billion laughs") by default: a few bytes of nested `<!ENTITY>`
 definitions can expand to gigabytes in memory *during parsing*, before the
 existing `check_input_size` file-size cap gets a chance to matter.
 
-`security/xml_safety.py::reject_xml_entity_declaration()` reads the first
-64 KB of a document and refuses to parse anything that declares a
-`<!ENTITY` or a `<!DOCTYPE` with an internal subset (`[...]`), raising
-`ARTIFACT_XML_ENTITY_DECLARATION_REJECTED` before the file ever reaches
-`ElementTree`, lxml, or Chromium. Legitimate documents have no legitimate
-use for a DOCTYPE/ENTITY declaration, so this is a hard rejection, not a
-size-limited allowance. Two callers:
+`security/xml_safety.py::reject_xml_entity_declaration()` scans the
+*entire* document (not a bounded prefix — see below) and refuses to parse
+anything that declares a `<!ENTITY` or a `<!DOCTYPE` with an internal
+subset (`[...]`), raising `ARTIFACT_XML_ENTITY_DECLARATION_REJECTED`
+before the file ever reaches `ElementTree`, lxml, or Chromium. Legitimate
+documents have no legitimate use for a DOCTYPE/ENTITY declaration, so
+this is a hard rejection, not a size-limited allowance.
+
+**Self-audit finding (FIX_PROMPT P1-2): this used to scan only a 64 KB
+prefix, and `reject_xml_entities_in_zip()` used to skip any zip member
+over 10 MB entirely.** Both confirmed directly as real bypasses — a
+DOCTYPE/ENTITY declaration pushed past 64 KB by a large-but-syntactically-
+legal leading XML comment, or placed inside a >10 MB zip member, went
+completely unscanned and reached the parser unguarded. Fixed by removing
+both limits: a substring search over the entire buffer this function is
+ever handed is cheap even at real-world scale (~0.2s measured directly
+for 200 MB), and the input is already bounded upstream by
+`check_input_size()`, so there was no real benefit to the bounded-prefix
+version, only a real gap. The EPUB adapter's own OPF/XHTML parser had the
+identical 10 MB-skip bypass independently (it calls this same function
+per zip member rather than through `reject_xml_entities_in_zip()`) and
+was fixed the same way. Two callers:
 
 - **`reject_xml_entities_in_file()`** — a single on-disk XML file. Used by
   the SVG adapter (originally the only caller, before this module was
@@ -221,6 +262,22 @@ same `limits` parameter for interface consistency (every `render()`
 override shares one real signature) but ignore it — neither backend
 (pypdfium2, Pillow) has a timeout-governed step to control.
 
+`max_pages` (default 2000) had the identical disconnected-field problem
+(Grok review "P0-3"): declared here, but the only other `max_pages`
+anywhere in this codebase was the PDF adapter's *policy* key — a
+caller-opt-in verification constraint, not a resource limit this project
+enforces on its own — so `rendering/pdf_pages.py::render_pdf_pages()`
+rendered every page of every PDF completely unconditionally. A 2000+ page
+PDF, or a LibreOffice-converted PPTX/DOCX/XLSX that happens to produce
+one, could burn unbounded disk and time with no cap at all. Fixed the
+same way as `render_timeout_seconds`: `render_pdf_pages()` now takes
+`limits: Limits = DEFAULT_LIMITS` and raises
+`ArtifactSecurityError(code="ARTIFACT_TOO_MANY_PAGES")` — rejecting
+outright, not silently truncating — before rendering a single page past
+the limit, threaded through from every one of the four adapters that call
+it (PDF directly; PPTX/DOCX/XLSX via their own already-`limits`-aware
+`render()`).
+
 ## Network policy
 
 Off by default, everywhere, with no per-tool opt-out in the current MVP.
@@ -245,10 +302,23 @@ capability (`html.fetch_remote_assets` or similar) that defaults to *off*
 `core/operation.py:default_output_path()` never returns the input path.
 Every `execute()` implementation writes only to the `output_path` it is
 given; the PDF adapter's `execute()` never opens `ref.path` in write mode.
-`tests/security/test_original_protection.py` asserts the input file's
-SHA-256 is bit-identical before and after every operation, including when a
-caller passes `--output` equal to the input path (Original Protection wins
-over the caller's literal request — see that test for the exact behavior).
+
+For most of this project's history that was the *entire* guarantee — a
+caller's own `--output` argument was never checked against the input path
+at all, so `--output` equal to (or resolving to, or a hard/symlink alias
+of) the input silently overwrote it. This was a real, reproduced bug
+(external review, "P0-1"), not a hypothetical: `execute --output
+report.pdf` on an input literally named `report.pdf` really did overwrite
+it. `security/paths.py::reject_output_overwrites_input()` — called from
+`core/engine.py::build_plan()`, the one chokepoint every `plan`/
+`execute`/`receipt` call goes through, CLI and MCP alike — now rejects
+with `ARTIFACT_OUTPUT_OVERWRITES_INPUT` *before* any adapter's `plan()` or
+`execute()` runs, checking both `.resolve()` equality (catches the
+literal-same-path, relative/absolute, and symlink-aliasing cases) and
+`(st_dev, st_ino)` equality when both paths already exist (catches a hard
+link, which `.resolve()` can't see). `tests/security/test_original_protection.py`
+proves this for every implemented format, not just PDF, and separately
+proves `plan` (not just `execute`) refuses too.
 
 ## What's explicitly not handled yet (and why that's stated, not hidden)
 

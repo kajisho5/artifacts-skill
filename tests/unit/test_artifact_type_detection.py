@@ -82,6 +82,42 @@ def test_svg_with_a_leading_comment_before_bare_svg_tag_is_still_detected(tmp_pa
     assert ArtifactRef.from_path(path).type == ArtifactType.SVG
 
 
+# --- XHTML: an XML declaration followed by an <html> root (FIX_PROMPT P2-3) -
+#
+# A real, unremarkable XHTML document (`<?xml ...?><html xmlns=...>`) fell
+# through both the SVG check (no "<svg" anywhere) and the bare
+# "<!doctype html"/"<html" check (the file starts with "<?xml", not either
+# of those) straight to UNKNOWN - confirmed by direct reproduction before
+# this fix.
+
+
+def test_xhtml_with_xml_declaration_is_detected_as_html(tmp_path):
+    path = tmp_path / "test.xhtml"
+    path.write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title></head>'
+        "<body><p>hello</p></body></html>"
+    )
+    assert ArtifactRef.from_path(path).type == ArtifactType.HTML
+
+
+def test_xhtml_detection_does_not_steal_svg_documents(tmp_path):
+    """An <?xml ...?> document containing <svg> must still be typed SVG,
+    not HTML - the new XHTML check must not run before (or instead of) the
+    existing SVG check."""
+    path = tmp_path / "test.svg"
+    path.write_text('<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><circle r="1"/></svg>')
+    assert ArtifactRef.from_path(path).type == ArtifactType.SVG
+
+
+def test_plain_xml_document_with_no_html_root_stays_unknown(tmp_path):
+    """The XHTML fix must be narrow: an ordinary XML document unrelated to
+    HTML must not be swept in just because it starts with <?xml."""
+    path = tmp_path / "test.xml"
+    path.write_text('<?xml version="1.0"?><root><item>data</item></root>')
+    assert ArtifactRef.from_path(path).type == ArtifactType.UNKNOWN
+
+
 def test_an_unterminated_leading_comment_is_left_as_unknown_not_misdetected(tmp_path):
     """The closing --> never appears at all: detect_type() must not guess
     past it - UNKNOWN is the honest answer here, not a silent misdetection."""
@@ -116,3 +152,134 @@ def test_cfb_detection_applies_regardless_of_file_extension(tmp_path):
     path = tmp_path / "mislabeled.zip"
     path.write_bytes(_CFB_MAGIC + b"\x00" * 512)
     assert ArtifactRef.from_path(path).type == ArtifactType.OLE_COMPOUND_FILE
+
+
+# --- EPUB (a zip container disambiguated from OOXML by its mimetype
+# member, not [Content_Types].xml) -----------------------------------------
+
+
+def _make_minimal_epub(path, mimetype_first_and_stored: bool = True) -> None:
+    import zipfile
+
+    with zipfile.ZipFile(path, "w") as zf:
+        if mimetype_first_and_stored:
+            zf.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        zf.writestr(
+            "META-INF/container.xml",
+            '<?xml version="1.0"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" '
+            'version="1.0"><rootfiles><rootfile full-path="OEBPS/content.opf" '
+            'media-type="application/oebps-package+xml"/></rootfiles></container>',
+        )
+        zf.writestr("OEBPS/content.opf", '<package xmlns="http://www.idpf.org/2007/opf"><manifest/><spine/></package>')
+        if not mimetype_first_and_stored:
+            zf.writestr("mimetype", "application/epub+zip")
+
+
+def test_epub_detected_by_mimetype_member_not_extension(tmp_path):
+    path = tmp_path / "book.epub"
+    _make_minimal_epub(path)
+    assert ArtifactRef.from_path(path).type == ArtifactType.EPUB
+
+
+def test_epub_mislabeled_with_wrong_extension_is_still_detected(tmp_path):
+    path = tmp_path / "book.zip"
+    _make_minimal_epub(path)
+    assert ArtifactRef.from_path(path).type == ArtifactType.EPUB
+
+
+def test_a_zip_without_the_epub_mimetype_member_is_not_misdetected_as_epub(tmp_path):
+    import zipfile
+
+    path = tmp_path / "plain.zip"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("readme.txt", "just a plain zip")
+    assert ArtifactRef.from_path(path).type == ArtifactType.ZIP
+
+
+def test_a_zip_with_a_wrong_mimetype_value_is_not_misdetected_as_epub(tmp_path):
+    import zipfile
+
+    path = tmp_path / "not_epub.zip"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr(zipfile.ZipInfo("mimetype"), "application/zip", zipfile.ZIP_STORED)
+    assert ArtifactRef.from_path(path).type == ArtifactType.ZIP
+
+
+# --- CSV / Markdown: heuristic text-based detection (no magic bytes) ------
+
+
+def test_csv_detected_by_content(tmp_path):
+    path = tmp_path / "data.csv"
+    path.write_text("name,age\nAlice,30\nBob,25\n")
+    assert ArtifactRef.from_path(path).type == ArtifactType.CSV
+
+
+def test_csv_with_a_leading_utf8_bom_is_still_detected(tmp_path):
+    """Self-audit finding: Excel/many Windows tools write CSV with a
+    leading UTF-8 BOM - it must not defeat detection."""
+    path = tmp_path / "bom.csv"
+    path.write_bytes(b"\xef\xbb\xbfname,age\nAlice,30\nBob,25\n")
+    assert ArtifactRef.from_path(path).type == ArtifactType.CSV
+
+
+def test_csv_with_one_ragged_row_is_still_detected_by_content(tmp_path):
+    """A single malformed row must not defeat detection entirely - that
+    would make the adapter's own column_count_consistency check
+    unreachable for the exact case it exists to catch."""
+    path = tmp_path / "ragged.csv"
+    path.write_text("a,b,c\n1,2,3\n4,5\n6,7,8\n")
+    assert ArtifactRef.from_path(path).type == ArtifactType.CSV
+
+
+def test_ordinary_prose_with_commas_is_not_misdetected_as_csv(tmp_path):
+    path = tmp_path / "prose.txt"
+    path.write_text(
+        "Hello, this is a test, with several, commas, in, it, for testing purposes today.\n"
+        "Another line, also with, some commas, here too, yes indeed.\n"
+    )
+    assert ArtifactRef.from_path(path).type == ArtifactType.UNKNOWN
+
+
+def test_a_single_line_of_comma_separated_words_is_too_weak_a_signal_for_csv(tmp_path):
+    path = tmp_path / "single.txt"
+    path.write_text("apple,banana,cherry\n")
+    assert ArtifactRef.from_path(path).type == ArtifactType.UNKNOWN
+
+
+def test_markdown_detected_by_a_fenced_code_block_alone(tmp_path):
+    path = tmp_path / "doc.md"
+    path.write_text("Some intro text.\n\n```python\nprint(1)\n```\n")
+    assert ArtifactRef.from_path(path).type == ArtifactType.MARKDOWN
+
+
+def test_markdown_with_a_leading_utf8_bom_is_still_detected_by_a_heading(tmp_path):
+    """Self-audit finding: a BOM glued onto the first line broke the ATX
+    heading regex's '^#' anchor on that specific line, silently
+    misdetecting an otherwise-obvious Markdown document as UNKNOWN."""
+    path = tmp_path / "bom.md"
+    path.write_bytes("﻿# Title\n\n- a\n- b\n".encode())
+    assert ArtifactRef.from_path(path).type == ArtifactType.MARKDOWN
+
+
+def test_markdown_detected_by_two_weaker_signals_together(tmp_path):
+    path = tmp_path / "doc.md"
+    path.write_text("Check [this link](http://example.com) out.\n\n- item one\n- item two\n")
+    assert ArtifactRef.from_path(path).type == ArtifactType.MARKDOWN
+
+
+def test_a_single_atx_heading_shaped_line_alone_is_too_weak_a_signal_for_markdown(tmp_path):
+    """A shell/Python/YAML '# comment' line is shaped exactly like an ATX
+    heading - one match alone must not be enough, or every commented
+    script would misdetect as Markdown."""
+    path = tmp_path / "script.sh"
+    path.write_text("#!/bin/bash\n# just a comment\necho hello\n")
+    assert ArtifactRef.from_path(path).type == ArtifactType.UNKNOWN
+
+
+def test_a_markdown_table_is_detected_as_markdown_not_pipe_delimited_csv(tmp_path):
+    """A Markdown table's separator row (|---|---|) is a strong Markdown
+    signal checked before CSV, specifically so a table isn't misdetected
+    as pipe-delimited CSV."""
+    path = tmp_path / "table.md"
+    path.write_text("| Name | Age |\n| --- | --- |\n| Alice | 30 |\n")
+    assert ArtifactRef.from_path(path).type == ArtifactType.MARKDOWN

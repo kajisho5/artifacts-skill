@@ -182,6 +182,33 @@ def test_execute_metadata_set_writes_new_file_and_preserves_input(good_pdf, adap
     assert out_report.details["page_count"] == 2  # postcondition: page count preserved
 
 
+def test_verify_require_metadata_matches_lowercase_policy_keys(good_pdf, adapter, tmp_path):
+    """Independent-review finding: details["metadata"] is keyed by the PDF
+    Info dict's own native casing ("Title", not "title" - see the test
+    above), but require_metadata's own field names use metadata_set's
+    lowercase schema convention ("title"), matching every other adapter
+    (DOCX/PPTX/XLSX). A bare `.get(key)` against the Capitalized dict
+    always FAILed for this, the natural way to write this policy
+    (confirmed by direct reproduction before this fix)."""
+    ref = ArtifactRef.from_path(good_pdf)
+    result_ref = adapter.execute(ref, "metadata_set", {"title": "My Title", "author": "QA"}, tmp_path / "out.pdf")
+
+    result = adapter.verify_structural(result_ref, {"require_metadata": {"title": "My Title", "author": "QA"}})
+    title_check = next(c for c in result.checks if c.id == "metadata_title")
+    author_check = next(c for c in result.checks if c.id == "metadata_author")
+    assert title_check.status == CheckStatus.PASS
+    assert author_check.status == CheckStatus.PASS
+
+
+def test_verify_require_metadata_still_fails_on_a_real_mismatch(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    result_ref = adapter.execute(ref, "metadata_set", {"title": "Actual Title"}, tmp_path / "out.pdf")
+
+    result = adapter.verify_structural(result_ref, {"require_metadata": {"title": "Wrong Title"}})
+    check = next(c for c in result.checks if c.id == "metadata_title")
+    assert check.status == CheckStatus.FAIL
+
+
 def test_execute_metadata_set_on_encrypted_pdf_raises(encrypted_pdf, adapter, tmp_path):
     ref = ArtifactRef.from_path(encrypted_pdf)
     with pytest.raises(ArtifactExecutionError) as exc_info:
@@ -195,6 +222,61 @@ def test_execute_merge_doubles_page_count(good_pdf, adapter, tmp_path):
     result_ref = adapter.execute(ref, "merge", {"additional_inputs": [str(good_pdf)]}, output_path)
     report = adapter.inspect(result_ref)
     assert report.details["page_count"] == 4
+
+
+def test_execute_merge_rejects_an_oversized_additional_input(adapter, tmp_path, monkeypatch):
+    """Independent-review finding: check_input_size() is called for the
+    primary input via inspect(), but merge's additional_inputs never
+    passed through it on either plan() or execute() - pypdf.PdfReader()
+    loads a file entirely into memory, so the size cap this exists to
+    enforce was silently bypassed for every secondary merge input
+    (confirmed by direct reproduction before this fix: a file exceeding
+    the configured limit was correctly rejected as the primary input but
+    merged in without error as an additional_inputs entry).
+
+    Uses a small primary and a deliberately larger additional_inputs file,
+    with a limit between the two sizes - a blanket tiny limit on both
+    would pass even without this fix (the primary's own long-standing
+    check would fire first via inspect() and mask a missing additional-
+    inputs check entirely), so this specifically isolates the fix."""
+    import pypdf
+
+    from artifact_skill.core.errors import ArtifactSecurityError
+    from artifact_skill.security.limits import Limits
+
+    def _make_pdf(path, pages: int) -> None:
+        writer = pypdf.PdfWriter()
+        for _ in range(pages):
+            writer.add_blank_page(width=200, height=200)
+        with open(path, "wb") as f:
+            writer.write(f)
+
+    small = tmp_path / "small.pdf"
+    big = tmp_path / "big.pdf"
+    _make_pdf(small, pages=1)
+    _make_pdf(big, pages=20)
+    assert small.stat().st_size < big.stat().st_size
+
+    import artifact_skill.adapters.pdf.adapter as pdf_adapter_module
+
+    real_check = pdf_adapter_module.check_input_size
+    between = Limits(max_input_bytes=(small.stat().st_size + big.stat().st_size) // 2)
+
+    def _discriminating_check(path, limits=between):
+        return real_check(path, limits=limits)
+
+    monkeypatch.setattr(pdf_adapter_module, "check_input_size", _discriminating_check)
+
+    ref = ArtifactRef.from_path(small)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.execute(ref, "merge", {"additional_inputs": [str(big)]}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_INPUT_TOO_LARGE"
+    assert exc_info.value.evidence["path"] == str(big)
+
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.plan(ref, "merge", {"additional_inputs": [str(big)]}, tmp_path / "out2.pdf")
+    assert exc_info.value.code == "ARTIFACT_INPUT_TOO_LARGE"
+    assert exc_info.value.evidence["path"] == str(big)
 
 
 def test_execute_unknown_operation_raises(good_pdf, adapter, tmp_path):
@@ -374,6 +456,30 @@ def test_verify_page_size_requirement_carries_fixer_evidence(good_pdf, adapter, 
     assert check.evidence["actual_width_pt"] == pytest.approx(612, abs=0.5)
 
 
+def test_verify_page_size_requirement_checks_every_page_not_just_the_first(adapter, tmp_path):
+    """External-review finding (verified by direct reproduction before
+    this fix): only page_sizes[0] was checked - a document whose first
+    page matched the requirement but whose other pages didn't (e.g. an A4
+    cover page followed by US Letter body pages) reported
+    page_size_requirement=PASS regardless, even though fit_page_size's own
+    fixer (see execute()) already scales every page, not just the first -
+    this was purely a verification gap."""
+    import pypdf
+
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=595, height=842)  # A4
+    writer.add_blank_page(width=612, height=792)  # US Letter - mismatched
+    path = tmp_path / "mixed.pdf"
+    with open(path, "wb") as f:
+        writer.write(f)
+
+    ref = ArtifactRef.from_path(path)
+    result = adapter.verify_structural(ref, {"require_page_size_pt": (595, 842), "page_size_tolerance_pt": 1.0})
+    check = next(c for c in result.checks if c.id == "page_size_requirement")
+    assert check.status == CheckStatus.FAIL
+    assert check.evidence["mismatched_pages"] == [{"page": 2, "width_pt": 612.0, "height_pt": 792.0}]
+
+
 def test_fix_returns_corrected_args_for_page_size_mismatch(adapter, good_pdf):
     """Given the exact failed_result shape verify_structural() produces,
     fix() must read the expected size and hand back args that would fix it —
@@ -442,5 +548,80 @@ def test_limitations_names_the_real_known_caveats(adapter):
     known-true strings, not just "is a non-empty list"."""
     text = " ".join(adapter.limitations())
     assert "not decrypted automatically" in text
-    assert "JavaScript actions are detected but not executed" in text
+    assert "never executed or analyzed further" in text
     assert "blank_pages" in text
+
+
+def _pdf_with_openaction_javascript(tmp_path):
+    """Build a minimal PDF whose /OpenAction (not /Names /JavaScript) runs
+    JavaScript - the exact real-world payload location FIX_PROMPT P2-2
+    found this adapter previously missed entirely."""
+    import pypdf
+    from pypdf.generic import DictionaryObject, NameObject, TextStringObject
+
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    action = DictionaryObject()
+    action[NameObject("/S")] = NameObject("/JavaScript")
+    action[NameObject("/JS")] = TextStringObject("app.alert('hi');")
+    writer._root_object[NameObject("/OpenAction")] = action
+    path = tmp_path / "openaction_js.pdf"
+    with open(path, "wb") as f:
+        writer.write(f)
+    return path
+
+
+def _pdf_with_page_level_aa_javascript(tmp_path):
+    """Same idea, but the JavaScript sits in a page's own /AA (additional
+    actions) dict rather than the document catalog."""
+    import pypdf
+    from pypdf.generic import DictionaryObject, NameObject, TextStringObject
+
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    action = DictionaryObject()
+    action[NameObject("/S")] = NameObject("/JavaScript")
+    action[NameObject("/JS")] = TextStringObject("app.alert('page open');")
+    aa = DictionaryObject()
+    aa[NameObject("/O")] = action
+    writer.pages[0][NameObject("/AA")] = aa
+    path = tmp_path / "page_aa_js.pdf"
+    with open(path, "wb") as f:
+        writer.write(f)
+    return path
+
+
+def test_inspect_detects_javascript_in_openaction(adapter, tmp_path):
+    """FIX_PROMPT P2-2: /Names /JavaScript is only one of several places a
+    PDF can carry JavaScript - confirmed by direct reproduction before this
+    fix that a crafted /OpenAction JavaScript action passed has_javascript
+    == False."""
+    path = _pdf_with_openaction_javascript(tmp_path)
+    report = adapter.inspect(ArtifactRef.from_path(path))
+    assert report.details["has_javascript"] is True
+
+
+def test_inspect_detects_javascript_in_page_level_additional_actions(adapter, tmp_path):
+    path = _pdf_with_page_level_aa_javascript(tmp_path)
+    report = adapter.inspect(ArtifactRef.from_path(path))
+    assert report.details["has_javascript"] is True
+
+
+def test_verify_openaction_javascript_fails_under_default_policy(adapter, tmp_path):
+    path = _pdf_with_openaction_javascript(tmp_path)
+    result = adapter.verify_structural(ArtifactRef.from_path(path), {})
+    check = next(c for c in result.checks if c.id == "javascript")
+    assert check.status == CheckStatus.FAIL
+
+
+def test_render_honors_a_custom_limits_max_pages(good_pdf, adapter, tmp_path):
+    """Grok review P0-3: Limits.max_pages must actually reach the render
+    backend through PdfAdapter.render(), not just render_pdf_pages()
+    directly (test_pdf_pages.py covers that in isolation)."""
+    from artifact_skill.core.errors import ArtifactSecurityError
+    from artifact_skill.security.limits import Limits
+
+    ref = ArtifactRef.from_path(good_pdf)  # good_2page.pdf
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.render(ref, tmp_path / "rendered", limits=Limits(max_pages=1))
+    assert exc_info.value.code == "ARTIFACT_TOO_MANY_PAGES"

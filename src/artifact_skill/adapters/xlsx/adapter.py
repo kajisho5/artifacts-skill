@@ -172,6 +172,8 @@ class XlsxAdapter(ArtifactAdapter):
             "present, reflect whatever application last saved the file, not this adapter's own computation.",
             "Chart and embedded-drawing validity is not checked.",
             "Conditional formatting and data validation rules are not checked.",
+            "Leftover marker text scanning covers cell string values and sheet names — not cell "
+            "comments, headers/footers, or chart titles/labels.",
             "Rendering depends on an external LibreOffice install; a present binary does not guarantee "
             "a specific document converts successfully.",
         ]
@@ -247,8 +249,13 @@ class XlsxAdapter(ArtifactAdapter):
             "defined_names": defined_names,
             "metadata": metadata,
             # Same rationale as the other adapters' leftover_markers: the
-            # marker list found, not every cell's text content.
-            "leftover_markers": find_leftover_markers("\n".join(all_text_parts)),
+            # marker list found, not every cell's text content. Sheet
+            # names are scanned too (FIX_PROMPT P2-1) - a generated
+            # workbook's default/placeholder sheet name ("TODO sheet",
+            # "Sheet1 - dummy data") is exactly the kind of unreviewed
+            # generation artifact this check exists to catch, and it was
+            # previously invisible since only cell values were scanned.
+            "leftover_markers": find_leftover_markers("\n".join(all_text_parts + sheet_names)),
         }
         return InspectionReport(artifact=ref, details=details, warnings=warnings)
 
@@ -325,7 +332,7 @@ class XlsxAdapter(ArtifactAdapter):
     def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
         with tempfile.TemporaryDirectory(prefix="artifacts-skill-xlsx-render-") as tmp:
             pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf", limits=limits)
-            return render_pdf_pages(pdf_path, out_dir)
+            return render_pdf_pages(pdf_path, out_dir, limits=limits)
 
     # ---- verify ------------------------------------------------------
 

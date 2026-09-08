@@ -95,6 +95,25 @@ def test_execute_resize_without_aspect_ratio_stretches_exactly(good_png, adapter
     assert out_report.details["height"] == 40
 
 
+def test_execute_resize_upscale_with_aspect_ratio_actually_enlarges(good_png, adapter, tmp_path):
+    """Independent-review finding: Pillow's Image.thumbnail() only ever
+    shrinks, never enlarges - so resizing a 200x100 source to a larger
+    800x800 box with maintain_aspect_ratio=True (the schema's own default)
+    used to silently leave the image completely untouched, and
+    verify_structural() reported a clean PASS regardless (confirmed by
+    direct reproduction before this fix). Requesting an enlargement must
+    actually enlarge, same as a shrink actually shrinks."""
+    ref = ArtifactRef.from_path(good_png)
+    output_path = tmp_path / "upscaled.png"
+
+    result_ref = adapter.execute(ref, "resize", {"width": 800, "height": 800}, output_path)
+
+    out_report = adapter.inspect(result_ref)
+    # 200x100 fitted into an 800x800 box, aspect preserved -> 800x400
+    assert out_report.details["width"] == 800
+    assert out_report.details["height"] == 400
+
+
 def test_execute_convert_format_to_jpeg_drops_alpha(alpha_png, adapter, tmp_path):
     ref = ArtifactRef.from_path(alpha_png)
     before_hash = ref.sha256

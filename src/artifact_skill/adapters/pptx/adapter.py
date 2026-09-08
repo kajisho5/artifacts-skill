@@ -153,6 +153,8 @@ class PptxAdapter(ArtifactAdapter):
             "Chart validity is only checked for presence (UNKNOWN), not internal correctness.",
             "'Leftover placeholder' detection is a heuristic (empty title/body placeholders) and can "
             "false-positive on intentionally blank section-header slides.",
+            "Leftover marker text scanning covers shape text frames, table cells, and speaker notes — "
+            "not text embedded inside chart data labels/titles or SmartArt.",
             "Embedded font completeness is not checked.",
             "Rendering depends on an external LibreOffice install; a present binary does not guarantee "
             "a specific document converts successfully (see this module's docstring).",
@@ -203,6 +205,21 @@ class PptxAdapter(ArtifactAdapter):
                     all_text_parts.append(shape.text_frame.text)
                 if shape.is_placeholder and shape.has_text_frame and not shape.text_frame.text.strip():
                     empty_placeholders += 1
+                # FIX_PROMPT P2-1: a table shape's cell text is not a
+                # text_frame on the shape itself (shape.has_text_frame is
+                # False for a table's enclosing GraphicFrame) - each cell
+                # has its own text_frame, so leftover placeholder text
+                # sitting in a table cell was silently invisible to every
+                # check above. Confirmed by direct reproduction before
+                # this fix: a table cell containing "Lorem ipsum" produced
+                # an empty leftover_markers list.
+                if shape.has_table:
+                    all_text_parts.extend(
+                        cell.text
+                        for row in shape.table.rows
+                        for cell in row.cells
+                        if cell.text.strip()
+                    )
                 if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
                     try:
                         _ = shape.image.blob
@@ -210,8 +227,15 @@ class PptxAdapter(ArtifactAdapter):
                         broken_media.append(f"slide {i + 1}: {shape.shape_id}")
             if slide_has_text:
                 text_bearing_slides += 1
-            if slide.has_notes_slide and slide.notes_slide.notes_text_frame.text.strip():
-                has_notes += 1
+            # FIX_PROMPT P2-1: speaker notes were counted (slides_with_notes)
+            # but never scanned for leftover placeholder text - a stray
+            # "TODO" left in a note is exactly the kind of unreviewed
+            # generation artifact this check exists to catch.
+            if slide.has_notes_slide:
+                notes_text = slide.notes_slide.notes_text_frame.text
+                if notes_text.strip():
+                    has_notes += 1
+                    all_text_parts.append(notes_text)
 
         meta = prs.core_properties
         metadata = {
@@ -321,7 +345,7 @@ class PptxAdapter(ArtifactAdapter):
             # render_pdf_pages needs the intermediate PDF to survive past
             # this `with` block's cleanup, so render directly from it now
             # rather than returning a path that's about to be deleted.
-            return render_pdf_pages(pdf_path, out_dir)
+            return render_pdf_pages(pdf_path, out_dir, limits=limits)
 
     # ---- verify ------------------------------------------------------
 

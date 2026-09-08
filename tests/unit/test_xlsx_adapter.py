@@ -141,6 +141,24 @@ def test_verify_leftover_placeholder_workbook_fails_under_strict_policy(leftover
     assert check.status == CheckStatus.FAIL
 
 
+def test_leftover_text_scan_covers_sheet_names(adapter, tmp_path):
+    """FIX_PROMPT P2-1: only cell string values were scanned for leftover
+    placeholder text - a generated workbook's own sheet name (e.g. a
+    default "TODO sheet" left unrenamed) was previously invisible entirely
+    (confirmed by direct reproduction before this fix)."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "TODO sheet"
+    ws["A1"] = "Ordinary reviewed data"
+    path = tmp_path / "todo_sheet_name.xlsx"
+    wb.save(str(path))
+
+    report = adapter.inspect(ArtifactRef.from_path(path))
+    assert "todo" in report.details["leftover_markers"]
+
+
 def test_verify_good_workbook_sheet_count_requirement(good_xlsx, adapter):
     ref = ArtifactRef.from_path(good_xlsx)
     ok = adapter.verify_structural(ref, {"require_sheet_count": 2})
@@ -198,6 +216,35 @@ def test_render_propagates_backend_failure(good_xlsx, adapter, tmp_path, monkeyp
     with pytest.raises(ArtifactExecutionError) as exc_info:
         adapter.render(ref, tmp_path / "rendered")
     assert exc_info.value.code == "ARTIFACT_RENDER_BACKEND_FAILED"
+
+
+def test_render_honors_a_custom_limits_max_pages(good_xlsx, adapter, tmp_path, monkeypatch):
+    """Grok review P0-3: limits must reach render_pdf_pages() through the
+    intermediate PDF conversion step. Fakes convert_to_pdf() with a real,
+    pre-made multi-page PDF rather than requiring a working LibreOffice
+    install for this specific check."""
+    import artifact_skill.adapters.xlsx.adapter as adapter_module
+    from artifact_skill.core.errors import ArtifactSecurityError
+    from artifact_skill.security.limits import Limits
+
+    def _fake_convert(input_path, pdf_out_dir, **kwargs):
+        import pypdf
+
+        pdf_out_dir.mkdir(parents=True, exist_ok=True)
+        writer = pypdf.PdfWriter()
+        for _ in range(5):
+            writer.add_blank_page(width=200, height=200)
+        out = pdf_out_dir / "converted.pdf"
+        with open(out, "wb") as f:
+            writer.write(f)
+        return out
+
+    monkeypatch.setattr(adapter_module, "convert_to_pdf", _fake_convert)
+
+    ref = ArtifactRef.from_path(good_xlsx)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.render(ref, tmp_path / "rendered", limits=Limits(max_pages=3))
+    assert exc_info.value.code == "ARTIFACT_TOO_MANY_PAGES"
 
 
 def test_render_happy_path_when_backend_actually_works(good_xlsx, adapter, tmp_path):

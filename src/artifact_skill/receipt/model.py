@@ -20,6 +20,7 @@ from artifact_skill.core.artifact import ArtifactRef
 from artifact_skill.core.capability import CapabilityReport
 from artifact_skill.core.operation import OperationRecord
 from artifact_skill.core.verification import CheckStatus, VerificationResult, aggregate
+from artifact_skill.security.paths import atomic_write_bytes
 
 RECEIPT_SCHEMA = "artifact-receipt/v1"
 
@@ -65,8 +66,17 @@ class ProductionReceipt:
         return json.dumps(self.to_dict(), indent=indent, sort_keys=False)
 
     def write(self, path: Path) -> Path:
+        """Self-audit finding (FIX_PROMPT P3-3): the receipt is the one
+        artifact this project's own docs call "meant to outlive this
+        process" (see module docstring), yet used a plain `write_text()`
+        — every other on-disk write in this project goes through
+        `atomic_write_bytes()` (same-directory temp file + fsync +
+        `os.replace()`), specifically so a crash mid-write never leaves a
+        partial file at the target path. A truncated `receipt.json` after
+        a crash is exactly the kind of half-finished evidence this
+        project's own design principles argue against."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(self.to_json() + "\n", encoding="utf-8")
+        atomic_write_bytes(path, (self.to_json() + "\n").encode("utf-8"))
         return path
 
 

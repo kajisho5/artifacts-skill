@@ -12,6 +12,9 @@ XLSX_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "xlsx"
 IMAGE_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "image"
 HTML_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "html"
 SVG_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "svg"
+CSV_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "csv"
+MARKDOWN_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "markdown"
+EPUB_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "epub"
 
 
 @pytest.fixture()
@@ -347,4 +350,146 @@ def entity_bomb_svg(tmp_path: Path) -> Path:
 def mislabeled_pdf_as_svg(tmp_path: Path) -> Path:
     dst = tmp_path / "mislabeled_pdf.svg"
     shutil.copy(SVG_FIXTURES_DIR / "mislabeled_pdf.svg", dst)
+    return dst
+
+
+# ---------------------------------------------------------------- CSV ----
+
+
+@pytest.fixture()
+def good_csv(tmp_path: Path) -> Path:
+    dst = tmp_path / "good.csv"
+    shutil.copy(CSV_FIXTURES_DIR / "good.csv", dst)
+    return dst
+
+
+@pytest.fixture()
+def ragged_csv(tmp_path: Path) -> Path:
+    dst = tmp_path / "ragged.csv"
+    shutil.copy(CSV_FIXTURES_DIR / "ragged.csv", dst)
+    return dst
+
+
+@pytest.fixture()
+def leftover_placeholder_csv(tmp_path: Path) -> Path:
+    dst = tmp_path / "leftover_placeholder.csv"
+    shutil.copy(CSV_FIXTURES_DIR / "leftover_placeholder.csv", dst)
+    return dst
+
+
+@pytest.fixture()
+def mislabeled_pdf_as_csv(tmp_path: Path) -> Path:
+    dst = tmp_path / "mislabeled_pdf.csv"
+    shutil.copy(CSV_FIXTURES_DIR / "mislabeled_pdf.csv", dst)
+    return dst
+
+
+# ----------------------------------------------------------- MARKDOWN ----
+
+
+@pytest.fixture()
+def good_markdown(tmp_path: Path) -> Path:
+    dst = tmp_path / "good.md"
+    shutil.copy(MARKDOWN_FIXTURES_DIR / "good.md", dst)
+    return dst
+
+
+@pytest.fixture()
+def unclosed_fence_markdown(tmp_path: Path) -> Path:
+    dst = tmp_path / "unclosed_fence.md"
+    shutil.copy(MARKDOWN_FIXTURES_DIR / "unclosed_fence.md", dst)
+    return dst
+
+
+@pytest.fixture()
+def missing_local_resource_markdown(tmp_path: Path) -> Path:
+    dst = tmp_path / "missing_local_resource.md"
+    shutil.copy(MARKDOWN_FIXTURES_DIR / "missing_local_resource.md", dst)
+    return dst
+
+
+@pytest.fixture()
+def external_resource_markdown(tmp_path: Path) -> Path:
+    dst = tmp_path / "external_resource.md"
+    shutil.copy(MARKDOWN_FIXTURES_DIR / "external_resource.md", dst)
+    return dst
+
+
+@pytest.fixture()
+def leftover_placeholder_markdown(tmp_path: Path) -> Path:
+    dst = tmp_path / "leftover_placeholder.md"
+    shutil.copy(MARKDOWN_FIXTURES_DIR / "leftover_placeholder.md", dst)
+    return dst
+
+
+@pytest.fixture()
+def leftover_in_code_fence_markdown(tmp_path: Path) -> Path:
+    dst = tmp_path / "leftover_in_code_fence.md"
+    shutil.copy(MARKDOWN_FIXTURES_DIR / "leftover_in_code_fence.md", dst)
+    return dst
+
+
+@pytest.fixture()
+def mislabeled_pdf_as_markdown(tmp_path: Path) -> Path:
+    dst = tmp_path / "mislabeled_pdf.md"
+    shutil.copy(MARKDOWN_FIXTURES_DIR / "mislabeled_pdf.md", dst)
+    return dst
+
+
+# --------------------------------------------------------------- EPUB ----
+
+
+@pytest.fixture()
+def good_epub(tmp_path: Path) -> Path:
+    dst = tmp_path / "good.epub"
+    shutil.copy(EPUB_FIXTURES_DIR / "good.epub", dst)
+    return dst
+
+
+@pytest.fixture()
+def broken_manifest_epub(tmp_path: Path) -> Path:
+    dst = tmp_path / "broken_manifest.epub"
+    shutil.copy(EPUB_FIXTURES_DIR / "broken_manifest.epub", dst)
+    return dst
+
+
+@pytest.fixture()
+def broken_spine_epub(tmp_path: Path) -> Path:
+    dst = tmp_path / "broken_spine.epub"
+    shutil.copy(EPUB_FIXTURES_DIR / "broken_spine.epub", dst)
+    return dst
+
+
+@pytest.fixture()
+def leftover_placeholder_epub(tmp_path: Path) -> Path:
+    dst = tmp_path / "leftover_placeholder.epub"
+    shutil.copy(EPUB_FIXTURES_DIR / "leftover_placeholder.epub", dst)
+    return dst
+
+
+@pytest.fixture()
+def mimetype_not_first_epub(tmp_path: Path) -> Path:
+    dst = tmp_path / "mimetype_not_first.epub"
+    shutil.copy(EPUB_FIXTURES_DIR / "mimetype_not_first.epub", dst)
+    return dst
+
+
+@pytest.fixture()
+def entity_bomb_epub(tmp_path: Path) -> Path:
+    dst = tmp_path / "entity_bomb.epub"
+    shutil.copy(EPUB_FIXTURES_DIR / "entity_bomb.epub", dst)
+    return dst
+
+
+@pytest.fixture()
+def missing_container_epub(tmp_path: Path) -> Path:
+    dst = tmp_path / "missing_container.epub"
+    shutil.copy(EPUB_FIXTURES_DIR / "missing_container.epub", dst)
+    return dst
+
+
+@pytest.fixture()
+def mislabeled_pdf_as_epub(tmp_path: Path) -> Path:
+    dst = tmp_path / "mislabeled_pdf.epub"
+    shutil.copy(EPUB_FIXTURES_DIR / "mislabeled_pdf.epub", dst)
     return dst

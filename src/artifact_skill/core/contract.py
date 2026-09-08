@@ -46,6 +46,7 @@ from typing import Any
 
 from artifact_skill import __version__
 from artifact_skill.core.errors import EXIT_CODE_BY_CATEGORY, EXIT_FAIL, EXIT_OK
+from artifact_skill.security.limits import DEFAULT_LIMITS
 
 CONTRACT_SCHEMA = "artifact-contract/v1"
 
@@ -223,7 +224,7 @@ TOOLS: list[ToolContract] = [
         verification_policy={"structural_required": False, "visual_required": False},
         visual_requirement="not_applicable",
         evidence="operation plan (JSON)",
-        errors=["ARTIFACT_OPERATION_UNKNOWN", "ARTIFACT_INPUT_NOT_FOUND"],
+        errors=["ARTIFACT_OPERATION_UNKNOWN", "ARTIFACT_INPUT_NOT_FOUND", "ARTIFACT_OUTPUT_OVERWRITES_INPUT"],
     ),
     ToolContract(
         name="execute",
@@ -246,6 +247,18 @@ TOOLS: list[ToolContract] = [
                     "description": "Named starting policy from policies.py (e.g. \"print-a4\", "
                     "\"web-no-external\"); 'policy' fields override it on conflict. See docs/verification.md.",
                 },
+                "evidence_dir": {
+                    "type": "string",
+                    "description": "Directory for execute's own reports/receipt.json (default: "
+                    "\"./reports\", same default as `receipt` — FIX_PROMPT P2-5).",
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "Run the identical plan/validation path but perform no I/O and spawn "
+                    "no subprocess (FIX_PROMPT P2-4: dry_run_supported=true means this MCP tool actually "
+                    "accepts this field, not just the CLI's --dry-run). Returns the operation plan instead "
+                    "of a real output/receipt.",
+                },
             },
             "required": ["input", "operation"],
             "additionalProperties": False,
@@ -264,6 +277,7 @@ TOOLS: list[ToolContract] = [
             "ARTIFACT_PDF_ENCRYPTED",
             "ARTIFACT_CAPABILITY_MISSING",
             "ARTIFACT_PATH_ESCAPE",
+            "ARTIFACT_OUTPUT_OVERWRITES_INPUT",
         ],
     ),
     ToolContract(
@@ -273,7 +287,15 @@ TOOLS: list[ToolContract] = [
         "output directory.",
         input_schema={
             "type": "object",
-            "properties": {**_INPUT_PATH_PROPERTY, "out_dir": {"type": "string"}},
+            "properties": {
+                **_INPUT_PATH_PROPERTY,
+                "out_dir": {"type": "string"},
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "Report where output would be written and an estimated file count "
+                    "without actually rendering (FIX_PROMPT P2-4).",
+                },
+            },
             "required": ["input"],
             "additionalProperties": False,
         },
@@ -286,7 +308,7 @@ TOOLS: list[ToolContract] = [
         verification_policy={"structural_required": False, "visual_required": False},
         visual_requirement="produces_evidence_for_agent_to_inspect",
         evidence="page images (PNG)",
-        errors=["ARTIFACT_CAPABILITY_MISSING", "ARTIFACT_RENDER_NOT_IMPLEMENTED"],
+        errors=["ARTIFACT_CAPABILITY_MISSING", "ARTIFACT_RENDER_NOT_IMPLEMENTED", "ARTIFACT_TOO_MANY_PAGES"],
     ),
     ToolContract(
         name="verify",
@@ -337,6 +359,11 @@ TOOLS: list[ToolContract] = [
                 **_INPUT_PATH_PROPERTY,
                 "compare_to": {"type": "string"},
                 "out_dir": {"type": "string"},
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "Report where the contact sheet would be written without actually "
+                    "rendering (FIX_PROMPT P2-4).",
+                },
             },
             "required": ["input"],
             "additionalProperties": False,
@@ -350,7 +377,7 @@ TOOLS: list[ToolContract] = [
         verification_policy={"structural_required": False, "visual_required": False},
         visual_requirement="produces_evidence_for_agent_to_inspect",
         evidence="contact sheet image (PNG)",
-        errors=["ARTIFACT_CAPABILITY_MISSING", "ARTIFACT_RENDER_NOT_IMPLEMENTED"],
+        errors=["ARTIFACT_CAPABILITY_MISSING", "ARTIFACT_RENDER_NOT_IMPLEMENTED", "ARTIFACT_TOO_MANY_PAGES"],
     ),
     ToolContract(
         name="receipt",
@@ -374,10 +401,34 @@ TOOLS: list[ToolContract] = [
                     "\"web-no-external\"); 'policy' fields override it on conflict. See docs/verification.md.",
                 },
                 "max_iterations": {
-                    "type": "integer", "minimum": 1, "maximum": 10,
-                    "description": "Fix-loop retry cap. Default (when omitted): Limits.max_fix_iterations "
-                    "(currently 3) - omitting this does NOT mean 'don't retry.' Meaningless without "
-                    "'operation' (there is no fix loop for a verify-only receipt).",
+                    # Self-audit finding: this used to hardcode "maximum": 10
+                    # while core/engine.py::run_lifecycle() silently clamped
+                    # anything above Limits.max_fix_iterations (3) down to 3
+                    # — a caller requesting e.g. 10 saw no error and no
+                    # indication their request was overridden (confirmed by
+                    # direct reproduction: requesting 10 against an
+                    # always-failing fixer actually ran exactly 3
+                    # iterations). Derived from DEFAULT_LIMITS here instead
+                    # of a second hardcoded literal, and run_lifecycle() now
+                    # rejects (ARTIFACT_INVALID_ARGS) rather than clamps, so
+                    # this bound is always the truth, not a stale promise.
+                    "type": "integer", "minimum": 1, "maximum": DEFAULT_LIMITS.max_fix_iterations,
+                    "description": f"Fix-loop retry cap, in [1, {DEFAULT_LIMITS.max_fix_iterations}]. Default "
+                    f"(when omitted): {DEFAULT_LIMITS.max_fix_iterations} - omitting this does NOT mean "
+                    "'don't retry.' Meaningless without 'operation' (there is no fix loop for a "
+                    "verify-only receipt).",
+                },
+                "evidence_dir": {
+                    "type": "string",
+                    "description": "Directory for the receipt and evidence (default: \"./reports\"). "
+                    "FIX_PROMPT P2-5/self-audit: this was already read by the MCP handler but was never a "
+                    "declared schema property, so additionalProperties:false silently rejected every real "
+                    "MCP caller that tried to pass it — dead code in practice, now reachable.",
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "Run the identical plan/validation path but perform no I/O and spawn "
+                    "no subprocess (FIX_PROMPT P2-4). Returns the operation plan instead of a real receipt.",
                 },
             },
             "required": ["input"],
@@ -397,6 +448,7 @@ TOOLS: list[ToolContract] = [
             "ARTIFACT_CAPABILITY_MISSING",
             "ARTIFACT_PDF_ENCRYPTED",
             "ARTIFACT_PATH_ESCAPE",
+            "ARTIFACT_OUTPUT_OVERWRITES_INPUT",
         ],
     ),
 ]

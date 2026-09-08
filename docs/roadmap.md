@@ -1,26 +1,29 @@
 # Roadmap
 
-> **Status for a new contributor (2026-09-08):** all format adapters,
-> the fix loop, MCP protocol negotiation, JSON Schema files, verification
-> policy presets, an expanded mutation-operation catalog, and real
-> LibreOffice/Chromium/macOS CI coverage are done — see GitHub issue #2
-> (the roadmap tracker) for the authoritative, currently-open-vs-closed
-> list, since this file reads chronologically (what happened, in what
-> order) rather than as a live checklist. As of this writing the only
-> items still open are Issue #9 (publish to PyPI/npm — deliberately not
-> started without the repo owner's explicit go-ahead, since it's an
-> external, irreversible action) and anything filed after this note.
+> **Status for a new contributor (2026-09-08):** all format adapters —
+> now including CSV, Markdown, and EPUB (Phase 8) alongside the original
+> PDF/PPTX/DOCX/XLSX/Image/HTML/SVG set — the fix loop, MCP protocol
+> negotiation, JSON Schema files, verification policy presets, an expanded
+> mutation-operation catalog, and real LibreOffice/Chromium/macOS CI
+> coverage are done — see GitHub issue #2 (the roadmap tracker) for the
+> authoritative, currently-open-vs-closed list, since this file reads
+> chronologically (what happened, in what order) rather than as a live
+> checklist. As of this writing the only items still open are Issue #9
+> (publish to PyPI/npm — deliberately not started without the repo
+> owner's explicit go-ahead, since it's an external, irreversible action)
+> and anything filed after this note.
 
 Phases per the original design brief. **Phase 0-1, Phase 2 (PDF + PPTX),
-Phase 3 (DOCX + XLSX), a working slice of Phase 4/5, and all of Phase 6
-(Image + HTML + SVG) are done as of this writing** — everything below
+Phase 3 (DOCX + XLSX), a working slice of Phase 4/5, all of Phase 6
+(Image + HTML + SVG), and Phase 8 (CSV + Markdown + EPUB, added beyond
+the original brief) are done as of this writing** — everything below
 "Now" is planned, not implemented, and nothing in this codebase claims
 otherwise (`doctor`/`registry.py` report unimplemented formats
 explicitly). All four Tier 1 formats from the original design brief
 (PDF/PPTX/DOCX/XLSX) are now implemented, plus PNG/JPEG/WebP, HTML, and
-SVG from Tier 2 — `adapters/registry.py`'s `_PLANNED` dict is now empty,
-meaning every `ArtifactType` this project currently knows about has a
-real adapter.
+SVG from Tier 2, plus CSV/Markdown/EPUB from Phase 8 —
+`adapters/registry.py`'s `_PLANNED` dict is now empty, meaning every
+`ArtifactType` this project currently knows about has a real adapter.
 
 ## Done
 
@@ -133,19 +136,37 @@ real adapter.
 
 All four Tier 1 formats (PDF, PPTX, DOCX, XLSX) are implemented, the PDF
 font-embedding gap flagged since the MVP is closed, all of Phase 6
-(Image, HTML, SVG) is done, and Issue #8's fix loop now has one real,
-tested fixer (`pdf.fit_page_size`, see the "Fix-loop honesty note" above)
-— see `docs/adapters.md` for the full per-adapter writeups. Remaining
-candidates: Issue #9 (PyPI/npm distribution — requires explicit
-confirmation before executing, since publishing is an external,
-irreversible action). Issue #10 is resolved (see below) — the only
-open item on the roadmap tracker is Issue #9.
+(Image, HTML, SVG) is done, Phase 8 (CSV, Markdown, EPUB) is done, and
+Issue #8's fix loop now has one real, tested fixer (`pdf.fit_page_size`,
+see the "Fix-loop honesty note" above) — see `docs/adapters.md` for the
+full per-adapter writeups. Remaining candidates: Issue #9 (PyPI/npm
+distribution — requires explicit confirmation before executing, since
+publishing is an external, irreversible action). Issue #10 is resolved
+(see below) — the only open item on the roadmap tracker is Issue #9.
 
 ## Later
 
-Nothing currently — Issue #9 (PyPI/npm publishing) is the only item left
-on the tracker, and it requires explicit user confirmation before
-executing since publishing is an external, irreversible action.
+Issue #9 (PyPI/npm publishing) is the only tracker item left, and it
+requires explicit user confirmation before executing since publishing is
+an external, irreversible action.
+
+**CAD and 3D assets (DWG/DXF/STEP, glTF/OBJ/STL, …) are not planned.**
+Considered directly when broadening beyond CSV/Markdown/EPUB (Phase 8):
+neither has a rendering backend that fits this project's local-first,
+lightweight bias — CAD formats are largely proprietary with no real
+open-source render path (LibreOffice/Chromium can't touch them), and 3D
+assets need a full engine (e.g. a headless Blender) just to produce a
+single preview image. Both would mean a heavyweight new dependency class
+for one format each, a poor trade the existing adapters don't ask for.
+
+**Audio and video are not planned here.** The verification model this
+project is built around — structural checks plus a rendered page/frame as
+visual evidence — doesn't transfer to time-based media at all; a real
+audio/video adapter needs a different verification paradigm entirely
+(waveform/frame analysis, duration/codec checks), not a render() variant.
+That's also squarely `kajisho5/ffmpeg-skill`'s own domain (see "What is
+SPEC?" in `README.md`) — building it here would duplicate, not
+complement, a sibling project already built for exactly this.
 
 ## Phase 7 — Ecosystem integration + scored benchmark (Issue #10 — resolved)
 
@@ -226,6 +247,55 @@ actually renders PPTX/DOCX/XLSX/HTML/SVG on macOS now, not just Linux.
 A Windows runner would close the remaining gap but is still lower
 priority than macOS was, per the reasoning above: no Windows-specific bug
 has ever been found by the code audit, only fixed proactively.
+
+## Phase 8 — CSV, Markdown, EPUB adapters
+
+Broadened format coverage on request, choosing by fit with this project's
+verification model (structural checks + a rendered visual evidence step)
+rather than accepting every format suggested — see "Explicitly not
+planned" below for the formats considered and rejected in the same pass.
+
+- **CSV** (`adapters/csv/adapter.py`). Stdlib `csv` only for structural
+  checks (readability, row count + optional requirement,
+  `column_count_consistency` for ragged rows, leftover-placeholder-text
+  scan across every cell). No mutating operations (a cell-value edit is
+  source-data editing, the same reasoning HTML/SVG already established for
+  their own formats). `render()` builds a small, fully self-contained HTML
+  `<table>` (every cell inlined and escaped, zero external/local resource
+  references) and reuses `rendering/chromium_render.py` — no new rendering
+  backend, no new trust surface.
+- **Markdown** (`adapters/markdown/adapter.py`). Structural checks are
+  again stdlib-only (regex over the decoded text: headings, local link/
+  image resolution, external links, fenced-code-block balance, leftover
+  text with fenced-code bodies excluded — the same "code is not document
+  text" reasoning as HTML's `<script>`/`<style>` exclusion). `render()`
+  needs a real Markdown → HTML conversion to be worth anything, so it pulls
+  in the optional `markdown-it-py` dependency (MIT, pure Python) feeding
+  the same Chromium backend as CSV/HTML/SVG; `markdown.render` degrades to
+  `MISSING` without it while structural verification stays fully
+  available — the same "losing one optional dependency doesn't collapse
+  the whole format" precedent as every other adapter.
+- **EPUB** (`adapters/epub/adapter.py`). Stdlib `zipfile` +
+  `xml.etree.ElementTree` only. Structural checks parse the real OCF/OPF
+  structure (`META-INF/container.xml` → the OPF package document →
+  manifest + spine), checking manifest/spine reference integrity and the
+  `mimetype`-first-and-stored OCF requirement (`WARN`, not `FAIL` — most
+  real-world reading systems tolerate this). `inspect()` reads the zip
+  entirely in memory (never extracts to disk, honoring the adapter
+  interface's "inspect() must never write to disk" rule) with its own
+  decompression-bomb guard reusing `security/limits.py`'s existing
+  thresholds, and the same billion-laughs entity-declaration guard XLSX
+  needed (Issue #21), applied per-XML-member since EPUB's XML-ish members
+  (`.opf`, `.xhtml`) don't share OOXML's bare `.xml` extension. One
+  operation, `metadata_set` (title/author only — EPUB's Dublin Core
+  metadata has no single-field analogue for `subject`/`keywords`).
+  **Rendering** (self-audit finding, closed after this phase's initial
+  ship — see `docs/adapters.md`'s EPUB section for the full design):
+  one PNG per spine document, staged into a safely-extracted private copy
+  of the whole archive so same-archive cross-directory resource
+  references (a chapter under `text/` pulling an image from a sibling
+  `images/`) resolve correctly without reopening the P0-2 `file://`
+  containment hole.
 
 ## Explicitly not planned (see spec §62)
 

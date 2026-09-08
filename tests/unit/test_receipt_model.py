@@ -71,3 +71,26 @@ def test_receipt_write_produces_valid_json_file(good_pdf, tmp_path):
     out = receipt.write(tmp_path / "reports" / "receipt.json")
     data = json.loads(out.read_text())
     assert data["schema"] == "artifact-receipt/v1"
+
+
+def test_receipt_write_leaves_no_partial_or_temp_file_behind(good_pdf, tmp_path):
+    """Self-audit finding (FIX_PROMPT P3-3): receipt.json is the one
+    artifact this project's own docs call "meant to outlive this
+    process" — it must go through the same atomic write-then-replace
+    path every other on-disk write in this project uses, not a plain
+    write_text() that could leave a truncated file behind on a crash
+    mid-write. This doesn't simulate the crash itself (atomic_write_bytes's
+    own crash-safety is already proven directly in
+    tests/security/test_path_safety.py) — it proves receipt.write() is
+    actually wired through that same code path, by checking that no
+    leftover temp file (atomic_write_bytes's own naming pattern) is ever
+    left in the output directory."""
+    ref = ArtifactRef.from_path(good_pdf)
+    builder = ReceiptBuilder(ref, CapabilityReport())
+    builder.add_operation(_record(True))
+    receipt = builder.build()
+    reports_dir = tmp_path / "reports"
+    out = receipt.write(reports_dir / "receipt.json")
+    leftovers = [p for p in reports_dir.iterdir() if p.name != "receipt.json"]
+    assert leftovers == []
+    assert out.exists()

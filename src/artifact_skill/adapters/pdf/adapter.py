@@ -40,6 +40,22 @@ _STANDARD_14_FONTS = {
 }
 
 
+def _action_is_javascript(action: object) -> bool:
+    """True if a PDF action dictionary is (or chains to, via /Next) a
+    JavaScript action. Best-effort structural check only — never executes
+    or interprets the script itself."""
+    seen = 0
+    while action is not None and seen < 64:  # bound a malicious /Next cycle
+        seen += 1
+        try:
+            if action.get("/S") == "/JavaScript":  # type: ignore[attr-defined]
+                return True
+            action = action.get("/Next")  # type: ignore[attr-defined]
+        except AttributeError:
+            return False
+    return False
+
+
 def _has(module: str) -> bool:
     return importlib.util.find_spec(module) is not None
 
@@ -374,7 +390,10 @@ class PdfAdapter(ArtifactAdapter):
     def limitations(self) -> list[str]:
         return [
             "Encrypted PDFs are detected but not decrypted automatically.",
-            "JavaScript actions are detected but not executed or analyzed further.",
+            "JavaScript detection is partial: it checks the /Names /JavaScript tree, /OpenAction, and "
+            "document- and page-level /AA (additional actions), but not annotation-level actions (e.g. a "
+            "form field's /AA) or JavaScript reachable only via an embedded file. Detected JavaScript is "
+            "never executed or analyzed further.",
             "blank_pages flags a page with neither extractable text nor an embedded image; a page of pure "
             "vector graphics (lines/shapes only) is a false positive this check cannot distinguish from a "
             "genuinely blank page.",
@@ -429,12 +448,43 @@ class PdfAdapter(ArtifactAdapter):
         has_javascript = False
         has_forms = False
         if not is_encrypted:
+            # FIX_PROMPT P2-2: the document-level name tree (/Names
+            # /JavaScript) is only one of several places a PDF can carry
+            # JavaScript. /OpenAction (runs when the document opens) and
+            # /AA (additional actions, at both the document catalog and
+            # per-page level - e.g. a page's /O action fires when it's
+            # opened) are at least as common a real-world payload location
+            # and were previously invisible to this check entirely
+            # (confirmed by direct reproduction: a crafted /OpenAction
+            # JavaScript action with no /Names entry passed has_javascript
+            # == False before this fix). Still not exhaustive - see
+            # limitations().
             try:
                 root = reader.trailer["/Root"]
                 names = root.get("/Names")
                 has_javascript = bool(names and "/JavaScript" in names)
             except Exception:  # noqa: BLE001 - best-effort detection, never fatal
                 has_javascript = False
+            if not has_javascript:
+                try:
+                    root = reader.trailer["/Root"]
+                    if _action_is_javascript(root.get("/OpenAction")):
+                        has_javascript = True
+                    else:
+                        catalog_aa = root.get("/AA")
+                        if catalog_aa and any(_action_is_javascript(a) for a in catalog_aa.values()):
+                            has_javascript = True
+                except Exception:  # noqa: BLE001, S110 - best-effort detection, never fatal
+                    pass
+            if not has_javascript:
+                try:
+                    for page in reader.pages:
+                        page_aa = page.get("/AA")
+                        if page_aa and any(_action_is_javascript(a) for a in page_aa.values()):
+                            has_javascript = True
+                            break
+                except Exception:  # noqa: BLE001, S110 - best-effort detection, never fatal
+                    pass
             try:
                 has_forms = "/AcroForm" in reader.trailer["/Root"]
             except Exception:  # noqa: BLE001
@@ -510,6 +560,18 @@ class PdfAdapter(ArtifactAdapter):
                         message=f"Additional merge input does not exist: {extra_path}",
                         evidence={"path": str(extra_path)},
                     )
+                # Independent-review finding: check_input_size() is called
+                # for the primary input via inspect() above, but a merge's
+                # additional_inputs never passed through it on any code
+                # path - pypdf.PdfReader() loads a file entirely into
+                # memory, so the size cap check_input_size() exists to
+                # enforce was silently bypassed for every secondary merge
+                # input (confirmed by direct reproduction: a file exceeding
+                # the configured limit was correctly rejected as the
+                # primary input but merged in without error as an
+                # additional_inputs entry). Checked here (plan()) and again
+                # in execute() since either can be called independently.
+                check_input_size(extra_path)
                 files_touched.append(str(extra_path))
         elif operation == "fit_page_size":
             _require_positive_page_size(args)
@@ -567,6 +629,7 @@ class PdfAdapter(ArtifactAdapter):
             writer = pypdf.PdfWriter()
             writer.append(reader)
             for extra in args.get("additional_inputs", []):
+                check_input_size(Path(extra))
                 extra_reader = pypdf.PdfReader(str(extra))
                 if extra_reader.is_encrypted:
                     raise ArtifactExecutionError(
@@ -662,11 +725,7 @@ class PdfAdapter(ArtifactAdapter):
     # ---- render ----------------------------------------------------
 
     def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
-        # pypdfium2 renders in-process with no timeout-governed step —
-        # `limits` is accepted (not omitted) so every adapter's render()
-        # shares one real interface (see adapters/base.py), but unused here.
-        del limits
-        return render_pdf_pages(ref.path, out_dir)
+        return render_pdf_pages(ref.path, out_dir, limits=limits)
 
     # ---- verify ------------------------------------------------------
 
@@ -748,23 +807,44 @@ class PdfAdapter(ArtifactAdapter):
         if "require_page_size_pt" in policy and details["page_sizes"]:
             expected_w, expected_h = policy["require_page_size_pt"]
             tolerance = policy.get("page_size_tolerance_pt", 1.0)
+            # Self-audit finding (external review, verified by direct
+            # reproduction): this used to check only page_sizes[0] - a
+            # document whose first page matched the requirement but whose
+            # other pages didn't (e.g. an A4 cover page followed by US
+            # Letter body pages) reported page_size_requirement=PASS
+            # regardless, even under a policy explicitly requiring every
+            # page match one size. Checked against every page now; the
+            # fixer (fit_page_size, see fix() below) already scales every
+            # page, not just the first, so this was purely a verification
+            # gap, not a mismatch with what the fixer actually does.
+            mismatched = [
+                {"page": i + 1, "width_pt": s["width_pt"], "height_pt": s["height_pt"]}
+                for i, s in enumerate(details["page_sizes"])
+                if abs(s["width_pt"] - expected_w) > tolerance or abs(s["height_pt"] - expected_h) > tolerance
+            ]
             first = details["page_sizes"][0]
-            ok = abs(first["width_pt"] - expected_w) <= tolerance and abs(first["height_pt"] - expected_h) <= tolerance
             checks.append(
                 Check(
                     id="page_size_requirement",
                     name="Page size matches requirement",
-                    status=CheckStatus.PASS if ok else CheckStatus.FAIL,
-                    message=f"expected ({expected_w}, {expected_h})pt, got "
-                    f"({first['width_pt']}, {first['height_pt']})pt.",
+                    status=CheckStatus.FAIL if mismatched else CheckStatus.PASS,
+                    message=f"expected every page at ({expected_w}, {expected_h})pt; "
+                    f"{len(mismatched)}/{len(details['page_sizes'])} page(s) did not match."
+                    if mismatched else f"All {len(details['page_sizes'])} page(s) match ({expected_w}, {expected_h})pt.",
                     # width_pt/height_pt here (not a nested pair) is what
                     # PdfAdapter.fix() reads to build corrected fit_page_size
                     # args — keep this shape stable, it's a fixer contract.
+                    # actual_width_pt/actual_height_pt report the first
+                    # page's size regardless of which page(s) mismatched
+                    # (fix()/fit_page_size scales every page uniformly, so
+                    # there is only ever one "current" target size to
+                    # retry with); mismatched_pages carries the full detail.
                     evidence={
                         "expected_width_pt": expected_w,
                         "expected_height_pt": expected_h,
                         "actual_width_pt": first["width_pt"],
                         "actual_height_pt": first["height_pt"],
+                        "mismatched_pages": mismatched,
                     },
                 )
             )
@@ -836,8 +916,25 @@ class PdfAdapter(ArtifactAdapter):
                 )
 
         if "require_metadata" in policy:
+            # Independent-review finding: details["metadata"] is keyed by
+            # the PDF Info dict's own native casing ("Title", "Author", ...
+            # - meta[key.lstrip("/")] in inspect(), deliberately preserved
+            # as-is for anyone inspecting the raw metadata; see the
+            # inspect() test asserting details["metadata"]["Title"]).
+            # Every other adapter (DOCX/PPTX/XLSX) builds its metadata dict
+            # with lowercase keys and looks up policy["require_metadata"]
+            # via key.lower() - this adapter alone did a bare `.get(key)`
+            # against Capitalized keys, so `require_metadata: {"title":
+            # ...}` (matching every field name in metadata_set's own
+            # schema, and how the identical policy key works on every
+            # other adapter) always FAILed regardless of the PDF's actual
+            # metadata (confirmed by direct reproduction before this fix).
+            # Normalizing only this lookup - not inspect()'s own output -
+            # fixes it without changing what a caller reading raw metadata
+            # sees.
+            metadata_lower = {k.lower(): v for k, v in details["metadata"].items()}
             for key, expected_value in policy["require_metadata"].items():
-                actual = details["metadata"].get(key)
+                actual = metadata_lower.get(key.lower())
                 ok = actual == expected_value
                 checks.append(
                     Check(

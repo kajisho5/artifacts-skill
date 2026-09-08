@@ -321,6 +321,14 @@ deserves a more specific answer than "unrecognized file."
 - **Known limitations**: JavaScript-driven content that renders
   asynchronously after `load` may not be captured; ARIA/accessibility
   structure is not inspected.
+- **Type detection scope** (`core/artifact.py`'s `detect_type()`,
+  FIX_PROMPT P2-3): recognizes a full HTML document — `<!doctype html>`,
+  a bare `<html>` root, or an XHTML document (`<?xml ...?>` followed by
+  `<html ...>`) — each after stripping any leading comment (Issue #26).
+  A bare fragment with no `<html>` tag at all (e.g. starting directly with
+  `<head>`/`<body>`, or a generation snippet with neither) is honestly
+  `UNKNOWN`, not a guess — save such a fragment wrapped in a real
+  `<html>` document if you want it recognized and verified as HTML.
 
 ## Implemented: SVG (`adapters/svg/adapter.py`)
 
@@ -364,12 +372,169 @@ deserves a more specific answer than "unrecognized file."
   `limitations()`).
 - **Render**: same Chromium backend and active network-blocking as HTML.
 
+## Implemented: CSV (`adapters/csv/adapter.py`)
+
+- **Backend**: stdlib `csv` only — `csv.structural` is always `AVAILABLE`.
+  `csv.render` needs Playwright (see below).
+- **Type detection**: CSV has no magic bytes at all — `core/artifact.py`'s
+  `_looks_like_csv()` is a genuine heuristic: `csv.Sniffer()` (retried
+  against just the header + first row if the whole sample fails to sniff,
+  since one ragged row is enough to make `Sniffer` give up entirely) plus
+  a *majority*-consistency check across sampled rows (not "every row" —
+  a real CSV can still have the odd ragged row, which is exactly what
+  `column_count_consistency` below exists to catch; requiring 100%
+  consistency at the type-detection layer would make that check
+  unreachable for the file it should flag). A file that doesn't clear the
+  bar is `UNKNOWN`, not guessed — same precedent as an unterminated
+  leading HTML comment.
+- **Operations**: none — a cell-value edit is source-data editing, the
+  same "not a property-set operation this Skill should own" reasoning
+  HTML/SVG already established.
+- **Structural checks**: readability (valid UTF-8 + parses), row count
+  (+ optional exact/range requirement), `column_count_consistency`
+  (`FAIL` if any row's field count differs from the header's), and
+  leftover generation-artifact text across every cell (shared
+  `leftover_text.py` marker list).
+- **Render**: builds a small, fully self-contained HTML `<table>` (every
+  cell HTML-escaped, zero external/local resource references at all —
+  nothing for the Chromium route handler to even need to block) and
+  reuses `rendering/chromium_render.py`, the same backend HTML/SVG use.
+  Capped at the first 500 rows, with the truncation surfaced in
+  `RenderResult.warnings`; structural checks still cover the whole file.
+- **Known limitations**: type detection is a heuristic, not a byte match
+  (see above); encoding is assumed UTF-8.
+
+## Implemented: Markdown (`adapters/markdown/adapter.py`)
+
+- **Backends**: structural inspection is stdlib-only (regex over the
+  decoded text) — `markdown.structural` is always `AVAILABLE`. Rendering
+  needs the optional `markdown-it-py` (MIT, pure Python) plus Playwright;
+  `markdown.render` degrades to `MISSING` without either, the same
+  "losing one optional dependency doesn't collapse the whole format"
+  precedent as every other adapter.
+- **Type detection**: also heuristic (`core/artifact.py`'s
+  `_looks_like_markdown()`), since plain text has no signature either.
+  One strong signal (a fenced code block, or a table separator row —
+  checked *before* CSV specifically so a Markdown table's `| a | b |`
+  rows aren't mistaken for pipe-delimited CSV) or two weaker ones
+  (heading/link-or-image/list-item/setext-heading/blockquote) are
+  required — a single ATX-heading-shaped line alone is indistinguishable
+  from a shell/Python/YAML `# comment` line, so it can't count alone.
+- **Operations**: none — same "source-content editing, not a property-set
+  operation" reasoning as CSV/HTML/SVG.
+- **Structural checks**: readability, heading count (+ optional
+  `require_heading`), `fenced_code_block_balance` (an odd fence-line count
+  means an unclosed fence, which silently renders the rest of the document
+  as code — a real correctness signal, not decoration), local link/image
+  resolution, external link/image references (`WARN` by default, `FAIL`
+  under `forbid_external_resources`), and leftover generation-artifact
+  text — with fenced-code-block *bodies* excluded first, the same "code is
+  not document text" reasoning as HTML's `<script>`/`<style>` exclusion (a
+  "TODO" inside a demonstrated code sample isn't an unreviewed artifact).
+- **Render**: `markdown-it-py` (CommonMark preset) converts to HTML,
+  wrapped in a minimal page and fed through the same
+  `rendering/chromium_render.py` backend CSV/HTML/SVG use — no new
+  security surface, since the same network-blocking route handler applies.
+- **Known limitations**: type detection and structural checks are both
+  heuristic, not a full CommonMark parser (indented code blocks and
+  reference-style links `[text][ref]` aren't specifically recognized);
+  `render()` needs two optional dependencies, not one.
+
+## Implemented: EPUB (`adapters/epub/adapter.py`)
+
+- **Backend**: stdlib `zipfile` + `xml.etree.ElementTree` only —
+  `epub.structural` is always `AVAILABLE`.
+- **Type detection**: `core/artifact.py`'s zip-container sniff
+  (`_sniff_zip_container()`, shared with the OOXML disambiguation PPTX/
+  DOCX/XLSX use) checks for EPUB's mandatory `mimetype` member containing
+  exactly `application/epub+zip` before falling back to the OOXML
+  content-type check — real content, not the `.epub` extension.
+- **`inspect()` never extracts to disk**: the adapter interface's
+  `inspect()` contract says "must never write to disk" — every read here
+  is `zipfile.ZipFile.read(name)` into memory, honored literally rather
+  than worked around. `_guard_zip_bounds()` reimplements the
+  decompression-bomb subset of `security/paths.py::safe_extract_zip()`'s
+  checks (member count / total uncompressed size / per-member compression
+  ratio, same limits, same error codes) without the extraction-only
+  checks (path escape, symlink members), which don't apply to an
+  in-memory read. `execute()` (the one place this adapter writes) doesn't
+  extract either — it rewrites the archive in memory and writes the
+  result once via `atomic_write_bytes()`.
+- **XML entity-expansion guard, generalized from Issue #21**:
+  `xml.etree.ElementTree` is `expat`-based and not hardened against
+  entity-expansion DoS, the same exposure XLSX's own zip members had. The
+  shared whole-zip pre-scanner (`reject_xml_entities_in_zip()`) filters by
+  a bare `.xml` extension, which would silently skip EPUB's `.opf`/
+  `.xhtml` members — rather than widen that already-tested scanner for a
+  format it wasn't written for, this adapter calls the lower-level
+  `reject_xml_entity_declaration()` directly on each specific member right
+  before parsing it, the same one-parse-point shape SVG uses for its
+  single file.
+- **Operations**: `metadata_set` (title/author only — EPUB's Dublin Core
+  metadata has no single-field analogue for `subject`/`keywords` the way
+  Office metadata does).
+- **Structural checks**: readability (container.xml → OPF parse
+  succeeds), `mimetype_first_and_stored` (`WARN`, not `FAIL` — a real OCF
+  requirement most real-world reading systems tolerate a violation of),
+  spine count (+ optional exact/range requirement),
+  `manifest_references_resolve` / `spine_references_resolve` (`FAIL` if a
+  manifest item or spine itemref points at nothing real), optional
+  `require_title` (dc:title presence), and leftover generation-artifact
+  text scanned across each spine content document (capped at the first
+  200, in spine order).
+- **`verify_structural()` deliberately does not catch
+  `ArtifactSecurityError`** (entity-bomb rejection, the zip-bomb guard) —
+  matching the SVG/XLSX precedent for the same class of risk (see
+  `tests/benchmark/cases.py`'s module docstring): a structural defect
+  that is itself a security control propagates as an exception, not a
+  mere `FAIL` `Check` a caller could route around.
+- **Render: one PNG per spine (reading-order) document** (self-audit
+  finding — this used to report `NOT_IMPLEMENTED`; closed by extending
+  `rendering/chromium_render.py` rather than shipping a quick hack). The
+  archive is safely extracted in full (`safe_extract_zip()` — the same
+  path-escape/symlink/zip-bomb-guarded utility FIX_PROMPT P1-1 found
+  declared but never actually wired into a production code path; this is
+  that wiring) into a private temp directory, and every spine document is
+  rendered from its staged copy with the *entire staged tree* as the
+  Chromium `file://` allowed root, not just each document's own immediate
+  directory — a chapter under `OEBPS/text/` pulling an image from a
+  sibling `OEBPS/images/` is an entirely ordinary EPUB layout, and the
+  narrower per-file boundary every other adapter uses would have
+  incorrectly blocked it. The staged tree is nothing but this one EPUB's
+  own content, so widening the boundary to all of it doesn't reopen the
+  P0-2 hole (arbitrary local files) it exists to close — proven both ways
+  directly against a real Chromium launch: a same-archive cross-directory
+  image reference renders correctly, and a hostile `file:///etc/passwd`
+  reference is still aborted. A document with more spine items than
+  `Limits.max_pages` is rejected (`ARTIFACT_TOO_MANY_PAGES`), not silently
+  truncated, the same as the PDF adapter.
+- **Known limitations**: manifest/spine integrity is checked by presence,
+  not by validating each content document's internal well-formedness
+  beyond XML parsing; `metadata_set` supports title/author only; it also
+  re-serializes the whole OPF via `xml.etree.ElementTree`, which silently
+  drops any XML comments in it (ElementTree doesn't retain them by
+  default) — every other archive member, XHTML content documents
+  included, is copied byte-for-byte unchanged.
+- **Self-audit finding, fixed before any external review saw it**:
+  `metadata_set`'s OPF re-serialization was rewriting every element's
+  namespace prefix from the original (virtually every real-world OPF
+  declares its own namespace as the *default*, unprefixed one) to an
+  auto-generated `ns0:` — `ET.tostring()`'s behavior for any namespace
+  URI it has no registered prefix mapping for. Namespace-URI-aware XML
+  parsers (this adapter's own `ET.fromstring()` included) don't care
+  about the prefix name, but it was needless churn a strict validator or
+  a human diffing the output shouldn't have had to see. Fixed by
+  registering the OPF's actual namespace URI (read from the parsed
+  root's own tag, not hardcoded) as the default prefix before
+  serializing.
+
 ## Planned, not implemented
 
 Every currently-known `ArtifactType` now has a real adapter — `_PLANNED`
 is empty. See `docs/roadmap.md`'s "Later" section for what's out of scope
-for the near term entirely (audio/video/3D/CAD, per the original design
-brief's Tier 3 and beyond) rather than "planned but not started."
+for the near term entirely (CAD, 3D assets, audio, video — considered and
+rejected when broadening to CSV/Markdown/EPUB above) rather than "planned
+but not started."
 
 `doctor` reports backend libraries' import/PATH availability
 informationally (so a contributor or user can see what to install ahead

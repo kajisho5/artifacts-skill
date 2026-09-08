@@ -77,6 +77,73 @@ def test_verify_external_resources_fails_under_strict_policy(external_resource_h
     assert check.status == CheckStatus.FAIL
 
 
+# --- P1-4 (Grok review, self-audit): external-resource detection used to
+# cover only img/script/link/iframe/source's single src/href attribute -
+# srcset, video/audio/poster, object/embed, CSS url()/@import (inline
+# style= and <style> blocks), and meta-refresh were all silently
+# undetected, undercounting what verify_structural() reports. This is a
+# *reporting* gap only - render()'s network block operates at the real
+# Chromium request layer regardless of which markup construct triggered
+# a request, so nothing here ever affected what render() actually blocks.
+
+
+def test_verify_detects_external_references_beyond_the_original_five_attributes(tmp_path, adapter):
+    html_path = tmp_path / "broad.html"
+    html_path.write_text(
+        "<!doctype html><html><head><style>\n"
+        'body { background: url("https://evil.example/bg.png"); }\n'
+        "@import url(https://evil.example/import.css);\n"
+        "</style></head><body>\n"
+        '<img srcset="local.jpg 1x, https://evil.example/srcset.jpg 2x">\n'
+        '<video src="https://evil.example/vid.mp4" poster="https://evil.example/poster.jpg"></video>\n'
+        '<audio src="https://evil.example/audio.mp3"></audio>\n'
+        '<object data="https://evil.example/thing.swf"></object>\n'
+        '<embed src="https://evil.example/embed.swf">\n'
+        '<div style="background-image:url(https://evil.example/inline.png)"></div>\n'
+        '<meta http-equiv="refresh" content="0;url=https://evil.example/redirect">\n'
+        "</body></html>\n"
+    )
+    ref = ArtifactRef.from_path(html_path)
+    report = adapter.inspect(ref)
+    external = set(report.details["external_resources"])
+    assert external == {
+        "https://evil.example/bg.png",
+        "https://evil.example/import.css",
+        "https://evil.example/srcset.jpg",
+        "https://evil.example/vid.mp4",
+        "https://evil.example/poster.jpg",
+        "https://evil.example/audio.mp3",
+        "https://evil.example/thing.swf",
+        "https://evil.example/embed.swf",
+        "https://evil.example/inline.png",
+        "https://evil.example/redirect",
+    }
+
+
+def test_verify_does_not_treat_a_plain_anchor_href_as_a_fetched_resource(tmp_path, adapter):
+    """A real browser never auto-fetches an <a href> target (only
+    navigates there on click) - it must stay out of scope, unlike
+    img/script/link/iframe."""
+    html_path = tmp_path / "anchor.html"
+    html_path.write_text('<!doctype html><html><body><a href="https://example.com/page">link</a></body></html>')
+    ref = ArtifactRef.from_path(html_path)
+    report = adapter.inspect(ref)
+    assert report.details["external_resources"] == []
+
+
+def test_verify_local_srcset_and_css_url_references_are_still_checked_for_existence(tmp_path, adapter):
+    html_path = tmp_path / "local.html"
+    html_path.write_text(
+        '<!doctype html><html><body><img srcset="missing.jpg 1x">'
+        '<div style="background:url(also-missing.png)"></div></body></html>'
+    )
+    ref = ArtifactRef.from_path(html_path)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "local_resources")
+    assert check.status == CheckStatus.FAIL
+    assert set(check.evidence["missing"]) == {"missing.jpg", "also-missing.png"}
+
+
 def test_verify_no_title_fails_when_required(no_title_html, adapter):
     ref = ArtifactRef.from_path(no_title_html)
     result = adapter.verify_structural(ref, {"require_title": True})
@@ -166,6 +233,25 @@ def test_render_happy_path_when_backend_actually_works(good_html, adapter, tmp_p
     assert result.files[0].exists()
 
 
+def test_render_succeeds_for_a_filename_containing_a_hash_character(tmp_path, adapter):
+    """Self-audit finding, FIX_PROMPT P1-3: the old f"file://{path}" URL
+    construction didn't percent-encode '#', which Chromium reads as a URL
+    fragment separator - a document named e.g. "report#2.html" (not an
+    exotic filename; ticket/issue-number-suffixed report names are
+    realistic) would silently fail navigation with
+    net::ERR_FILE_NOT_FOUND. Confirmed directly against a real Chromium
+    launch before switching to Path.as_uri()."""
+    html_path = tmp_path / "report#2 (draft).html"
+    html_path.write_text("<!doctype html><html><body>real content</body></html>")
+    ref = ArtifactRef.from_path(html_path)
+    if not _probe_html_render_works(adapter, ref, tmp_path):
+        pytest.skip("Playwright/Chromium in this environment cannot render (see adapter docstring)")
+    result = adapter.render(ref, tmp_path / "rendered")
+    assert len(result.files) == 1
+    assert result.files[0].exists()
+    assert result.files[0].stat().st_size > 0
+
+
 def test_render_blocks_external_requests_when_backend_works(tmp_path, adapter):
     """The real behavior this adapter exists to guarantee: navigating to a
     page that references an external resource must not fetch it."""
@@ -210,6 +296,59 @@ def test_render_blocks_external_requests_when_backend_works(tmp_path, adapter):
     # ...but aborted, not fulfilled — verified functionally by
     # test_render_happy_path producing a broken-image render rather than
     # this test needing to inspect pixel data.
+
+
+def test_render_blocks_a_file_url_escaping_the_document_directory(tmp_path, adapter):
+    """Grok review P0-2: before rendering/chromium_render.py restricted
+    file:// to the document's own directory, ANY file:// URL was let
+    through unconditionally - a hostile document referencing
+    file:///etc/passwd (or anything outside its own directory) would have
+    that file's content end up in the rendered PNG evidence. Real
+    end-to-end proof against a real Chromium launch, not just the pure
+    boundary-check unit tests in test_chromium_render.py."""
+    doc_dir = tmp_path / "docroot"
+    doc_dir.mkdir()
+    outside_secret = tmp_path / "outside_secret.txt"
+    outside_secret.write_text("TOP SECRET - must never be fetched")
+    html_path = doc_dir / "escape.html"
+    html_path.write_text(f'<!doctype html><html><body><iframe src="file://{outside_secret}" id="leak"></iframe></body></html>')
+
+    ref = ArtifactRef.from_path(html_path)
+    if not _probe_html_render_works(adapter, ref, tmp_path):
+        pytest.skip("Playwright/Chromium in this environment cannot render (see adapter docstring)")
+
+    from playwright.sync_api import sync_playwright
+
+    from artifact_skill.rendering.chromium_render import _file_url_is_within
+
+    allowed_root = html_path.resolve().parent
+    requests_seen = []
+    aborted = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page()
+
+            def _track(request):
+                requests_seen.append(request.url)
+
+            page.on("request", _track)
+
+            def _block_external(route):
+                url = route.request.url
+                if url.startswith(("data:", "about:")) or _file_url_is_within(url, allowed_root):
+                    route.continue_()
+                else:
+                    aborted.append(url)
+                    route.abort()
+
+            page.route("**/*", _block_external)
+            page.goto(f"file://{html_path.resolve()}", wait_until="load")
+        finally:
+            browser.close()
+
+    assert any(str(outside_secret) in u for u in requests_seen)  # the request was attempted...
+    assert any(str(outside_secret) in u for u in aborted)  # ...but aborted, not fulfilled.
 
 
 def test_limitations_names_the_real_known_caveats(adapter):

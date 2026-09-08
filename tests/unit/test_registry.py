@@ -1,13 +1,12 @@
 """Tests for adapters/registry.py's dispatch logic.
 
-All six known ArtifactTypes now have a real adapter (see
-docs/roadmap.md — Tier 1 + Image/HTML/SVG from Tier 2 are all
-implemented), so `_PLANNED` is currently empty in production. Its code
-path — a format that's a real, recognized type but genuinely not
-implemented yet — still needs to stay correct for whenever a future
-format (Tier 3: EPUB, CSV-as-a-real-format, etc.) is added there before
-its adapter lands. Exercised here via a temporary monkeypatched entry
-rather than a real fixture, since none currently exists.
+Every currently-known ArtifactType now has a real adapter (Tier 1 + 2 +
+3 — see docs/roadmap.md), so `_PLANNED` is currently empty in production.
+Its code path — a format that's a real, recognized type but genuinely
+not implemented yet — still needs to stay correct for whenever a future
+format is added there before its adapter lands. Exercised here via a
+temporary monkeypatched entry rather than a real fixture, since none
+currently exists.
 """
 
 from __future__ import annotations

@@ -197,6 +197,36 @@ def test_execute_gates_its_own_receipt_with_an_explicit_policy(good_pdf, tmp_pat
     assert data["receipt"]["status"] == "fail"
 
 
+def test_execute_default_evidence_dir_matches_receipts_default(good_pdf, tmp_path):
+    """FIX_PROMPT P2-5: execute used to always write its receipt to
+    output_path.parent/'reports', which diverged from `receipt`'s own
+    cwd-relative './reports' default whenever --output pointed outside
+    cwd - confirmed by direct reproduction before this fix that an
+    absolute --output path put the receipt somewhere an agent checking
+    the conventional ./reports location would never find it."""
+    out_dir = tmp_path / "elsewhere"
+    out_dir.mkdir()
+    proc = run_cli(
+        ["execute", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}',
+         "--output", str(out_dir / "out.pdf"), "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 0
+    assert (tmp_path / "reports" / "receipt.json").exists()
+    assert not (out_dir / "reports" / "receipt.json").exists()
+
+
+def test_execute_evidence_dir_flag_overrides_the_default(good_pdf, tmp_path):
+    proc = run_cli(
+        ["execute", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}',
+         "--output", "out.pdf", "--evidence-dir", "custom_evidence", "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 0
+    assert (tmp_path / "custom_evidence" / "receipt.json").exists()
+    assert not (tmp_path / "reports" / "receipt.json").exists()
+
+
 def test_execute_accepts_policy_preset(good_pdf, tmp_path):
     proc = run_cli(
         ["execute", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}',
@@ -323,6 +353,43 @@ def test_password_protected_looking_ooxml_gives_a_specific_actionable_error(tmp_
     assert data["error"]["code"] == "ARTIFACT_OLE_COMPOUND_FILE_UNSUPPORTED"
     assert "password" in data["error"]["remediation"].lower()
     assert proc.returncode == 3
+
+
+def test_malformed_policy_json_respects_the_json_flag(good_pdf, tmp_path):
+    """Self-audit finding (CLI/MCP parity audit): _load_json_arg() used to
+    raise a bare SystemExit(str) - a plain-text message to stderr that
+    completely ignores --json, unlike every other error path in this CLI.
+    Confirmed by direct reproduction before this fix: `verify doc.pdf
+    --policy 'not json' --json` printed a plain "error: ..." line, not
+    JSON, even though --json was explicitly requested."""
+    proc = run_cli(["verify", str(good_pdf), "--policy", "not valid json", "--json"], cwd=tmp_path)
+    assert proc.returncode != 0
+    data = json.loads(proc.stdout)  # must be parseable JSON, not a plain-text message
+    assert data["error"]["code"] == "ARTIFACT_INVALID_ARGS"
+
+
+def test_non_object_policy_json_respects_the_json_flag(good_pdf, tmp_path):
+    proc = run_cli(["verify", str(good_pdf), "--policy", '"just a string"', "--json"], cwd=tmp_path)
+    assert proc.returncode != 0
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_INVALID_ARGS"
+
+
+def test_receipt_max_iterations_above_the_limit_is_rejected_over_the_cli(good_pdf, tmp_path):
+    """Self-audit finding (CLI/MCP parity): the CLI used to silently accept
+    --max-iterations outside [1, Limits.max_fix_iterations] and just run
+    with a silently-clamped value - confirmed by direct reproduction that
+    `--max-iterations 15` on a real run exited 0 with status "pass" and no
+    indication the requested retry cap was overridden. Must now be a
+    structured rejection, same as MCP's schema already enforced."""
+    proc = run_cli(
+        ["receipt", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}',
+         "--max-iterations", "15", "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode != 0
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_INVALID_ARGS"
 
 
 def test_receipt_end_to_end_human_readable_report(good_pdf, tmp_path):
@@ -538,9 +605,19 @@ def test_html_receipt_without_operation_gives_a_real_verify_only_receipt(good_ht
 
 
 def test_receipt_without_operation_rejects_output(good_html, tmp_path):
+    """Self-audit finding (CLI/MCP parity audit): this test used to assert
+    the error text on stderr only ("requires --operation" in proc.stderr),
+    which passed identically whether or not --json was honored - masking
+    a real bug where this exact code path raised a bare SystemExit(str)
+    that ignored --json entirely (confirmed by direct reproduction before
+    the fix: --json produced a plain-text line, not JSON, on stdout).
+    Asserting the actual --json contract (parseable JSON on stdout with
+    the structured error code) is what would have caught that."""
     proc = run_cli(["receipt", str(good_html), "--output", "out.html", "--json"], cwd=tmp_path)
     assert proc.returncode != 0
-    assert "requires --operation" in proc.stderr
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_INVALID_ARGS"
+    assert "requires --operation" in data["error"]["message"]
 
 
 def test_pdf_receipt_without_operation_still_gates_on_policy(leftover_placeholder_pdf, tmp_path):

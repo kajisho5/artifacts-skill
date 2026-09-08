@@ -76,6 +76,32 @@ def test_verify_leftover_placeholder_docx_fails_under_strict_policy(leftover_pla
     assert check.status == CheckStatus.FAIL
 
 
+def test_leftover_text_scan_covers_table_cells_and_header_footer(adapter, tmp_path):
+    """FIX_PROMPT P2-1: document.paragraphs only walks the document body -
+    table cell text and header/footer text each live in their own separate
+    python-docx object graph and were previously invisible to leftover-text
+    scanning entirely (confirmed by direct reproduction: an earlier version
+    of this adapter reported an empty leftover_markers list for this exact
+    fixture)."""
+    import docx
+
+    d = docx.Document()
+    d.add_paragraph("Ordinary reviewed body text.")
+    table = d.add_table(rows=1, cols=1)
+    table.cell(0, 0).text = "Lorem ipsum in a table cell"
+    section = d.sections[0]
+    section.header.paragraphs[0].text = "TODO header text"
+    section.footer.paragraphs[0].text = "FIXME footer text"
+    path = tmp_path / "table_header_footer.docx"
+    d.save(str(path))
+
+    report = adapter.inspect(ArtifactRef.from_path(path))
+    markers = report.details["leftover_markers"]
+    assert "lorem ipsum" in markers
+    assert "todo" in markers
+    assert "fixme" in markers
+
+
 def test_page_count_is_always_unknown_not_hidden(good_docx, adapter):
     """DOCX has no fixed pagination in its XML — this must never be
     silently omitted or fabricated (see the adapter module's docstring)."""
@@ -146,6 +172,35 @@ def test_render_propagates_backend_failure(good_docx, adapter, tmp_path, monkeyp
     with pytest.raises(ArtifactExecutionError) as exc_info:
         adapter.render(ref, tmp_path / "rendered")
     assert exc_info.value.code == "ARTIFACT_RENDER_BACKEND_FAILED"
+
+
+def test_render_honors_a_custom_limits_max_pages(good_docx, adapter, tmp_path, monkeypatch):
+    """Grok review P0-3: limits must reach render_pdf_pages() through the
+    intermediate PDF conversion step. Fakes convert_to_pdf() with a real,
+    pre-made multi-page PDF rather than requiring a working LibreOffice
+    install for this specific check."""
+    import artifact_skill.adapters.docx.adapter as adapter_module
+    from artifact_skill.core.errors import ArtifactSecurityError
+    from artifact_skill.security.limits import Limits
+
+    def _fake_convert(input_path, pdf_out_dir, **kwargs):
+        import pypdf
+
+        pdf_out_dir.mkdir(parents=True, exist_ok=True)
+        writer = pypdf.PdfWriter()
+        for _ in range(5):
+            writer.add_blank_page(width=200, height=200)
+        out = pdf_out_dir / "converted.pdf"
+        with open(out, "wb") as f:
+            writer.write(f)
+        return out
+
+    monkeypatch.setattr(adapter_module, "convert_to_pdf", _fake_convert)
+
+    ref = ArtifactRef.from_path(good_docx)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.render(ref, tmp_path / "rendered", limits=Limits(max_pages=3))
+    assert exc_info.value.code == "ARTIFACT_TOO_MANY_PAGES"
 
 
 def test_render_happy_path_when_backend_actually_works(good_docx, adapter, tmp_path):

@@ -43,6 +43,9 @@ XLSX_OUT_DIR = Path(__file__).parent / "xlsx"
 IMAGE_OUT_DIR = Path(__file__).parent / "image"
 HTML_OUT_DIR = Path(__file__).parent / "html"
 SVG_OUT_DIR = Path(__file__).parent / "svg"
+CSV_OUT_DIR = Path(__file__).parent / "csv"
+MARKDOWN_OUT_DIR = Path(__file__).parent / "markdown"
+EPUB_OUT_DIR = Path(__file__).parent / "epub"
 
 
 # ---------------------------------------------------------------- PDF ----
@@ -615,6 +618,174 @@ def make_mislabeled_pdf_as_svg() -> None:
     path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
 
 
+# ---------------------------------------------------------------- CSV ----
+
+def make_good_csv() -> None:
+    path = CSV_OUT_DIR / "good.csv"
+    path.write_text("name,age,city\nAlice,30,Tokyo\nBob,25,Osaka\nCarol,40,Kyoto\n")
+
+
+def make_ragged_csv() -> None:
+    """Row 2 (0-indexed) has one fewer field than the header - column_count_consistency must FAIL."""
+    path = CSV_OUT_DIR / "ragged.csv"
+    path.write_text("a,b,c\n1,2,3\n4,5\n6,7,8\n")
+
+
+def make_leftover_placeholder_csv() -> None:
+    path = CSV_OUT_DIR / "leftover_placeholder.csv"
+    path.write_text("item,note\nWidget,TODO fill in real price\nGadget,Lorem ipsum dolor sit amet\n")
+
+
+def make_mislabeled_pdf_as_csv() -> None:
+    path = CSV_OUT_DIR / "mislabeled_pdf.csv"
+    path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
+
+
+# ----------------------------------------------------------- MARKDOWN ----
+
+def make_good_markdown() -> None:
+    path = MARKDOWN_OUT_DIR / "good.md"
+    path.write_text(
+        "# Title\n\nSome intro text with a [link](good.md) to itself.\n\n"
+        "- item one\n- item two\n\n```python\nprint('hello')\n```\n"
+    )
+
+
+def make_unclosed_fence_markdown() -> None:
+    path = MARKDOWN_OUT_DIR / "unclosed_fence.md"
+    path.write_text("# Title\n\n```python\nprint('never closed')\n\nMore text after.\n")
+
+
+def make_missing_local_resource_markdown() -> None:
+    path = MARKDOWN_OUT_DIR / "missing_local_resource.md"
+    path.write_text("# Title\n\nSee ![diagram](does-not-exist.png) for details.\n")
+
+
+def make_external_resource_markdown() -> None:
+    path = MARKDOWN_OUT_DIR / "external_resource.md"
+    path.write_text("# Title\n\nSee [the spec](https://example.com/spec) for details.\n")
+
+
+def make_leftover_placeholder_markdown() -> None:
+    path = MARKDOWN_OUT_DIR / "leftover_placeholder.md"
+    path.write_text(
+        "# Title\n\nTODO: write the real introduction.\n\n- Lorem ipsum dolor sit amet.\n- Another point.\n"
+    )
+
+
+def make_leftover_in_code_fence_markdown() -> None:
+    """A "TODO" that appears only inside a fenced code block - the code
+    fence's *body* must be excluded from the leftover-text scan, the same
+    "code is not document text" reasoning the HTML adapter applies to
+    <script>/<style> content."""
+    path = MARKDOWN_OUT_DIR / "leftover_in_code_fence.md"
+    path.write_text("# Title\n\nReal, reviewed content here.\n\n```text\n# TODO: this is sample output, not a note\n```\n")
+
+
+def make_mislabeled_pdf_as_markdown() -> None:
+    path = MARKDOWN_OUT_DIR / "mislabeled_pdf.md"
+    path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
+
+
+# --------------------------------------------------------------- EPUB ----
+
+_EPUB_CONTAINER_XML = (
+    '<?xml version="1.0"?>\n'
+    '<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">\n'
+    '  <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>\n'
+    "</container>\n"
+)
+
+
+def _epub_opf(title: str, creator: str, chapter_href: str, spine_idref: str) -> str:
+    return (
+        '<?xml version="1.0"?>\n'
+        '<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">\n'
+        '  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">\n'
+        f"    <dc:title>{title}</dc:title>\n"
+        f"    <dc:creator>{creator}</dc:creator>\n"
+        "    <dc:language>en</dc:language>\n"
+        '    <dc:identifier id="bookid">urn:uuid:00000000-0000-0000-0000-000000000000</dc:identifier>\n'
+        "  </metadata>\n"
+        "  <manifest>\n"
+        f'    <item id="chap1" href="{chapter_href}" media-type="application/xhtml+xml"/>\n'
+        "  </manifest>\n"
+        "  <spine>\n"
+        f'    <itemref idref="{spine_idref}"/>\n'
+        "  </spine>\n"
+        "</package>\n"
+    )
+
+
+def _write_epub(path: Path, *, chapter_text: str, chapter_href: str = "text/chapter1.xhtml",
+                 manifest_href: str | None = None, spine_idref: str = "chap1",
+                 title: str = "My Book", creator: str = "Author Name",
+                 mimetype_first_and_stored: bool = True, opf_override: str | None = None) -> None:
+    with zipfile.ZipFile(path, "w") as zf:
+        if mimetype_first_and_stored:
+            zf.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        zf.writestr("META-INF/container.xml", _EPUB_CONTAINER_XML)
+        zf.writestr(f"OEBPS/{chapter_href}", f"<html><body><p>{chapter_text}</p></body></html>")
+        opf = opf_override or _epub_opf(title, creator, manifest_href or chapter_href, spine_idref)
+        zf.writestr("OEBPS/content.opf", opf)
+        if not mimetype_first_and_stored:
+            # written last and compressed - fails the OCF "first, stored" requirement (WARN, not FAIL).
+            zf.writestr("mimetype", "application/epub+zip")
+
+
+def make_good_epub() -> None:
+    _write_epub(EPUB_OUT_DIR / "good.epub", chapter_text="Hello world, this is chapter one.")
+
+
+def make_broken_manifest_epub() -> None:
+    _write_epub(
+        EPUB_OUT_DIR / "broken_manifest.epub",
+        chapter_text="Hello.", manifest_href="text/does-not-exist.xhtml",
+    )
+
+
+def make_broken_spine_epub() -> None:
+    _write_epub(EPUB_OUT_DIR / "broken_spine.epub", chapter_text="Hello.", spine_idref="no-such-id")
+
+
+def make_leftover_placeholder_epub() -> None:
+    _write_epub(
+        EPUB_OUT_DIR / "leftover_placeholder.epub",
+        chapter_text="TODO: write the real chapter content. Lorem ipsum dolor sit amet.",
+    )
+
+
+def make_mimetype_not_first_epub() -> None:
+    _write_epub(EPUB_OUT_DIR / "mimetype_not_first.epub", chapter_text="Hello.", mimetype_first_and_stored=False)
+
+
+def make_entity_bomb_epub() -> None:
+    """DOCTYPE declaring a custom entity in the OPF - proves the per-member
+    reject_xml_entity_declaration() guard runs before ET.fromstring() on
+    the package document, the same pattern as SVG's entity_bomb fixture."""
+    opf = (
+        '<?xml version="1.0"?>\n<!DOCTYPE package [<!ENTITY lol "lol">]>\n'
+        '<package xmlns="http://www.idpf.org/2007/opf">\n'
+        '  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>&lol;</dc:title></metadata>\n'
+        "  <manifest/><spine/>\n</package>\n"
+    )
+    _write_epub(EPUB_OUT_DIR / "entity_bomb.epub", chapter_text="Hello.", opf_override=opf)
+
+
+def make_missing_container_epub() -> None:
+    """No META-INF/container.xml at all - a zip with the right mimetype
+    member (so it's still *detected* as EPUB) but structurally unreadable."""
+    path = EPUB_OUT_DIR / "missing_container.epub"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        zf.writestr("OEBPS/content.opf", _epub_opf("Title", "Author", "text/chapter1.xhtml", "chap1"))
+
+
+def make_mislabeled_pdf_as_epub() -> None:
+    path = EPUB_OUT_DIR / "mislabeled_pdf.epub"
+    path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
+
+
 if __name__ == "__main__":
     PDF_OUT_DIR.mkdir(parents=True, exist_ok=True)
     PPTX_OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -623,6 +794,9 @@ if __name__ == "__main__":
     IMAGE_OUT_DIR.mkdir(parents=True, exist_ok=True)
     HTML_OUT_DIR.mkdir(parents=True, exist_ok=True)
     SVG_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    CSV_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    MARKDOWN_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    EPUB_OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     make_good_2page()
     make_blank_page_pdf()
@@ -682,6 +856,28 @@ if __name__ == "__main__":
     make_entity_bomb_svg()
     make_mislabeled_pdf_as_svg()
 
+    make_good_csv()
+    make_ragged_csv()
+    make_leftover_placeholder_csv()
+    make_mislabeled_pdf_as_csv()
+
+    make_good_markdown()
+    make_unclosed_fence_markdown()
+    make_missing_local_resource_markdown()
+    make_external_resource_markdown()
+    make_leftover_placeholder_markdown()
+    make_leftover_in_code_fence_markdown()
+    make_mislabeled_pdf_as_markdown()
+
+    make_good_epub()
+    make_broken_manifest_epub()
+    make_broken_spine_epub()
+    make_leftover_placeholder_epub()
+    make_mimetype_not_first_epub()
+    make_entity_bomb_epub()
+    make_missing_container_epub()
+    make_mislabeled_pdf_as_epub()
+
     print(f"Wrote PDF fixtures to {PDF_OUT_DIR}")
     print(f"Wrote PPTX fixtures to {PPTX_OUT_DIR}")
     print(f"Wrote DOCX fixtures to {DOCX_OUT_DIR}")
@@ -689,3 +885,6 @@ if __name__ == "__main__":
     print(f"Wrote image fixtures to {IMAGE_OUT_DIR}")
     print(f"Wrote HTML fixtures to {HTML_OUT_DIR}")
     print(f"Wrote SVG fixtures to {SVG_OUT_DIR}")
+    print(f"Wrote CSV fixtures to {CSV_OUT_DIR}")
+    print(f"Wrote Markdown fixtures to {MARKDOWN_OUT_DIR}")
+    print(f"Wrote EPUB fixtures to {EPUB_OUT_DIR}")

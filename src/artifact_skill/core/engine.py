@@ -32,6 +32,7 @@ from artifact_skill.core.verification import Check, CheckStatus, VerificationRes
 from artifact_skill.policies import unknown_policy_keys
 from artifact_skill.receipt.model import ProductionReceipt, ReceiptBuilder
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
+from artifact_skill.security.paths import reject_output_overwrites_input
 
 
 def _now_iso() -> str:
@@ -47,6 +48,7 @@ class LifecycleResult:
 
 
 def build_plan(input_path: Path, operation: str, args: dict[str, Any], output_path: Path) -> tuple[ArtifactRef, ArtifactAdapter, OperationPlan]:
+    reject_output_overwrites_input(Path(input_path), Path(output_path))
     ref = ArtifactRef.from_path(input_path)
     adapter = adapter_for(ref)
     _validate_operation_args(adapter, operation, args)
@@ -107,7 +109,27 @@ def run_lifecycle(
     # literal 3 in the CLI and MCP callers too.
     if max_iterations is None:
         max_iterations = limits.max_fix_iterations
-    max_iterations = max(1, min(max_iterations, limits.max_fix_iterations))
+    elif not 1 <= max_iterations <= limits.max_fix_iterations:
+        # Self-audit finding: this used to silently clamp
+        # (`max(1, min(max_iterations, limits.max_fix_iterations))`) instead
+        # of rejecting - an explicit --max-iterations/max_iterations outside
+        # [1, limits.max_fix_iterations] was silently overridden with no
+        # indication to the caller, even though the MCP schema advertised
+        # "maximum: 10" as if the full range were honored (confirmed by
+        # direct reproduction: requesting 10 against an always-failing
+        # fixer actually ran exactly 3 iterations, not 10). Same "reject
+        # clearly rather than silently do something different" precedent
+        # as Limits.max_pages (FIX_PROMPT P0-3) - a caller who explicitly
+        # asked for more retries than the deployment allows deserves an
+        # error naming the real ceiling, not a quiet downgrade.
+        raise ArtifactInputError(
+            code="ARTIFACT_INVALID_ARGS",
+            message=f"max_iterations must be between 1 and {limits.max_fix_iterations} "
+            f"(this deployment's Limits.max_fix_iterations), got {max_iterations}.",
+            remediation=f"Pass a value in [1, {limits.max_fix_iterations}], or omit max_iterations "
+            "entirely to use the default.",
+            evidence={"max_iterations": max_iterations, "limit": limits.max_fix_iterations},
+        )
 
     if operation is None:
         # No mutation requested (Issue #18): inspect -> render -> structural
@@ -347,11 +369,22 @@ def _visual_evidence_result(
     try:
         rendered = adapter.render(ref, evidence_dir / "rendered", limits=limits)
     except ArtifactError as exc:
+        # Self-audit finding (a real end-to-end walkthrough, not a curated
+        # unit fixture): str(exc) is only f"[{code}] {message}" -
+        # ArtifactError.remediation and .evidence (for a render backend
+        # failure, evidence.stdout/stderr carry the actual LibreOffice/
+        # Chromium diagnostic output) were silently dropped, right when a
+        # caller most needs them - reproduced directly by triggering a
+        # real ARTIFACT_RENDER_BACKEND_FAILED and finding stdout/stderr
+        # nowhere in the resulting receipt.json.
         return (
             VerificationResult(
                 kind="visual",
                 checks=[
-                    Check(id="visual_evidence", name="Visual evidence produced", status=CheckStatus.UNKNOWN, message=str(exc))
+                    Check(
+                        id="visual_evidence", name="Visual evidence produced", status=CheckStatus.UNKNOWN,
+                        message=str(exc), evidence={"remediation": exc.remediation, **exc.evidence},
+                    )
                 ],
             ),
             None,

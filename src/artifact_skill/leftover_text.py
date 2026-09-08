@@ -40,10 +40,23 @@ import re
 MARKERS: tuple[tuple[str, bool], ...] = (
     ("lorem ipsum", False),
     ("loremipsum", False),
+    ("lorem.ipsum", False),  # FIX_PROMPT P3-1: a dot-separated variant seen in the wild
     ("click to add", False),
     ("insert text here", False),
     ("placeholder text", False),
     ("[placeholder]", False),
+    ("dummy text", False),  # FIX_PROMPT P3-1
+    ("sample text", False),  # FIX_PROMPT P3-1
+    # Deliberately NOT adding a bare "placeholder" (FIX_PROMPT P3-1 also
+    # suggested this): unlike "todo"/"fixme"/"tktk", it's an ordinary
+    # English word with everyday legitimate technical-writing uses (e.g.
+    # "this field is a placeholder for the real config value") - even
+    # with word-boundary matching, that's a real sentence a bare-word
+    # marker would still misfire on, and this list's whole design
+    # principle (see module docstring) is that a false positive here
+    # costs trust in every other check this project makes. "placeholder
+    # text"/"[placeholder]" above already cover the shapes that are
+    # actually specific enough to be safe.
     ("todo", True),
     ("fixme", True),
     ("tktk", True),
@@ -54,6 +67,9 @@ MARKERS: tuple[tuple[str, bool], ...] = (
     ("ダミーテキスト", False),
     ("サンプルテキスト", False),
     ("仮のテキスト", False),
+    ("プレースホルダー", False),  # FIX_PROMPT P3-1
+    ("ダミーデータ", False),  # FIX_PROMPT P3-1
+    ("サンプル文章", False),  # FIX_PROMPT P3-1
 )
 
 
