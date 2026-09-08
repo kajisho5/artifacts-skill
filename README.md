@@ -80,11 +80,15 @@ just a claim. Once published, the same commands work as
 | Image (PNG/JPEG/WebP) | ✅ | ✅ | ✅ (Pillow) | `resize`, `convert_format` |
 | HTML | ✅ | ✅ | ✅ (Playwright + Chromium) | — (inspect/render/verify only, by design) |
 | SVG | ✅ | ✅ | ✅ (Playwright + Chromium) | — (inspect/render/verify only, by design) |
+| CSV | ✅ | ✅ | ✅ (Playwright + Chromium) | — (inspect/render/verify only, by design) |
+| Markdown | ✅ | ✅ | ✅ (`markdown-it-py` + Playwright + Chromium) | — (inspect/render/verify only, by design) |
+| EPUB | ✅ | ✅ | not yet (honestly `NOT_IMPLEMENTED`, see `docs/adapters.md`) | `metadata_set` |
 
-All formats from the original design brief's Tier 1 and Tier 2 are now
-implemented. A genuinely unrecognized file fails loudly with
-`ARTIFACT_TYPE_UNSUPPORTED`; a recognized-but-not-yet-built format would
-fail with `ARTIFACT_ADAPTER_NOT_IMPLEMENTED` — never a silent no-op. See
+All formats from the original design brief's Tier 1 and Tier 2, plus CSV/
+Markdown/EPUB added beyond it, are now implemented. A genuinely
+unrecognized file fails loudly with `ARTIFACT_TYPE_UNSUPPORTED`; a
+recognized-but-not-yet-built format would fail with
+`ARTIFACT_ADAPTER_NOT_IMPLEMENTED` — never a silent no-op. See
 `docs/roadmap.md` for the phase plan and `docs/architecture.md` for why
 the Core/Adapter split makes adding a format additive, not a rewrite.
 
@@ -163,7 +167,7 @@ same honest comparison this section summarizes.
 ```bash
 git clone https://github.com/kajisho5/artifacts-skill
 cd artifacts-skill
-pip install -e ".[all]"   # every adapter (PDF/PPTX/DOCX/XLSX/Image/HTML/SVG)
+pip install -e ".[all]"   # every adapter (PDF/PPTX/DOCX/XLSX/Image/HTML/SVG/CSV/Markdown/EPUB)
 artifacts-skill doctor
 ```
 
@@ -171,9 +175,11 @@ Only need a subset? Install just what you use instead — `pip install -e
 ".[pdf]"` for PDF alone, `.[html,svg]` for the Playwright-backed adapters,
 etc. (see `pyproject.toml`'s `[project.optional-dependencies]` for the
 full list). PPTX/DOCX/XLSX also need a `soffice`/`libreoffice` binary on
-`PATH` for rendering; HTML/SVG need `playwright install chromium` once
-after installing the `html`/`svg` extra. Run `artifacts-skill doctor` to
-see exactly what's available and what's still missing — never assume.
+`PATH` for rendering; HTML/SVG/CSV/Markdown need `playwright install
+chromium` once after installing their extra (Markdown also needs
+`markdown-it-py`, pulled in by `.[markdown]`). EPUB needs nothing beyond
+the standard library. Run `artifacts-skill doctor` to see exactly what's
+available and what's still missing — never assume.
 
 Or, once published: `npx artifacts-skill doctor` (the npm package is a thin
 wrapper that locates your Python 3 interpreter — the engine itself is

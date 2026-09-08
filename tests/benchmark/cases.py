@@ -189,6 +189,42 @@ STRUCTURAL_DEFECT_CASES: list[StructuralDefectCase] = [
         "svg/external_resource.svg", CheckStatus.WARN, "External resource reference; external_resources (WARN by default)."
     ),
     StructuralDefectCase("svg/no_size.svg", CheckStatus.WARN, "No width/height/viewBox; explicit_size."),
+    StructuralDefectCase("csv/ragged.csv", CheckStatus.FAIL, "One row has a different column count; column_count_consistency."),
+    StructuralDefectCase(
+        "csv/leftover_placeholder.csv", CheckStatus.WARN,
+        "Contains 'TODO'/'Lorem ipsum' in cell text; leftover_placeholder_text (WARN by default).",
+    ),
+    StructuralDefectCase("markdown/unclosed_fence.md", CheckStatus.WARN, "Odd fence-line count; fenced_code_block_balance."),
+    StructuralDefectCase(
+        "markdown/missing_local_resource.md", CheckStatus.FAIL, "Local image target doesn't exist; local_resources."
+    ),
+    StructuralDefectCase(
+        "markdown/external_resource.md", CheckStatus.WARN, "External link reference; external_resources (WARN by default)."
+    ),
+    StructuralDefectCase(
+        "markdown/leftover_placeholder.md", CheckStatus.WARN,
+        "Contains 'TODO'/'Lorem ipsum' in body text; leftover_placeholder_text (WARN by default).",
+    ),
+    StructuralDefectCase(
+        "epub/broken_manifest.epub", CheckStatus.FAIL, "Manifest item references a missing archive member; manifest_references_resolve."
+    ),
+    StructuralDefectCase(
+        "epub/broken_spine.epub", CheckStatus.FAIL, "Spine itemref references an unknown manifest id; spine_references_resolve."
+    ),
+    StructuralDefectCase(
+        "epub/leftover_placeholder.epub", CheckStatus.WARN,
+        "Contains 'TODO'/'Lorem ipsum' in chapter text; leftover_placeholder_text (WARN by default).",
+    ),
+    StructuralDefectCase(
+        "epub/mimetype_not_first.epub", CheckStatus.WARN,
+        "mimetype is present but not the archive's first entry, or not stored uncompressed; "
+        "mimetype_first_and_stored (WARN by default — most real-world reading systems tolerate this).",
+    ),
+    StructuralDefectCase(
+        "epub/missing_container.epub", CheckStatus.FAIL,
+        "No META-INF/container.xml at all; epub_validity — caught as ArtifactInputError, not a security "
+        "control, so (unlike entity_bomb.epub below) this is a Check, not an exception.",
+    ),
 ]
 
 EXCEPTION_CASES: list[ExceptionCase] = [
@@ -202,6 +238,12 @@ EXCEPTION_CASES: list[ExceptionCase] = [
         "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED",
         "XML entity-expansion DoS payload in xl/worksheets/sheet1.xml (Issue #21) — rejected before "
         "openpyxl.load_workbook() is ever called, not reported as a Check.",
+    ),
+    ExceptionCase(
+        "epub/entity_bomb.epub",
+        "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED",
+        "XML entity-expansion DoS payload in the OPF package document; rejected before ET.fromstring() "
+        "is ever called, not reported as a Check.",
     ),
 ]
 
@@ -222,6 +264,14 @@ KNOWN_GOOD_CASES: list[KnownGoodCase] = [
     KnownGoodCase("html/good.html", CheckStatus.PASS, "Clean HTML with a title.", policy={"require_title": True}),
     KnownGoodCase("html/no_title.html", CheckStatus.PASS, "No title, but title_presence isn't checked without the policy."),
     KnownGoodCase("svg/good.svg", CheckStatus.PASS, "Clean, self-contained SVG."),
+    KnownGoodCase("csv/good.csv", CheckStatus.PASS, "Clean, consistent-column CSV."),
+    KnownGoodCase("markdown/good.md", CheckStatus.PASS, "Clean Markdown with a heading, list, and fenced code block."),
+    KnownGoodCase(
+        "markdown/leftover_in_code_fence.md", CheckStatus.PASS,
+        "A 'TODO' that appears only inside a fenced code block's body is correctly excluded from the "
+        "leftover-text scan (code, not document text) — proves the exclusion works, not just that clean text passes.",
+    ),
+    KnownGoodCase("epub/good.epub", CheckStatus.PASS, "Clean EPUB: one spine chapter, valid manifest, mimetype first and stored."),
 ]
 
 TYPE_DETECTION_CASES: list[TypeDetectionCase] = [
@@ -232,4 +282,7 @@ TYPE_DETECTION_CASES: list[TypeDetectionCase] = [
     TypeDetectionCase("image/mislabeled_pdf.png", ArtifactType.PDF, "Real PDF content, misleading .png extension."),
     TypeDetectionCase("html/mislabeled_pdf.html", ArtifactType.PDF, "Real PDF content, misleading .html extension."),
     TypeDetectionCase("svg/mislabeled_pdf.svg", ArtifactType.PDF, "Real PDF content, misleading .svg extension."),
+    TypeDetectionCase("csv/mislabeled_pdf.csv", ArtifactType.PDF, "Real PDF content, misleading .csv extension."),
+    TypeDetectionCase("markdown/mislabeled_pdf.md", ArtifactType.PDF, "Real PDF content, misleading .md extension."),
+    TypeDetectionCase("epub/mislabeled_pdf.epub", ArtifactType.PDF, "Real PDF content, misleading .epub extension."),
 ]

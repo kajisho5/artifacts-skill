@@ -88,9 +88,12 @@ def adapter_for(ref: ArtifactRef) -> ArtifactAdapter:
 
 
 def _register_builtin_adapters() -> None:
+    from artifact_skill.adapters.csv.adapter import CsvAdapter
     from artifact_skill.adapters.docx.adapter import DocxAdapter
+    from artifact_skill.adapters.epub.adapter import EpubAdapter
     from artifact_skill.adapters.html.adapter import HtmlAdapter
     from artifact_skill.adapters.image.adapter import ImageAdapter
+    from artifact_skill.adapters.markdown.adapter import MarkdownAdapter
     from artifact_skill.adapters.pdf.adapter import PdfAdapter
     from artifact_skill.adapters.pptx.adapter import PptxAdapter
     from artifact_skill.adapters.svg.adapter import SvgAdapter
@@ -102,6 +105,9 @@ def _register_builtin_adapters() -> None:
     register(XlsxAdapter)
     register(HtmlAdapter)
     register(SvgAdapter)
+    register(CsvAdapter)
+    register(MarkdownAdapter)
+    register(EpubAdapter)
     register_for_types(
         ImageAdapter, [ArtifactType.IMAGE_PNG, ArtifactType.IMAGE_JPEG, ArtifactType.IMAGE_WEBP]
     )
