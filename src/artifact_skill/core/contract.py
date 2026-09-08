@@ -1,9 +1,29 @@
-"""The Contract — single source of truth for CLI, MCP, and docs (spec #20/#21).
+"""The Contract — single source of truth for tool identity, MCP, and docs
+(spec #20/#21).
 
-Nobody hand-writes a second copy of a tool's name/schema/policy anywhere
-else in this codebase. `cli/main.py` builds its argparse subcommands by
-reading `TOOLS`; `mcp/server.py` builds `tools/list` by reading `TOOLS`.
-`tests/contract/` asserts the two never drift apart.
+`mcp/server.py` builds `tools/list` — including every `inputSchema` — by
+reading `TOOLS` directly at runtime; there is no second copy of an MCP
+tool's schema anywhere (`tests/contract/test_cli_mcp_consistency.py`'s
+`test_mcp_tools_have_input_schema_matching_contract` asserts this by
+comparing the live objects, not by convention).
+
+`cli/main.py`'s argparse subcommands are NOT generated from `TOOLS` at
+runtime — this docstring used to claim they were, which was inaccurate.
+`build_parser()` hand-declares each subcommand's flags, and
+`tests/contract/test_cli_mcp_consistency.py::test_cli_subcommands_match_contract_tools`
+only checks that the *set of subcommand names* matches `TOOLS`, not that
+each subcommand's individual flags track `input_schema`'s properties —
+so, unlike the MCP side, a hand-edited CLI flag can drift from
+`input_schema` without CI catching it. This is a real gap relative to the
+"generate the schema from the one thing that has to be correct" pattern
+(SPEC, see kajisho5/ffmpeg-skill's README) and is tracked as follow-up
+work, not yet closed.
+
+Similarly, each adapter's `OperationSpec.args_schema` (`adapters/base.py`)
+is a hand-authored JSON Schema dict declared in `operations()`, kept in
+sync by hand with what `execute()`/`plan()` actually read out of `args`
+— there is no `jsonschema` validation step and no test asserting the two
+never diverge. Same caveat as the CLI flags above.
 """
 
 from __future__ import annotations

@@ -1,9 +1,14 @@
 """`artifact-skill` CLI — a thin, honest layer over core/engine.py.
 
 Every subcommand here corresponds 1:1 to a `ToolContract` in
-`core/contract.py`; `tests/contract/test_cli_contract_consistency.py`
-enforces that this file never adds/removes/renames a subcommand without
-updating the contract (and vice versa).
+`core/contract.py`; `tests/contract/test_cli_mcp_consistency.py`'s
+`test_cli_subcommands_match_contract_tools` enforces that this file never
+adds/removes/renames a subcommand without updating the contract (and vice
+versa) — but only at the subcommand-name level. Each subcommand's actual
+flags below are hand-declared, not generated from `TOOLS[*].input_schema`,
+and nothing currently asserts the two stay in sync flag-for-flag (see
+`core/contract.py`'s module docstring). Keep them matching by hand when
+you touch either side.
 """
 
 from __future__ import annotations
