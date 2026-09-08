@@ -31,11 +31,28 @@ This module is the *only* place in the codebase allowed to call
   `LANG`, `LC_ALL`, `SYSTEMROOT` are forwarded — not the caller's full
   environment (proxies, tokens, unrelated config).
 
-No adapter in the current MVP (PDF) actually needs this module yet — `pypdf`
-and `pypdfium2` are pure-Python-callable. It exists now because the very
-next adapter (LibreOffice-backed PPTX/DOCX/XLSX rendering) will need it
-immediately, and retrofitting safety rules onto an existing call site is
-how they get skipped under time pressure.
+The PDF and Image adapters never need this module — `pypdf`, `pypdfium2`,
+and Pillow are pure-Python-callable. `rendering/office_convert.py` (used
+by PPTX/DOCX/XLSX for LibreOffice-backed rendering) is the module's actual
+consumer, going through `run()` with an explicit `{"soffice",
+"libreoffice"}` allowlist for every invocation.
+
+**Documented exception: the HTML adapter's Playwright/Chromium process.**
+`adapters/html/adapter.py::render()` calls Playwright's Python API
+(`sync_playwright()`, `chromium.launch()`), which spawns and manages its
+own browser process internally — that process is not started through this
+module's `run()`. The rationale this module exists for — no shell strings,
+no attacker-influenced argv assembled by this project's own code — applies
+to argv *this project constructs*, like the `soffice` invocation in
+`rendering/office_convert.py`. It does not extend to a well-audited
+library (Playwright) managing its own child process through its own API,
+any more than it would require wrapping `pypdfium2`'s internal calls into
+PDFium. What this project *is* responsible for at that boundary — and
+does enforce — is what the browser process is allowed to do once running:
+`render()` installs a Playwright route handler that aborts every request
+that isn't `file://`/`data:`/`about:`, so navigating to an HTML page can
+never trigger a real network fetch, matching the network-off-by-default
+policy below in an actively-enforced way, not just a documented one.
 
 ## Filesystem — `security/paths.py`
 
@@ -75,12 +92,21 @@ per-format exception.
 ## Network policy
 
 Off by default, everywhere, with no per-tool opt-out in the current MVP.
-Nothing in this codebase issues an HTTP request. When a future HTML/SVG
-adapter needs to fetch a document's own linked assets (remote fonts, remote
-images, remote stylesheets) to render faithfully, that will be an explicit,
-separately-gated capability (`html.fetch_remote_assets` or similar) that
-defaults to *off* and reports referenced-but-unfetched externals as a
-`WARN`, not a silent fetch — consistent with spec §27.
+Nothing in this codebase issues an HTTP request itself. The HTML adapter
+is the one place a *sub-process this project doesn't control* (Chromium)
+could otherwise do so on its own — `render()` actively blocks it via a
+Playwright route handler that aborts every non-`file://`/`data:`/`about:`
+request rather than merely documenting an intention (verified in
+`tests/unit/test_html_adapter.py::test_render_blocks_external_requests_
+when_backend_works`, which drives a real browser and confirms an external
+request is attempted-then-aborted, not fulfilled). `verify_structural()`'s
+`external_resources` check reports the same references as `WARN` (or
+`FAIL` under `policy.forbid_external_resources`) so the caller knows why a
+render might show broken images/missing styles, rather than being
+surprised by it. If a future capability needs to actually fetch remote
+assets to render faithfully, that will be an explicit, separately-gated
+capability (`html.fetch_remote_assets` or similar) that defaults to *off*
+— consistent with spec §27.
 
 ## Original Protection
 

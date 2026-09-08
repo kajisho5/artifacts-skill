@@ -52,7 +52,8 @@ just a claim.
 | DOCX | ✅ | ✅ | ✅ (LibreOffice + `pypdfium2`) | `metadata_set` |
 | XLSX | ✅ | ✅ | ✅ (LibreOffice + `pypdfium2`) | `metadata_set` |
 | Image (PNG/JPEG/WebP) | ✅ | ✅ | ✅ (Pillow) | `resize`, `convert_format` |
-| HTML / SVG | planned | planned | planned | — |
+| HTML | ✅ | ✅ | ✅ (Playwright + Chromium) | — (inspect/render/verify only, by design) |
+| SVG | planned | planned | planned | — |
 | HTML / SVG / Image | planned | planned | planned | — |
 
 Unimplemented formats fail loudly with `ARTIFACT_ADAPTER_NOT_IMPLEMENTED`

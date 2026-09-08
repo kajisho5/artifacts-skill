@@ -87,12 +87,13 @@ def test_input_not_found_gives_input_exit_code(tmp_path):
 
 
 def test_unimplemented_format_gives_clear_capability_error(tmp_path):
-    """HTML is still on the `_PLANNED` list (registry.py) as of this test —
-    PDF/PPTX/DOCX/XLSX moved off it as their adapters landed, so this
-    specifically needs a format that's genuinely not implemented yet."""
-    html_like = tmp_path / "page.html"
-    html_like.write_bytes(b"<!doctype html><html><body>hi</body></html>")
-    proc = run_cli(["inspect", str(html_like), "--json"], cwd=tmp_path)
+    """SVG is the only type still on the `_PLANNED` list (registry.py) as
+    of this test — PDF/PPTX/DOCX/XLSX/Image/HTML moved off it as their
+    adapters landed, so this specifically needs a format that's genuinely
+    not implemented yet."""
+    svg_like = tmp_path / "shape.svg"
+    svg_like.write_bytes(b'<svg xmlns="http://www.w3.org/2000/svg"><circle r="5"/></svg>')
+    proc = run_cli(["inspect", str(svg_like), "--json"], cwd=tmp_path)
     data = json.loads(proc.stdout)
     assert data["error"]["code"] in ("ARTIFACT_ADAPTER_NOT_IMPLEMENTED", "ARTIFACT_TYPE_UNSUPPORTED")
     assert proc.returncode == 3
@@ -264,3 +265,28 @@ def test_image_input_unchanged_after_execute(good_png, tmp_path):
         cwd=tmp_path,
     )
     assert sha256_of(good_png) == before
+
+
+def test_html_doctor_reports_structural_always_available(tmp_path):
+    proc = run_cli(["doctor", "--json"], cwd=tmp_path)
+    data = json.loads(proc.stdout)
+    assert data["capabilities"]["html.structural"]["status"] == "available"
+    assert "html.render" in data["capabilities"]
+
+
+def test_html_inspect_and_verify(good_html, tmp_path):
+    inspect_proc = run_cli(["inspect", str(good_html), "--json"], cwd=tmp_path)
+    assert inspect_proc.returncode == 0
+    data = json.loads(inspect_proc.stdout)
+    assert data["details"]["title"] == "Sample Page"
+
+    verify_proc = run_cli(["verify", str(good_html), "--policy", '{"require_title": true}', "--json"], cwd=tmp_path)
+    assert verify_proc.returncode == 0
+    assert json.loads(verify_proc.stdout)["status"] == "pass"
+
+
+def test_html_has_no_mutating_operations(good_html, tmp_path):
+    proc = run_cli(["execute", str(good_html), "--operation", "metadata_set", "--args", "{}", "--json"], cwd=tmp_path)
+    assert proc.returncode == 2  # ArtifactInputError -> input category
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_OPERATION_UNKNOWN"

@@ -200,6 +200,48 @@ agent reading the error can tell "we haven't built this yet" apart from
   explicitly with the new one, or the file's content format and its
   filename extension will disagree — the content itself is always correct).
 
+## Implemented: HTML (`adapters/html/adapter.py`)
+
+- **Backends**: structural inspection uses only the standard library
+  (`html.parser`) — no optional dependency, so `html.structural` is always
+  `AVAILABLE` regardless of whether Playwright is installed. Rendering
+  uses Playwright + Chromium.
+- **No mutating operations** — deliberately. Every other adapter edits a
+  well-defined property set (Office core metadata, image pixels); HTML's
+  natural "edit" is changing markup, which is source-code editing, not a
+  property-set operation this Skill should own. `operations()` returns
+  `{}`, and `plan()`/`execute()` both raise a clear `ARTIFACT_OPERATION_
+  UNKNOWN` for any operation name — `inspect`/`render`/`verify`/`look`
+  still work normally.
+- **Structural checks**: readability (valid UTF-8 + parses), `<title>`
+  presence (only checked when `policy.require_title` is set — a missing
+  title isn't inherently wrong), local resource references that don't
+  resolve to a file relative to the HTML file (`FAIL`), and external
+  (`http`/`https`) resource references (`WARN` by default, `FAIL` under
+  `policy.forbid_external_resources`).
+- **Render enforces the network policy, not just reports it**: navigating
+  a real page means Chromium will happily fetch every external resource it
+  finds unless stopped. `render()` installs a Playwright route handler
+  that aborts any request that isn't `file://`/`data:`/`about:` — so an
+  external `<img>`/`<script>`/`<link>` renders visibly broken/missing
+  rather than silently being fetched. This is the one adapter where
+  `docs/security.md`'s subprocess-wrapper invariant needs an explicit,
+  documented exception (Playwright manages its own browser process
+  through its own API) — see that doc for the reasoning.
+- **The same LibreOffice lesson applied to Chromium**: a `playwright`
+  package being pip-installed doesn't guarantee a *matching* Chromium
+  build is present — this project hit that directly (a pre-fetched
+  Chromium build in its own dev sandbox didn't match the pip-installed
+  `playwright` client's expected protocol version, and `playwright
+  install chromium` was needed to fix it). `render()` treats any
+  Playwright launch/navigation failure as `ARTIFACT_RENDER_BACKEND_FAILED`
+  with the underlying error attached, never a crash; the render-happy-path
+  test self-skips via a real probe, same pattern as the LibreOffice-backed
+  adapters.
+- **Known limitations**: JavaScript-driven content that renders
+  asynchronously after `load` may not be captured; ARIA/accessibility
+  structure is not inspected.
+
 ## Planned, not implemented
 
 Registered in `_PLANNED` with the phase each is targeted for (see
@@ -207,8 +249,7 @@ Registered in `_PLANNED` with the phase each is targeted for (see
 
 | Type | Phase | Primary backend candidate |
 |---|---|---|
-| HTML | 6 | Playwright/Chromium (already vendored in this dev environment) |
-| SVG | 6 | Playwright/Chromium rasterization, or a pure-Python SVG rasterizer |
+| SVG | 6 | Playwright/Chromium rasterization (same backend as HTML), or a pure-Python SVG rasterizer |
 
 None of these are stubbed as "implemented." `doctor` reports the backend
 libraries' import/PATH availability today (informationally, so a

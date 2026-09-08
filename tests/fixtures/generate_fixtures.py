@@ -42,6 +42,7 @@ PPTX_OUT_DIR = Path(__file__).parent / "pptx"
 DOCX_OUT_DIR = Path(__file__).parent / "docx"
 XLSX_OUT_DIR = Path(__file__).parent / "xlsx"
 IMAGE_OUT_DIR = Path(__file__).parent / "image"
+HTML_OUT_DIR = Path(__file__).parent / "html"
 
 
 # ---------------------------------------------------------------- PDF ----
@@ -318,12 +319,55 @@ def make_mislabeled_pdf_as_png() -> None:
     path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
 
 
+# --------------------------------------------------------------- HTML ----
+
+def make_good_html() -> None:
+    path = HTML_OUT_DIR / "good.html"
+    path.write_text(
+        "<!doctype html>\n<html><head><title>Sample Page</title></head>\n"
+        "<body><h1>Hello Artifact Skill</h1><p>Some body content.</p></body></html>\n"
+    )
+
+
+def make_missing_local_resource_html() -> None:
+    path = HTML_OUT_DIR / "missing_local_resource.html"
+    path.write_text(
+        "<!doctype html>\n<html><head><title>Broken Refs</title>"
+        '<link rel="stylesheet" href="does-not-exist.css"></head>\n'
+        '<body><img src="also-missing.png"></body></html>\n'
+    )
+
+
+def make_external_resource_html() -> None:
+    path = HTML_OUT_DIR / "external_resource.html"
+    path.write_text(
+        "<!doctype html>\n<html><head><title>External Refs</title></head>\n"
+        '<body><img src="https://example.com/some-image.png"></body></html>\n'
+    )
+
+
+def make_no_title_html() -> None:
+    path = HTML_OUT_DIR / "no_title.html"
+    path.write_text("<!doctype html>\n<html><body><p>No title element here.</p></body></html>\n")
+
+
+def make_binary_garbage_html() -> None:
+    path = HTML_OUT_DIR / "binary_garbage.html"
+    path.write_bytes(b"\xff\xfe\x00\x01not valid utf-8 \xfe\xff pretending to be html")
+
+
+def make_mislabeled_pdf_as_html() -> None:
+    path = HTML_OUT_DIR / "mislabeled_pdf.html"
+    path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
+
+
 if __name__ == "__main__":
     PDF_OUT_DIR.mkdir(parents=True, exist_ok=True)
     PPTX_OUT_DIR.mkdir(parents=True, exist_ok=True)
     DOCX_OUT_DIR.mkdir(parents=True, exist_ok=True)
     XLSX_OUT_DIR.mkdir(parents=True, exist_ok=True)
     IMAGE_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    HTML_OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     make_good_2page()
     make_empty_0page()
@@ -359,8 +403,16 @@ if __name__ == "__main__":
     make_corrupt_png()
     make_mislabeled_pdf_as_png()
 
+    make_good_html()
+    make_missing_local_resource_html()
+    make_external_resource_html()
+    make_no_title_html()
+    make_binary_garbage_html()
+    make_mislabeled_pdf_as_html()
+
     print(f"Wrote PDF fixtures to {PDF_OUT_DIR}")
     print(f"Wrote PPTX fixtures to {PPTX_OUT_DIR}")
     print(f"Wrote DOCX fixtures to {DOCX_OUT_DIR}")
     print(f"Wrote XLSX fixtures to {XLSX_OUT_DIR}")
     print(f"Wrote image fixtures to {IMAGE_OUT_DIR}")
+    print(f"Wrote HTML fixtures to {HTML_OUT_DIR}")

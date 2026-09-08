@@ -13,11 +13,14 @@ skill gives you a CLI (`artifact-skill`) that inspects, mutates safely,
 renders to images, and verifies — and it never just tells you "done"
 without evidence.
 
-**Currently implemented: PDF, PPTX, DOCX, XLSX** (all four Tier 1 formats)
-**and PNG/JPEG/WebP.** HTML/SVG are designed for (see
+**Currently implemented: PDF, PPTX, DOCX, XLSX** (all four Tier 1 formats),
+**PNG/JPEG/WebP, and HTML.** SVG is designed for (see
 `docs/architecture.md`, `docs/roadmap.md`) but not yet built — running
-this skill against those formats returns a clear
-`ARTIFACT_ADAPTER_NOT_IMPLEMENTED` error, never a silent no-op.
+this skill against that format returns a clear
+`ARTIFACT_ADAPTER_NOT_IMPLEMENTED` error, never a silent no-op. HTML has
+no mutating operations by design (inspect/render/verify only — its natural
+"edit" is markup, i.e. source-code editing, not a property-set operation
+this skill owns).
 
 ## The workflow
 
@@ -70,6 +73,10 @@ artifact-skill receipt report.pdf --operation metadata_set --args '{"title":"Q3 
 # Same lifecycle works on PPTX — same commands, same verbs:
 artifact-skill receipt deck.pptx --operation metadata_set --args '{"title":"Q3 Deck"}' \
   --policy '{"require_slide_count":10,"max_empty_placeholders":0}'
+
+# HTML has no operations (inspect/render/verify only) — go straight to render+verify:
+artifact-skill render page.html --out-dir reports/rendered
+artifact-skill verify page.html --policy '{"require_title":true,"forbid_external_resources":false}'
 ```
 
 Supported PDF operations today: `metadata_set` (title/author/subject/keywords)

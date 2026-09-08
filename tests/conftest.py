@@ -10,6 +10,7 @@ PPTX_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "pptx"
 DOCX_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "docx"
 XLSX_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "xlsx"
 IMAGE_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "image"
+HTML_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "html"
 
 
 @pytest.fixture()
@@ -191,4 +192,46 @@ def corrupt_png(tmp_path: Path) -> Path:
 def mislabeled_pdf_as_png(tmp_path: Path) -> Path:
     dst = tmp_path / "mislabeled_pdf.png"
     shutil.copy(IMAGE_FIXTURES_DIR / "mislabeled_pdf.png", dst)
+    return dst
+
+
+@pytest.fixture()
+def good_html(tmp_path: Path) -> Path:
+    dst = tmp_path / "good.html"
+    shutil.copy(HTML_FIXTURES_DIR / "good.html", dst)
+    return dst
+
+
+@pytest.fixture()
+def missing_local_resource_html(tmp_path: Path) -> Path:
+    dst = tmp_path / "missing_local_resource.html"
+    shutil.copy(HTML_FIXTURES_DIR / "missing_local_resource.html", dst)
+    return dst
+
+
+@pytest.fixture()
+def external_resource_html(tmp_path: Path) -> Path:
+    dst = tmp_path / "external_resource.html"
+    shutil.copy(HTML_FIXTURES_DIR / "external_resource.html", dst)
+    return dst
+
+
+@pytest.fixture()
+def no_title_html(tmp_path: Path) -> Path:
+    dst = tmp_path / "no_title.html"
+    shutil.copy(HTML_FIXTURES_DIR / "no_title.html", dst)
+    return dst
+
+
+@pytest.fixture()
+def binary_garbage_html(tmp_path: Path) -> Path:
+    dst = tmp_path / "binary_garbage.html"
+    shutil.copy(HTML_FIXTURES_DIR / "binary_garbage.html", dst)
+    return dst
+
+
+@pytest.fixture()
+def mislabeled_pdf_as_html(tmp_path: Path) -> Path:
+    dst = tmp_path / "mislabeled_pdf.html"
+    shutil.copy(HTML_FIXTURES_DIR / "mislabeled_pdf.html", dst)
     return dst

@@ -1,12 +1,12 @@
 # Roadmap
 
 Phases per the original design brief. **Phase 0-1, Phase 2 (PDF + PPTX),
-Phase 3 (DOCX + XLSX), a working slice of Phase 4/5, and the Image slice
-of Phase 6 are done as of this writing** — everything below "Now" is
-planned, not implemented, and nothing in this codebase claims otherwise
+Phase 3 (DOCX + XLSX), a working slice of Phase 4/5, and the Image + HTML
+slices of Phase 6 are done as of this writing** — everything below "Now"
+is planned, not implemented, and nothing in this codebase claims otherwise
 (`doctor`/`registry.py` report unimplemented formats explicitly). All four
 Tier 1 formats from the original design brief (PDF/PPTX/DOCX/XLSX) are now
-implemented, plus PNG/JPEG/WebP from Tier 2.
+implemented, plus PNG/JPEG/WebP and HTML from Tier 2 — only SVG remains.
 
 ## Done
 
@@ -79,23 +79,39 @@ implemented, plus PNG/JPEG/WebP from Tier 2.
   EXIF orientation tag means its stored pixel grid isn't its display
   orientation) — `render()` corrects this in its evidence output, the raw
   file does not carry the correction.
+- **Phase 6 (HTML slice).** `adapters/html/adapter.py`: inspect (stdlib
+  `html.parser` only, no optional dependency), render (Playwright +
+  Chromium), structural verify. No mutating operations — a deliberate
+  scope decision, see `docs/adapters.md`. Hit the same "backend present on
+  PATH/importable ≠ backend actually works" lesson PPTX's rollout
+  surfaced for LibreOffice, this time for Chromium: this project's own dev
+  sandbox had a pre-fetched Chromium build that didn't match the
+  pip-installed `playwright` client's expected version, failing at launch
+  until `playwright install chromium` fetched a matching one.
+  `render()`'s error handling follows the same pattern established for
+  LibreOffice (`ARTIFACT_RENDER_BACKEND_FAILED` with the real error
+  attached, never a crash). Also the first adapter to *actively enforce*
+  the network-off-by-default policy rather than only reporting on it — see
+  `docs/security.md`'s Network policy section for how and why.
 
 ## Now / Next
 
 All four Tier 1 formats (PDF, PPTX, DOCX, XLSX) are implemented, the PDF
-font-embedding gap flagged since the MVP is closed, and the Image slice of
-Phase 6 is done. HTML and SVG (both needing a Chromium/Playwright render
-path, not yet wired up) are what's left of Phase 6 — see "Later" below,
-and `docs/adapters.md`'s "Writing a new adapter" checklist for how to
-start one of them.
+font-embedding gap flagged since the MVP is closed, and the Image and HTML
+slices of Phase 6 are done. SVG (needing a rasterization path — likely the
+same Chromium backend HTML now uses) is what's left of Phase 6 — see
+"Later" below, and `docs/adapters.md`'s "Writing a new adapter" checklist
+for how to start it.
 
 ## Later
 
-- **Phase 6 (remaining) — HTML, SVG.** Chromium (via Playwright, already
-  available in CI-like dev environments) for HTML/SVG rendering. Network
-  access for externally-referenced assets (remote fonts/images/stylesheets)
-  stays off by default per `docs/security.md` — referenced-but-unfetched
-  externals are reported, not silently fetched.
+- **Phase 6 (remaining) — SVG.** Rasterize via the same Chromium backend
+  the HTML adapter now uses (a `<svg>` root loads fine as a standalone
+  page), or evaluate a pure-Python SVG rasterizer as a lighter-weight
+  alternative. Network access for externally-referenced assets stays off
+  by default per `docs/security.md` — the HTML adapter's active
+  request-blocking approach (not just reporting) is the pattern to reuse,
+  not reinvent.
 - **Phase 7 — Ecosystem integration, CI, benchmark, artifact corpus.**
   Expand `tests/fixtures/` into a scored benchmark per spec §54 (count of
   known-broken fixtures correctly detected per format); publish

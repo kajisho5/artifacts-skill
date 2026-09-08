@@ -18,7 +18,8 @@ pptx = ["python-pptx>=1.0", "pypdf>=5.0", "pypdfium2>=4.30", "Pillow>=10.0"]
 docx = ["python-docx>=1.0", "pypdf>=5.0", "pypdfium2>=4.30", "Pillow>=10.0"]
 xlsx = ["openpyxl>=3.1", "pypdf>=5.0", "pypdfium2>=4.30", "Pillow>=10.0"]
 image = ["Pillow>=10.0"]
-dev = ["pytest>=8.0", "pytest-cov>=5.0", "reportlab>=4.0", "python-pptx>=1.0", "python-docx>=1.0", "openpyxl>=3.1"]
+html = ["playwright>=1.40"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "reportlab>=4.0", "python-pptx>=1.0", "python-docx>=1.0", "openpyxl>=3.1", "playwright>=1.40"]
 
 [project.scripts]
 artifact-skill = "artifact_skill.cli.main:main"
