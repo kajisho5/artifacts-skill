@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from artifact_skill.mcp.server import CAPABILITY_PREFIX, call_tool
+from artifact_skill.mcp.server import CAPABILITY_PREFIX, PROTOCOL_VERSION, _handle_request, _negotiate_protocol_version, call_tool
 
 
 def test_missing_required_argument_returns_structured_error_not_a_crash(good_pdf):
@@ -70,3 +70,40 @@ def test_execute_rejects_operation_args_that_violate_operation_schema(good_pdf, 
     assert result["isError"] is True
     payload = json.loads(result["content"][0]["text"])
     assert payload["error"]["code"] == "ARTIFACT_INVALID_ARGS"
+
+
+# --- protocol version negotiation (Issue #12) -----------------------------
+
+
+def test_negotiate_echoes_a_plausible_client_version():
+    assert _negotiate_protocol_version("2025-06-18") == "2025-06-18"
+
+
+def test_negotiate_falls_back_when_client_sends_nothing():
+    assert _negotiate_protocol_version(None) == PROTOCOL_VERSION
+
+
+def test_negotiate_falls_back_on_garbage_input():
+    assert _negotiate_protocol_version("not-a-version") == PROTOCOL_VERSION
+    assert _negotiate_protocol_version(12345) == PROTOCOL_VERSION
+    assert _negotiate_protocol_version("") == PROTOCOL_VERSION
+
+
+def test_initialize_response_echoes_the_requested_version():
+    """Regression guard: initialize() used to always return the server's
+    own fixed PROTOCOL_VERSION regardless of what the client actually
+    asked for in its initialize request's params."""
+    response = _handle_request(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-03-26"}}
+    )
+    assert response["result"]["protocolVersion"] == "2025-03-26"
+
+
+def test_initialize_response_falls_back_without_a_requested_version():
+    response = _handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
+    assert response["result"]["protocolVersion"] == PROTOCOL_VERSION
+
+
+def test_initialize_response_falls_back_with_no_params_at_all():
+    response = _handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+    assert response["result"]["protocolVersion"] == PROTOCOL_VERSION

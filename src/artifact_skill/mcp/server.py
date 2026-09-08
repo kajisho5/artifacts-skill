@@ -9,11 +9,27 @@ only in schema — and `tests/contract/` checks the schema stays in sync too.
 No `mcp` SDK dependency: the stdio transport is a small enough protocol
 (newline-delimited JSON-RPC 2.0 messages) that adding a dependency for it
 would cut against this project's local-first, few-dependencies stance.
+
+This implements the **legacy**, `initialize`-handshake-based MCP protocol
+(spec terminology: any revision `2025-11-25` or earlier — this server was
+built against `2024-11-05`). Verified directly against the current spec
+(`modelcontextprotocol.io/specification`) while fixing Issue #12: a much
+larger revision landed at `2026-07-28` that drops the handshake entirely in
+favor of per-request version metadata (`server/discover`,
+`UnsupportedProtocolVersionError`, etc.) — real MCP clients as of that
+revision are "dual-era" and fall back to `initialize` against a server like
+this one, so this server keeps working, but it does not itself implement
+`server/discover` or per-request metadata. That would be a separate,
+substantially larger project, not a natural extension of Issue #12's
+narrower "negotiate the version this server already claims to speak" scope
+— left as a deliberate, documented gap rather than a half-implemented
+attempt at the newer spec.
 """
 
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -32,6 +48,25 @@ from artifact_skill.rendering.contact_sheet import build_before_after, build_con
 SERVER_NAME = "artifact-skill"
 CAPABILITY_PREFIX = "artifact-skill"
 PROTOCOL_VERSION = "2024-11-05"
+
+_VERSION_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _negotiate_protocol_version(requested: Any) -> str:
+    """Echo back the client's requested legacy protocol version if it looks
+    like a real one, rather than always claiming this server's own default
+    regardless of what was asked (the bug this closes: initialize() used to
+    ignore `params` entirely). This server's implemented method surface
+    (`initialize`/`tools/list`/`tools/call`/`ping`) hasn't changed shape
+    across the legacy protocol era, so it can honestly speak whatever
+    legacy `YYYY-MM-DD` version the client names — there's nothing
+    version-gated here to actually be incompatible about. Falls back to
+    `PROTOCOL_VERSION` when the client didn't send one, or sent something
+    that isn't a plausible date-string version identifier.
+    """
+    if isinstance(requested, str) and _VERSION_RE.match(requested):
+        return requested
+    return PROTOCOL_VERSION
 
 
 def _mcp_tool_name(tool_name: str) -> str:
@@ -186,7 +221,7 @@ def _handle_request(msg: dict[str, Any]) -> dict[str, Any] | None:
 
     if method == "initialize":
         result = {
-            "protocolVersion": PROTOCOL_VERSION,
+            "protocolVersion": _negotiate_protocol_version(params.get("protocolVersion")),
             "capabilities": {"tools": {}},
             "serverInfo": {"name": SERVER_NAME, "version": __version__},
         }

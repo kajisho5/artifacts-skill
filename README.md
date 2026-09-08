@@ -120,7 +120,13 @@ python -m artifact_skill.mcp.server
 
 Exposes the same nine tools (`artifact-skill.inspect`, `.plan`, `.execute`,
 `.render`, `.verify`, `.look`, `.receipt`, `.doctor`, `.contract`) over
-stdio, schema-identical to the CLI.
+stdio, schema-identical to the CLI. Implements the legacy,
+`initialize`-handshake-based MCP protocol (`2024-11-05` through
+`2025-11-25`) — real clients from the newer, per-request-metadata protocol
+revision (`2026-07-28`+) are specified as "dual-era" and fall back to this
+handshake automatically, so this still interoperates; `initialize`
+negotiates the client's requested version rather than ignoring it (see
+`mcp/server.py`'s module docstring for the full compatibility note).
 
 ## Documentation
 
