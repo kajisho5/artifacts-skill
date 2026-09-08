@@ -80,6 +80,12 @@ inspected, and do not report success without having verified.
    can actually look at it, not just trust that bytes exist.
 5. **`verify`** — run structural checks (page count, page size, encryption,
    JavaScript, extractable text, and anything else you pass as `--policy`).
+   Never renders anything itself — a fact only measurable by rendering
+   (e.g. DOCX `page_count`) stays honestly `UNKNOWN` under bare `verify`
+   even though `execute`/`receipt` would report it as a real, measured
+   `PASS` (their lifecycle already renders for visual evidence and reuses
+   that). Use `receipt` (or `render` then `verify`) instead if you need
+   that specific fact measured, not just checked for.
    Reports one of six states per check — **PASS, WARN, FAIL, UNKNOWN,
    NOT_CHECKED, SKIPPED** — never collapses "we didn't check this" into
    "it's fine." **Read `checks[].status` by `id` for the specific things

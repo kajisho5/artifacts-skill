@@ -291,10 +291,15 @@ TOOLS: list[ToolContract] = [
     ToolContract(
         name="verify",
         description="Run structural verification against an artifact and an optional policy (e.g. "
-        "required page count/size, forbidden JavaScript, required metadata). Read-only. Visual "
-        "verification evidence (if requested) is produced by `render`/`look` for the caller to judge; "
-        "this command reports PASS/WARN/FAIL/UNKNOWN/NOT_CHECKED/SKIPPED per check, never inventing a "
-        "verdict for something it could not check.",
+        "required page count/size, forbidden JavaScript, required metadata). Read-only, and never "
+        "renders anything itself, so a fact that can only be measured by rendering (e.g. DOCX "
+        "page_count, which has no fixed pagination in the XML) stays honestly UNKNOWN here even when "
+        "`execute`/`receipt` would report it as a real, measured PASS (their lifecycle already renders "
+        "for visual evidence, and reuses that render for exactly this) - use `receipt` (or `render` "
+        "then `verify`) instead of bare `verify` if you need that fact measured. Visual verification "
+        "evidence (if requested) is produced by `render`/`look` for the caller to judge; this command "
+        "reports PASS/WARN/FAIL/UNKNOWN/NOT_CHECKED/SKIPPED per check, never inventing a verdict for "
+        "something it could not check.",
         input_schema={
             "type": "object",
             "properties": {
