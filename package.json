@@ -9,6 +9,7 @@
     "bin",
     "src/artifact_skill",
     "schemas",
+    "docs",
     "pyproject.toml",
     "SKILL.md",
     "README.md",

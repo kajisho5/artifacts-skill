@@ -83,12 +83,24 @@ def convert_to_pdf(input_path: Path, pdf_out_dir: Path, *, limits: Limits = DEFA
             allowlist=SOFFICE_ALLOWLIST,
             limits=limits,
         )
-        produced = list(pdf_out_dir.glob("*.pdf"))
-        if result.returncode != 0 or not produced:
-            reason = (
-                f"exited {result.returncode}" if result.returncode != 0
-                else "exited 0 but produced no PDF output"
-            )
+        # Self-audit finding (FIX_PROMPT P3-4): `soffice --convert-to pdf`
+        # deterministically names its output `<input stem>.pdf` in
+        # `--outdir` - waiting for that exact name (rather than
+        # `glob("*.pdf")[0]`, whose match order is arbitrary) means a
+        # stray, unrelated PDF already sitting in `pdf_out_dir` can never
+        # be silently returned as if it were this call's real output.
+        # Low real-world impact today (every caller passes a fresh,
+        # per-call temp directory), but the correctness gap was real, not
+        # hypothetical, and cheap to close outright.
+        expected = pdf_out_dir / f"{input_path.stem}.pdf"
+        if result.returncode != 0 or not expected.is_file():
+            produced = sorted(p.name for p in pdf_out_dir.glob("*.pdf"))
+            if result.returncode != 0:
+                reason = f"exited {result.returncode}"
+            elif produced:
+                reason = f"exited 0 but did not produce the expected '{expected.name}' (found instead: {produced})"
+            else:
+                reason = f"exited 0 but did not produce the expected '{expected.name}' (no PDF output at all)"
             raise ArtifactExecutionError(
                 code="ARTIFACT_RENDER_BACKEND_FAILED",
                 message=f"LibreOffice failed to convert '{input_path}' to PDF ({reason}).",
@@ -97,4 +109,4 @@ def convert_to_pdf(input_path: Path, pdf_out_dir: Path, *, limits: Limits = DEFA
                 "source file — not necessarily a problem with this adapter.",
                 evidence={"returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr},
             )
-        return produced[0]
+        return expected

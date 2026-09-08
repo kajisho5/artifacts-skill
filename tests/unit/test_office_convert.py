@@ -51,7 +51,7 @@ def test_convert_to_pdf_raises_backend_failed_when_exit_zero_but_no_output(tmp_p
 
     with pytest.raises(ArtifactExecutionError) as exc_info:
         office_convert.convert_to_pdf(tmp_path / "input.pptx", tmp_path / "out")
-    assert "produced no PDF output" in exc_info.value.message
+    assert "no PDF output at all" in exc_info.value.message
 
 
 def test_convert_to_pdf_returns_produced_pdf_path(tmp_path, monkeypatch):
@@ -67,6 +67,30 @@ def test_convert_to_pdf_returns_produced_pdf_path(tmp_path, monkeypatch):
 
     result = office_convert.convert_to_pdf(tmp_path / "input.pptx", out_dir)
     assert result == out_dir / "input.pdf"
+
+
+def test_convert_to_pdf_ignores_a_stray_unrelated_pdf_already_in_the_out_dir(tmp_path, monkeypatch):
+    """Self-audit finding (FIX_PROMPT P3-4): glob("*.pdf")[0]'s match
+    order is arbitrary - a stray PDF already sitting in pdf_out_dir
+    (e.g. left over from a prior failed run sharing the directory) could
+    be silently returned as if it were this call's real output. Confirmed
+    the fix by simulating soffice failing to produce ANY real output
+    while a decoy with an unrelated name is already present."""
+    monkeypatch.setattr(office_convert, "soffice_binary", lambda: "/usr/bin/soffice")
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    (out_dir / "some_other_document.pdf").write_bytes(b"%PDF-1.4 decoy, not this call's output")
+
+    def _fake_run(argv, **kwargs):
+        return ExecResult(argv=argv, returncode=0, stdout="", stderr="", timed_out=False)
+
+    monkeypatch.setattr(office_convert, "run_subprocess", _fake_run)
+
+    with pytest.raises(ArtifactExecutionError) as exc_info:
+        office_convert.convert_to_pdf(tmp_path / "input.pptx", out_dir)
+    assert exc_info.value.code == "ARTIFACT_RENDER_BACKEND_FAILED"
+    assert "input.pdf" in exc_info.value.message
+    assert "some_other_document.pdf" in exc_info.value.message
 
 
 def test_convert_to_pdf_forwards_a_custom_limits_to_the_subprocess_call(tmp_path, monkeypatch):
