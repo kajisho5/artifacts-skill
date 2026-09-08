@@ -71,8 +71,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     def common(p: argparse.ArgumentParser) -> None:
         p.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
-        p.add_argument("--verbose", action="store_true", help="Print progress to stderr.")
-        p.add_argument("--progress", action="store_true", help="Print lifecycle stage markers to stderr.")
 
     p_doctor = sub.add_parser("doctor", help="Detect local capabilities.")
     common(p_doctor)

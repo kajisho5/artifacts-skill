@@ -21,6 +21,22 @@ def run_cli(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=60)
 
 
+def test_verbose_and_progress_flags_were_removed_not_left_as_silent_no_ops(tmp_path):
+    """Issue #31: --verbose/--progress used to be declared on every
+    subcommand with help text implying real behavior, but nothing in the
+    codebase ever read args.verbose/args.progress - passing either flag
+    silently did nothing, with no indication to the caller. Removed
+    rather than implemented, per the project's minimalism stance; this
+    guards against either flag quietly coming back as another no-op."""
+    proc = run_cli(["doctor", "--verbose"], cwd=tmp_path)
+    assert proc.returncode != 0
+    assert "unrecognized arguments" in proc.stderr
+
+    proc = run_cli(["doctor", "--progress"], cwd=tmp_path)
+    assert proc.returncode != 0
+    assert "unrecognized arguments" in proc.stderr
+
+
 def test_doctor_json_is_valid_and_has_pdf_capabilities(tmp_path):
     proc = run_cli(["doctor", "--json"], cwd=tmp_path)
     assert proc.returncode == 0
