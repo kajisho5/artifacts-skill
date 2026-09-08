@@ -10,7 +10,8 @@ import importlib.util
 from pathlib import Path
 
 from artifact_skill.adapters.base import RenderResult
-from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactInputError
+from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactInputError, ArtifactSecurityError
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 
 
 def _has(module: str) -> bool:
@@ -30,13 +31,27 @@ def require_pypdfium2():
     return pypdfium2
 
 
-def render_pdf_pages(pdf_path: Path, out_dir: Path, dpi: int = 150) -> RenderResult:
+def render_pdf_pages(
+    pdf_path: Path, out_dir: Path, dpi: int = 150, *, limits: Limits = DEFAULT_LIMITS
+) -> RenderResult:
     """Render every page of `pdf_path` to a PNG in `out_dir`.
 
     Checks encryption/page-count via `pypdf` first, because pypdfium2 raises
     its own opaque exception (rather than "0 usable pages") for a 0-page or
     still-encrypted document — see the PDF adapter's regression test for the
     concrete crash this avoids.
+
+    Rejects, rather than silently rendering, a document with more than
+    `limits.max_pages` pages (Grok review P0-3): `Limits.max_pages` was
+    declared in `security/limits.py` but read nowhere — the only other
+    `max_pages` in this codebase is the unrelated PDF adapter policy key
+    (a caller-supplied *verification* constraint, checked only when a
+    caller opts into it, not a resource limit this project itself
+    enforces). Rendering is unconditional: a 2000+ page PDF, or a
+    LibreOffice-converted PPTX/DOCX/XLSX that happens to produce one,
+    would burn unbounded disk and time with no cap at all. A partial
+    render that silently stops partway would be worse than an honest
+    rejection — it would look like a complete, verified render.
     """
     if not _has("pypdf"):
         raise ArtifactCapabilityError(
@@ -66,6 +81,15 @@ def render_pdf_pages(pdf_path: Path, out_dir: Path, dpi: int = 150) -> RenderRes
         )
     if len(reader.pages) == 0:
         return RenderResult(kind="page_images", files=[], backend="pypdfium2", warnings=["0 pages to render."])
+    if len(reader.pages) > limits.max_pages:
+        raise ArtifactSecurityError(
+            code="ARTIFACT_TOO_MANY_PAGES",
+            message=f"'{pdf_path}' has {len(reader.pages)} pages, exceeding the render limit of "
+            f"{limits.max_pages}.",
+            remediation="Not rendered; increase Limits.max_pages if this document is legitimately expected, "
+            "or render a subset instead.",
+            evidence={"path": str(pdf_path), "page_count": len(reader.pages), "max_pages": limits.max_pages},
+        )
 
     doc = pdfium.PdfDocument(str(pdf_path))
     try:

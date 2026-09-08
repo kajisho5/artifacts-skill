@@ -220,6 +220,36 @@ def test_render_propagates_backend_failure(good_pptx, adapter, tmp_path, monkeyp
     assert "fake soffice failure" in exc_info.value.evidence["stderr"]
 
 
+def test_render_honors_a_custom_limits_max_pages(good_pptx, adapter, tmp_path, monkeypatch):
+    """Grok review P0-3: limits must reach render_pdf_pages() through the
+    intermediate PDF conversion step, not just when rendering a PDF
+    directly (test_pdf_pages.py covers that in isolation). Fakes
+    convert_to_pdf() with a real, pre-made multi-page PDF rather than
+    requiring a working LibreOffice install for this specific check."""
+    import artifact_skill.adapters.pptx.adapter as adapter_module
+    from artifact_skill.core.errors import ArtifactSecurityError
+    from artifact_skill.security.limits import Limits
+
+    def _fake_convert(input_path, pdf_out_dir, **kwargs):
+        import pypdf
+
+        pdf_out_dir.mkdir(parents=True, exist_ok=True)
+        writer = pypdf.PdfWriter()
+        for _ in range(5):
+            writer.add_blank_page(width=200, height=200)
+        out = pdf_out_dir / "converted.pdf"
+        with open(out, "wb") as f:
+            writer.write(f)
+        return out
+
+    monkeypatch.setattr(adapter_module, "convert_to_pdf", _fake_convert)
+
+    ref = ArtifactRef.from_path(good_pptx)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.render(ref, tmp_path / "rendered", limits=Limits(max_pages=3))
+    assert exc_info.value.code == "ARTIFACT_TOO_MANY_PAGES"
+
+
 def test_render_happy_path_when_backend_actually_works(good_pptx, adapter, tmp_path):
     ref = ArtifactRef.from_path(good_pptx)
     if not _probe_pptx_render_works(adapter, ref, tmp_path):

@@ -321,7 +321,7 @@ class PptxAdapter(ArtifactAdapter):
             # render_pdf_pages needs the intermediate PDF to survive past
             # this `with` block's cleanup, so render directly from it now
             # rather than returning a path that's about to be deleted.
-            return render_pdf_pages(pdf_path, out_dir)
+            return render_pdf_pages(pdf_path, out_dir, limits=limits)
 
     # ---- verify ------------------------------------------------------
 

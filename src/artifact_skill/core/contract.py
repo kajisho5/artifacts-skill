@@ -287,7 +287,7 @@ TOOLS: list[ToolContract] = [
         verification_policy={"structural_required": False, "visual_required": False},
         visual_requirement="produces_evidence_for_agent_to_inspect",
         evidence="page images (PNG)",
-        errors=["ARTIFACT_CAPABILITY_MISSING", "ARTIFACT_RENDER_NOT_IMPLEMENTED"],
+        errors=["ARTIFACT_CAPABILITY_MISSING", "ARTIFACT_RENDER_NOT_IMPLEMENTED", "ARTIFACT_TOO_MANY_PAGES"],
     ),
     ToolContract(
         name="verify",
@@ -351,7 +351,7 @@ TOOLS: list[ToolContract] = [
         verification_policy={"structural_required": False, "visual_required": False},
         visual_requirement="produces_evidence_for_agent_to_inspect",
         evidence="contact sheet image (PNG)",
-        errors=["ARTIFACT_CAPABILITY_MISSING", "ARTIFACT_RENDER_NOT_IMPLEMENTED"],
+        errors=["ARTIFACT_CAPABILITY_MISSING", "ARTIFACT_RENDER_NOT_IMPLEMENTED", "ARTIFACT_TOO_MANY_PAGES"],
     ),
     ToolContract(
         name="receipt",

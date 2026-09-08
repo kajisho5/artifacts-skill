@@ -444,3 +444,16 @@ def test_limitations_names_the_real_known_caveats(adapter):
     assert "not decrypted automatically" in text
     assert "JavaScript actions are detected but not executed" in text
     assert "blank_pages" in text
+
+
+def test_render_honors_a_custom_limits_max_pages(good_pdf, adapter, tmp_path):
+    """Grok review P0-3: Limits.max_pages must actually reach the render
+    backend through PdfAdapter.render(), not just render_pdf_pages()
+    directly (test_pdf_pages.py covers that in isolation)."""
+    from artifact_skill.core.errors import ArtifactSecurityError
+    from artifact_skill.security.limits import Limits
+
+    ref = ArtifactRef.from_path(good_pdf)  # good_2page.pdf
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.render(ref, tmp_path / "rendered", limits=Limits(max_pages=1))
+    assert exc_info.value.code == "ARTIFACT_TOO_MANY_PAGES"

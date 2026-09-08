@@ -662,11 +662,7 @@ class PdfAdapter(ArtifactAdapter):
     # ---- render ----------------------------------------------------
 
     def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
-        # pypdfium2 renders in-process with no timeout-governed step —
-        # `limits` is accepted (not omitted) so every adapter's render()
-        # shares one real interface (see adapters/base.py), but unused here.
-        del limits
-        return render_pdf_pages(ref.path, out_dir)
+        return render_pdf_pages(ref.path, out_dir, limits=limits)
 
     # ---- verify ------------------------------------------------------
 

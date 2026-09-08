@@ -232,6 +232,22 @@ same `limits` parameter for interface consistency (every `render()`
 override shares one real signature) but ignore it — neither backend
 (pypdfium2, Pillow) has a timeout-governed step to control.
 
+`max_pages` (default 2000) had the identical disconnected-field problem
+(Grok review "P0-3"): declared here, but the only other `max_pages`
+anywhere in this codebase was the PDF adapter's *policy* key — a
+caller-opt-in verification constraint, not a resource limit this project
+enforces on its own — so `rendering/pdf_pages.py::render_pdf_pages()`
+rendered every page of every PDF completely unconditionally. A 2000+ page
+PDF, or a LibreOffice-converted PPTX/DOCX/XLSX that happens to produce
+one, could burn unbounded disk and time with no cap at all. Fixed the
+same way as `render_timeout_seconds`: `render_pdf_pages()` now takes
+`limits: Limits = DEFAULT_LIMITS` and raises
+`ArtifactSecurityError(code="ARTIFACT_TOO_MANY_PAGES")` — rejecting
+outright, not silently truncating — before rendering a single page past
+the limit, threaded through from every one of the four adapters that call
+it (PDF directly; PPTX/DOCX/XLSX via their own already-`limits`-aware
+`render()`).
+
 ## Network policy
 
 Off by default, everywhere, with no per-tool opt-out in the current MVP.
