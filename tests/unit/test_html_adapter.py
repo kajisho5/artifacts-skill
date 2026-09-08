@@ -90,6 +90,31 @@ def test_verify_no_title_check_absent_when_not_required(no_title_html, adapter):
     assert not any(c.id == "title_presence" for c in result.checks)
 
 
+def test_verify_good_html_has_no_leftover_placeholder_text(good_html, adapter):
+    ref = ArtifactRef.from_path(good_html)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.PASS
+
+
+def test_verify_leftover_placeholder_html_warns_by_default(leftover_placeholder_html, adapter):
+    ref = ArtifactRef.from_path(leftover_placeholder_html)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.WARN
+    assert "click to add" in check.evidence["markers"]
+    assert "lorem ipsum" in check.evidence["markers"]
+    # the "TODO" is inside <script> content, not document text - must not match
+    assert "todo" not in check.evidence["markers"]
+
+
+def test_verify_leftover_placeholder_html_fails_under_strict_policy(leftover_placeholder_html, adapter):
+    ref = ArtifactRef.from_path(leftover_placeholder_html)
+    result = adapter.verify_structural(ref, {"forbid_placeholder_text": True})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.FAIL
+
+
 def test_no_mutating_operations(good_html, adapter, tmp_path):
     """HTML is inspect/render/verify only by design — see the adapter's
     module docstring for why editing markup isn't this Skill's job."""

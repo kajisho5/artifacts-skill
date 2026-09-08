@@ -117,6 +117,11 @@ TYPE_REJECTED_CASES: list[TypeRejectedCase] = [
 STRUCTURAL_DEFECT_CASES: list[StructuralDefectCase] = [
     StructuralDefectCase("pdf/corrupt.pdf", CheckStatus.FAIL, "Truncated/garbage PDF body; pdf_validity."),
     StructuralDefectCase("pdf/empty_0page.pdf", CheckStatus.FAIL, "Zero pages; page_count."),
+    StructuralDefectCase(
+        "pdf/blank_page.pdf", CheckStatus.WARN,
+        "3 pages, the middle one has no extractable text and no embedded image; blank_pages (WARN by default) "
+        "- a different failure mode from empty_0page.pdf (zero pages total).",
+    ),
     StructuralDefectCase("pdf/encrypted.pdf", CheckStatus.WARN, "Encrypted; encryption (WARN by default)."),
     StructuralDefectCase(
         "pdf/nonembedded_custom_font.pdf", CheckStatus.WARN, "Non-standard font not embedded; font_embedding."
@@ -125,10 +130,34 @@ STRUCTURAL_DEFECT_CASES: list[StructuralDefectCase] = [
     StructuralDefectCase("pptx/zero_slide.pptx", CheckStatus.FAIL, "Zero slides; slide_count."),
     StructuralDefectCase("docx/empty.docx", CheckStatus.FAIL, "No paragraphs; paragraph_count."),
     StructuralDefectCase("xlsx/formula_error.xlsx", CheckStatus.FAIL, "Cached #REF! error; formula_cached_errors."),
+    StructuralDefectCase(
+        "xlsx/external_link.xlsx", CheckStatus.UNKNOWN,
+        "External workbook reference; external_links is WARN by default, but the formula "
+        "referencing that external sheet has no cached value (openpyxl's writer never adds one "
+        "for a formula it didn't compute), so formula_cached_errors/formula_recalculation are "
+        "also UNKNOWN — which outranks WARN in aggregation (core/verification.py), making the "
+        "overall status UNKNOWN, not WARN.",
+    ),
+    StructuralDefectCase(
+        "docx/leftover_placeholder.docx", CheckStatus.UNKNOWN,
+        "Contains 'Click to add title'/'Lorem ipsum'/'TODO'; leftover_placeholder_text is WARN by default, "
+        "but page_count is always UNKNOWN for DOCX without a render (see docx/adapter.py), which outranks "
+        "WARN in aggregation, making the overall status UNKNOWN, not WARN.",
+    ),
+    StructuralDefectCase(
+        "pptx/leftover_placeholder_text.pptx", CheckStatus.WARN,
+        "Filled-in placeholders containing 'Click to add title'/'Lorem ipsum'; leftover_placeholder_text "
+        "(WARN by default) — a different case from empty_placeholder.pptx (placeholders left blank).",
+    ),
     StructuralDefectCase("image/corrupt.png", CheckStatus.FAIL, "Truncated/garbage PNG; image_validity."),
     StructuralDefectCase("image/exif_rotated.jpg", CheckStatus.WARN, "EXIF orientation != 1; exif_orientation."),
     StructuralDefectCase(
         "html/missing_local_resource.html", CheckStatus.FAIL, "Local <img> target doesn't exist; local_resources."
+    ),
+    StructuralDefectCase(
+        "html/leftover_placeholder.html", CheckStatus.WARN,
+        "Contains 'Click to add title'/'Lorem ipsum' in body text (a 'TODO' inside <script> is correctly "
+        "excluded - code, not document text); leftover_placeholder_text (WARN by default).",
     ),
     StructuralDefectCase(
         "html/external_resource.html", CheckStatus.WARN, "External resource reference; external_resources (WARN by default)."

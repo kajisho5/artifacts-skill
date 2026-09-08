@@ -282,7 +282,15 @@ TOOLS: list[ToolContract] = [
         "verdict for something it could not check.",
         input_schema={
             "type": "object",
-            "properties": {**_INPUT_PATH_PROPERTY, "policy": {"type": "object"}},
+            "properties": {
+                **_INPUT_PATH_PROPERTY,
+                "policy": {"type": "object"},
+                "policy_preset": {
+                    "type": "string",
+                    "description": "Named starting policy from policies.py (e.g. \"print-a4\", "
+                    "\"web-no-external\"); 'policy' fields override it on conflict. See docs/verification.md.",
+                },
+            },
             "required": ["input"],
             "additionalProperties": False,
         },
@@ -337,6 +345,11 @@ TOOLS: list[ToolContract] = [
                 "args": {"type": "object"},
                 "output": {"type": "string"},
                 "policy": {"type": "object"},
+                "policy_preset": {
+                    "type": "string",
+                    "description": "Named starting policy from policies.py (e.g. \"print-a4\", "
+                    "\"web-no-external\"); 'policy' fields override it on conflict. See docs/verification.md.",
+                },
                 "max_iterations": {"type": "integer", "minimum": 1, "maximum": 10},
             },
             "required": ["input", "operation"],

@@ -90,7 +90,16 @@ execute(ref, op, args, output_path) -> ArtifactRef       # writes only to output
 render(ref, out_dir) -> RenderResult                     # optional; default raises capability error
 verify_structural(ref, policy) -> VerificationResult
 fix(ref, op, args, failed_result) -> dict | None         # optional; None = no fixer
+refine_structural_with_render(structural, render) -> VerificationResult  # optional; default no-op
 ```
+
+`refine_structural_with_render()` (Issue #14) lets an adapter upgrade a
+structural check that's honestly `UNKNOWN` on its own into something real,
+using a render that already happened as part of the same
+`execute`/`receipt` lifecycle run — DOCX's `page_count` is the first user
+(see `docs/adapters.md`'s DOCX section). It never causes rendering to
+happen; `core/engine.py` only calls it with whatever `RenderResult` (or
+`None`) the run already produced, and the default is a no-op.
 
 Adding a format means implementing this interface under `adapters/<format>/`
 and registering it in `adapters/registry.py`. Nothing in `core/`, `cli/`, or

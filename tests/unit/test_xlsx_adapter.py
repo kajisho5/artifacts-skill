@@ -78,6 +78,26 @@ def test_verify_formula_error_workbook_fails(formula_error_xlsx, adapter):
     assert result.status == CheckStatus.FAIL
 
 
+def test_inspect_external_link_workbook_reports_the_link(external_link_xlsx, adapter):
+    ref = ArtifactRef.from_path(external_link_xlsx)
+    report = adapter.inspect(ref)
+    assert len(report.details["external_links"]) == 1
+
+
+def test_verify_external_link_workbook_warns_by_default(external_link_xlsx, adapter):
+    ref = ArtifactRef.from_path(external_link_xlsx)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "external_links")
+    assert check.status == CheckStatus.WARN
+
+
+def test_verify_external_link_workbook_fails_under_strict_policy(external_link_xlsx, adapter):
+    ref = ArtifactRef.from_path(external_link_xlsx)
+    result = adapter.verify_structural(ref, {"forbid_external_links": True})
+    check = next(c for c in result.checks if c.id == "external_links")
+    assert check.status == CheckStatus.FAIL
+
+
 def test_verify_good_workbook_sheet_count_requirement(good_xlsx, adapter):
     ref = ArtifactRef.from_path(good_xlsx)
     ok = adapter.verify_structural(ref, {"require_sheet_count": 2})

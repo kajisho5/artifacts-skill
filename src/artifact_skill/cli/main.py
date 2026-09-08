@@ -32,6 +32,8 @@ from artifact_skill.core.errors import EXIT_CODE_BY_CATEGORY, EXIT_FAIL, EXIT_OK
 from artifact_skill.core.operation import default_output_path
 from artifact_skill.core.verification import CheckStatus
 from artifact_skill.doctor.detect import detect_environment
+from artifact_skill.policies import PRESETS as _PRESET_NAMES
+from artifact_skill.policies import resolve_policy
 from artifact_skill.rendering.contact_sheet import build_before_after, build_contact_sheet
 
 
@@ -105,6 +107,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_verify = sub.add_parser("verify", help="Run structural verification against an optional policy.")
     p_verify.add_argument("input")
     p_verify.add_argument("--policy", default="{}", help="JSON object, e.g. '{\"min_pages\": 1}'.")
+    p_verify.add_argument(
+        "--policy-preset",
+        help=f"Named starting policy (see policies.py); explicit --policy fields override it. "
+        f"Choices: {sorted(_PRESET_NAMES)}.",
+    )
     common(p_verify)
 
     p_look = sub.add_parser("look", help="Build a contact sheet (or before/after) for Agent visual review.")
@@ -120,6 +127,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_receipt.add_argument("--args", default="{}")
     p_receipt.add_argument("--output")
     p_receipt.add_argument("--policy", default="{}")
+    p_receipt.add_argument(
+        "--policy-preset",
+        help=f"Named starting policy (see policies.py); explicit --policy fields override it. "
+        f"Choices: {sorted(_PRESET_NAMES)}.",
+    )
     p_receipt.add_argument("--max-iterations", type=int, default=1)
     p_receipt.add_argument("--evidence-dir", help="Directory for the receipt and evidence (default: ./reports).")
     p_receipt.add_argument("--dry-run", action="store_true")
@@ -136,6 +148,14 @@ def _load_json_arg(raw: str, flag: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise SystemExit(f"error: {flag} must be a JSON object.")
     return value
+
+
+def _resolve_policy_arg(args: argparse.Namespace) -> dict[str, Any]:
+    policy = _load_json_arg(args.policy, "--policy")
+    try:
+        return resolve_policy(getattr(args, "policy_preset", None), policy)
+    except KeyError as exc:
+        raise SystemExit(f"error: {exc}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -256,7 +276,7 @@ def _cmd_render(args: argparse.Namespace) -> int:
 
 
 def _cmd_verify(args: argparse.Namespace) -> int:
-    policy = _load_json_arg(args.policy, "--policy")
+    policy = _resolve_policy_arg(args)
     ref = ArtifactRef.from_path(args.input)
     adapter = adapter_for(ref)
     result = adapter.verify_structural(ref, policy)
@@ -289,7 +309,7 @@ def _cmd_look(args: argparse.Namespace) -> int:
 
 def _cmd_receipt(args: argparse.Namespace) -> int:
     op_args = _load_json_arg(args.args, "--args")
-    policy = _load_json_arg(args.policy, "--policy")
+    policy = _resolve_policy_arg(args)
     input_path = Path(args.input)
     output_path = Path(args.output) if args.output else default_output_path(input_path, args.operation)
     evidence_dir = Path(args.evidence_dir) if args.evidence_dir else Path("reports")

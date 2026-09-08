@@ -79,6 +79,38 @@ def test_verify_fail_gives_nonzero_exit(empty_pdf, tmp_path):
     assert data["status"] == "fail"
 
 
+def test_verify_with_policy_preset(good_pdf, tmp_path):
+    """good_2page.pdf is US Letter (612x792pt); print-a4 requires A4
+    (595x842pt) - the preset alone should be enough to fail it."""
+    proc = run_cli(["verify", str(good_pdf), "--policy-preset", "print-a4", "--json"], cwd=tmp_path)
+    data = json.loads(proc.stdout)
+    check = next(c for c in data["checks"] if c["id"] == "page_size_requirement")
+    assert check["status"] == "fail"
+
+
+def test_verify_policy_preset_and_explicit_policy_merge(good_pdf, tmp_path):
+    """--policy overrides individual preset fields rather than replacing
+    the whole preset."""
+    proc = run_cli(
+        [
+            "verify", str(good_pdf), "--policy-preset", "print-a4",
+            "--policy", '{"require_page_size_pt": [612, 792]}', "--json",
+        ],
+        cwd=tmp_path,
+    )
+    data = json.loads(proc.stdout)
+    check = next(c for c in data["checks"] if c["id"] == "page_size_requirement")
+    assert check["status"] == "pass"  # now matches the overridden (Letter) size
+    font_check = next(c for c in data["checks"] if c["id"] == "font_embedding")
+    assert font_check["status"] == "pass"  # preset's forbid_unembedded_fonts still applies
+
+
+def test_verify_unknown_policy_preset_gives_clear_error(good_pdf, tmp_path):
+    proc = run_cli(["verify", str(good_pdf), "--policy-preset", "not-a-real-preset"], cwd=tmp_path)
+    assert proc.returncode != 0
+    assert "not-a-real-preset" in proc.stderr
+
+
 def test_input_not_found_gives_input_exit_code(tmp_path):
     proc = run_cli(["inspect", str(tmp_path / "nope.pdf"), "--json"], cwd=tmp_path)
     assert proc.returncode == 2

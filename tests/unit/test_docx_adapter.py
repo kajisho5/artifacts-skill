@@ -52,6 +52,30 @@ def test_verify_empty_docx_fails_paragraph_count(empty_docx, adapter):
     assert check.status == CheckStatus.FAIL
 
 
+def test_verify_good_docx_has_no_leftover_placeholder_text(good_docx, adapter):
+    ref = ArtifactRef.from_path(good_docx)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.PASS
+
+
+def test_verify_leftover_placeholder_docx_warns_by_default(leftover_placeholder_docx, adapter):
+    ref = ArtifactRef.from_path(leftover_placeholder_docx)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.WARN
+    assert "click to add" in check.evidence["markers"]
+    assert "lorem ipsum" in check.evidence["markers"]
+    assert "todo" in check.evidence["markers"]
+
+
+def test_verify_leftover_placeholder_docx_fails_under_strict_policy(leftover_placeholder_docx, adapter):
+    ref = ArtifactRef.from_path(leftover_placeholder_docx)
+    result = adapter.verify_structural(ref, {"forbid_placeholder_text": True})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.FAIL
+
+
 def test_page_count_is_always_unknown_not_hidden(good_docx, adapter):
     """DOCX has no fixed pagination in its XML — this must never be
     silently omitted or fabricated (see the adapter module's docstring)."""
@@ -131,3 +155,67 @@ def test_render_happy_path_when_backend_actually_works(good_docx, adapter, tmp_p
     result = adapter.render(ref, tmp_path / "rendered")
     assert len(result.files) >= 1
     assert all(f.exists() for f in result.files)
+
+
+# --- refine_structural_with_render (Issue #14) ------------------------
+
+
+def test_refine_with_no_render_leaves_page_count_unknown(good_docx, adapter):
+    ref = ArtifactRef.from_path(good_docx)
+    structural = adapter.verify_structural(ref, {})
+    refined = adapter.refine_structural_with_render(structural, None)
+    check = next(c for c in refined.checks if c.id == "page_count")
+    assert check.status == CheckStatus.UNKNOWN
+
+
+def test_refine_with_empty_render_leaves_page_count_unknown(good_docx, adapter):
+    from artifact_skill.adapters.base import RenderResult
+
+    ref = ArtifactRef.from_path(good_docx)
+    structural = adapter.verify_structural(ref, {})
+    refined = adapter.refine_structural_with_render(structural, RenderResult(kind="page_images", files=[], backend="pypdfium2"))
+    check = next(c for c in refined.checks if c.id == "page_count")
+    assert check.status == CheckStatus.UNKNOWN
+
+
+def test_refine_with_real_render_upgrades_page_count_to_pass(good_docx, adapter, tmp_path):
+    """Unit-tests the refinement logic directly with a synthetic
+    RenderResult (files that don't need to actually exist for this) so it
+    doesn't depend on LibreOffice actually working in this environment —
+    the end-to-end proof against a real render is
+    test_docx_receipt_measures_real_page_count_when_render_works below."""
+    from artifact_skill.adapters.base import RenderResult
+
+    ref = ArtifactRef.from_path(good_docx)
+    structural = adapter.verify_structural(ref, {})
+    fake_pages = [tmp_path / "page-001.png", tmp_path / "page-002.png"]
+    refined = adapter.refine_structural_with_render(
+        structural, RenderResult(kind="page_images", files=fake_pages, backend="pypdfium2")
+    )
+    check = next(c for c in refined.checks if c.id == "page_count")
+    assert check.status == CheckStatus.PASS
+    assert check.evidence["page_count"] == 2
+    # every other check must survive untouched
+    other_ids_before = {c.id for c in structural.checks if c.id != "page_count"}
+    other_ids_after = {c.id for c in refined.checks if c.id != "page_count"}
+    assert other_ids_before == other_ids_after
+
+
+def test_docx_receipt_measures_real_page_count_when_render_works(good_docx, adapter, tmp_path):
+    """End-to-end: run_lifecycle() (execute/receipt path) should upgrade
+    DOCX's page_count from UNKNOWN to a real, PASS, measured value when
+    LibreOffice actually renders successfully as part of the same run."""
+    from artifact_skill.core.engine import run_lifecycle
+
+    ref = ArtifactRef.from_path(good_docx)
+    if not _probe_docx_render_works(adapter, ref, tmp_path / "_probe"):
+        pytest.skip("LibreOffice in this environment cannot convert documents (soffice present but non-functional)")
+
+    result = run_lifecycle(
+        good_docx, "metadata_set", {"title": "x"}, tmp_path / "out.docx",
+        evidence_dir=tmp_path / "reports", dry_run=False,
+    )
+    structural = result.receipt.verification["structural"]
+    check = next(c for c in structural["checks"] if c["id"] == "page_count")
+    assert check["status"] == "pass"
+    assert check["evidence"]["page_count"] >= 1

@@ -122,17 +122,26 @@ agent reading the error can tell "we haven't built this yet" apart from
   count/PPTX's slide count that DOCX actually has), broken media
   references (unreadable embedded images), text presence, arbitrary
   metadata field matching, and an unconditional `page_count: UNKNOWN`.
-- **Why `page_count` is always `UNKNOWN`, not computed or omitted**: DOCX's
-  XML has no fixed page count — pagination is a function of the layout
-  engine (fonts, margins, the actual rendering pass), something
+- **Why `page_count` is `UNKNOWN` from `verify_structural()` alone**:
+  DOCX's XML has no fixed page count — pagination is a function of the
+  layout engine (fonts, margins, the actual rendering pass), something
   `python-docx` fundamentally cannot compute from the document part alone.
   Reporting a number derived from paragraph count would be a fabricated
   proxy; omitting the check would hide a real gap (spec §43, "Unknown is
-  first-class"). A true page count *is* obtainable — after `render()`
-  converts the document and produces real PDF pages — but that is a
-  render-time, visual-adjacent fact, not something `verify_structural()`
-  can determine on its own, and blurring that line is exactly what
-  `docs/verification.md`'s structural/visual split exists to prevent.
+  first-class"). `verify_structural()` itself never renders, keeping the
+  structural/visual split `docs/verification.md` describes intact — a
+  bare `verify` call still reports `UNKNOWN`, honestly.
+- **`refine_structural_with_render()` (Issue #14)**: `execute`/`receipt`'s
+  lifecycle already renders for visual evidence in the common case, and
+  that render's page count *is* a real, measured fact (just not a
+  format-intrinsic one). This adapter overrides the
+  `ArtifactAdapter.refine_structural_with_render()` hook to swap the
+  `UNKNOWN` `page_count` check for a `PASS` reporting the actual measured
+  count — but only when a render with at least one page already happened
+  as part of that same run (`core/engine.py::run_lifecycle()` calls this
+  hook after both structural and visual results are known). This is
+  upgrade-only: a bare `verify` call, or a run where rendering wasn't
+  available/failed, is untouched and still reports `UNKNOWN`.
 - **Render**: same `office -> PDF -> pypdfium2 page images` path as PPTX.
 - **Known limitations**: page count not structurally determinable (see
   above); hyperlink validity not checked; numbering/list consistency not

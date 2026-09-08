@@ -59,6 +59,20 @@ def make_good_2page() -> None:
     c.save()
 
 
+def make_blank_page_pdf() -> None:
+    """3 pages, the middle one genuinely blank (no drawing calls at all) -
+    a different failure mode from empty_0page.pdf (zero pages total).
+    blank_pages must flag page 2 specifically."""
+    path = PDF_OUT_DIR / "blank_page.pdf"
+    c = canvas.Canvas(str(path), pagesize=letter)
+    c.drawString(100, 700, "Page one has content")
+    c.showPage()
+    c.showPage()  # page two: nothing drawn - genuinely blank
+    c.drawString(100, 700, "Page three has content")
+    c.showPage()
+    c.save()
+
+
 def make_empty_0page() -> None:
     path = PDF_OUT_DIR / "empty_0page.pdf"
     writer = pypdf.PdfWriter()
@@ -161,6 +175,18 @@ def make_empty_placeholder_pptx() -> None:
     prs.save(str(path))
 
 
+def make_leftover_placeholder_text_pptx() -> None:
+    """Placeholders are filled in (not empty - a different, already-covered
+    case), but with unreviewed generation leftovers -
+    leftover_placeholder_text must WARN."""
+    path = PPTX_OUT_DIR / "leftover_placeholder_text.pptx"
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = "Click to add title"
+    slide.placeholders[1].text = "Lorem ipsum dolor sit amet."
+    prs.save(str(path))
+
+
 def make_zero_slide_pptx() -> None:
     path = PPTX_OUT_DIR / "zero_slide.pptx"
     prs = Presentation()
@@ -187,6 +213,18 @@ def make_good_docx() -> None:
     doc.add_heading("Sample Document", level=1)
     doc.add_paragraph("Some body content.")
     doc.add_table(rows=1, cols=2)
+    doc.save(str(path))
+
+
+def make_leftover_placeholder_docx() -> None:
+    """A generated-looking document that still has unreviewed placeholder
+    text — leftover_placeholder_text must WARN (or FAIL under
+    forbid_placeholder_text)."""
+    path = DOCX_OUT_DIR / "leftover_placeholder.docx"
+    doc = Document()
+    doc.add_heading("Click to add title", level=1)
+    doc.add_paragraph("Lorem ipsum dolor sit amet, consectetur adipiscing elit.")
+    doc.add_paragraph("TODO: write the real conclusion here.")
     doc.save(str(path))
 
 
@@ -278,6 +316,88 @@ def make_no_formula_xlsx() -> None:
     wb.save(str(path))
 
 
+def make_external_link_xlsx() -> None:
+    """A workbook with a real `<externalReferences>` part pointing at
+    another workbook file — must produce a non-empty `external_links` in
+    inspect() and WARN/FAIL the `external_links` structural check.
+
+    openpyxl has no write-side API for this (confirmed: saving a formula
+    string like "=[1]Sheet1!A1" does NOT create the externalLinks parts —
+    it's just treated as opaque formula text), so this hand-builds the
+    three OOXML parts a real external reference needs and wires them into
+    the zip the same way _rewrite_zip_member patches a single cell:
+    xl/externalLinks/externalLink1.xml (the external book + sheet names),
+    its _rels file (the actual external target path), plus registering
+    both in xl/workbook.xml's <externalReferences>, xl/_rels/workbook.xml.rels,
+    and [Content_Types].xml. Verified by round-tripping through openpyxl's
+    own reader (wb._external_links is populated) before trusting this as a
+    fixture, not assumed correct from the XML alone.
+    """
+    path = XLSX_OUT_DIR / "external_link.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws["A1"] = "Label"
+    ws["B1"] = "=[1]Sheet1!A1"  # references the (not-actually-present) external book
+    wb.save(str(path))
+
+    with zipfile.ZipFile(path, "r") as zf:
+        items = {name: zf.read(name) for name in zf.namelist()}
+
+    wb_xml = items["xl/workbook.xml"].decode()
+    assert "</sheets>" in wb_xml
+    items["xl/workbook.xml"] = wb_xml.replace(
+        "</sheets>",
+        '</sheets><externalReferences><externalReference '
+        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId4"/>'
+        "</externalReferences>",
+        1,
+    ).encode()
+
+    rels_xml = items["xl/_rels/workbook.xml.rels"].decode()
+    assert "</Relationships>" in rels_xml
+    items["xl/_rels/workbook.xml.rels"] = rels_xml.replace(
+        "</Relationships>",
+        '<Relationship Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink" '
+        'Target="externalLinks/externalLink1.xml" Id="rId4"/></Relationships>',
+    ).encode()
+
+    ct_xml = items["[Content_Types].xml"].decode()
+    assert "</Types>" in ct_xml
+    items["[Content_Types].xml"] = ct_xml.replace(
+        "</Types>",
+        '<Override PartName="/xl/externalLinks/externalLink1.xml" '
+        'ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml"/></Types>',
+    ).encode()
+
+    items["xl/externalLinks/externalLink1.xml"] = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<externalLink xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        '<externalBook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1">'
+        "<sheetNames><sheetName val=\"Sheet1\"/></sheetNames>"
+        "</externalBook></externalLink>"
+    ).encode()
+    items["xl/externalLinks/_rels/externalLink1.xml.rels"] = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" '
+        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLinkPath" '
+        'Target="other_workbook.xlsx" TargetMode="External"/></Relationships>'
+    ).encode()
+
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, data in items.items():
+            zf.writestr(name, data)
+
+    # Don't trust the hand-built XML blindly - confirm openpyxl's own
+    # reader actually populates _external_links from it before shipping
+    # this as a fixture other tests will rely on.
+    from openpyxl import load_workbook
+
+    reloaded = load_workbook(str(path))
+    assert getattr(reloaded, "_external_links", None), "external_link.xlsx fixture failed its own round-trip check"
+
+
 def make_corrupt_xlsx() -> None:
     path = XLSX_OUT_DIR / "corrupt.xlsx"
     path.write_bytes(b"PK\x03\x04this is not a real zip/ooxml body, just garbage bytes")
@@ -344,6 +464,17 @@ def make_external_resource_html() -> None:
     path.write_text(
         "<!doctype html>\n<html><head><title>External Refs</title></head>\n"
         '<body><img src="https://example.com/some-image.png"></body></html>\n'
+    )
+
+
+def make_leftover_placeholder_html() -> None:
+    path = HTML_OUT_DIR / "leftover_placeholder.html"
+    path.write_text(
+        "<!doctype html>\n<html><head><title>Sample Page</title></head>\n"
+        "<body><h1>Click to add title</h1>"
+        "<p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>"
+        "<script>// TODO: this is JS code, not document text - must not be flagged</script>"
+        "</body></html>\n"
     )
 
 
@@ -425,6 +556,7 @@ if __name__ == "__main__":
     SVG_OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     make_good_2page()
+    make_blank_page_pdf()
     make_empty_0page()
     make_encrypted()
     make_corrupt_pdf()
@@ -437,18 +569,21 @@ if __name__ == "__main__":
 
     make_good_2slide_pptx()
     make_empty_placeholder_pptx()
+    make_leftover_placeholder_text_pptx()
     make_zero_slide_pptx()
     make_corrupt_pptx()
     make_mislabeled_pdf_as_pptx()
 
     make_good_docx()
     make_empty_docx()
+    make_leftover_placeholder_docx()
     make_corrupt_docx()
     make_mislabeled_pdf_as_docx()
 
     make_good_xlsx()
     make_formula_error_xlsx()
     make_no_formula_xlsx()
+    make_external_link_xlsx()
     make_corrupt_xlsx()
     make_mislabeled_pdf_as_xlsx()
 
@@ -462,6 +597,7 @@ if __name__ == "__main__":
     make_missing_local_resource_html()
     make_external_resource_html()
     make_no_title_html()
+    make_leftover_placeholder_html()
     make_binary_garbage_html()
     make_mislabeled_pdf_as_html()
 

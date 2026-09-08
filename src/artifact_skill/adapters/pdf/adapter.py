@@ -296,6 +296,9 @@ class PdfAdapter(ArtifactAdapter):
         return [
             "Encrypted PDFs are detected but not decrypted automatically.",
             "JavaScript actions are detected but not executed or analyzed further.",
+            "blank_pages flags a page with neither extractable text nor an embedded image; a page of pure "
+            "vector graphics (lines/shapes only) is a false positive this check cannot distinguish from a "
+            "genuinely blank page.",
         ]
 
     # ---- inspect ---------------------------------------------------
@@ -352,13 +355,23 @@ class PdfAdapter(ArtifactAdapter):
                 has_forms = False
 
         text_extractable_pages = 0
+        blank_pages: list[int] = []
         if not is_encrypted:
-            for page in reader.pages:
+            for i, page in enumerate(reader.pages):
+                has_text = False
                 try:
-                    if page.extract_text().strip():
-                        text_extractable_pages += 1
+                    has_text = bool(page.extract_text().strip())
                 except Exception:  # noqa: BLE001 - a single bad page must not abort inspect
                     pass
+                if has_text:
+                    text_extractable_pages += 1
+                has_images = False
+                try:
+                    has_images = len(page.images) > 0
+                except Exception:  # noqa: BLE001 - same: a bad page's image list must not abort inspect
+                    pass
+                if not has_text and not has_images:
+                    blank_pages.append(i + 1)
 
         fonts = [] if is_encrypted else _collect_font_info(reader)
 
@@ -370,6 +383,7 @@ class PdfAdapter(ArtifactAdapter):
             "has_javascript": has_javascript,
             "has_forms": has_forms,
             "text_extractable_pages": text_extractable_pages,
+            "blank_pages": blank_pages,
             "pdf_version": getattr(reader, "pdf_header", None),
             "fonts": fonts,
         }
@@ -625,6 +639,23 @@ class PdfAdapter(ArtifactAdapter):
                         message=f"{details['text_extractable_pages']}/{page_count} pages have extractable text.",
                     )
                 )
+
+            blank_pages = details.get("blank_pages", [])
+            if blank_pages:
+                checks.append(
+                    Check(
+                        id="blank_pages",
+                        name="No structurally blank pages",
+                        status=CheckStatus.FAIL if policy.get("forbid_blank_pages") else CheckStatus.WARN,
+                        message=f"{len(blank_pages)}/{page_count} page(s) have neither extractable text nor "
+                        f"an embedded image (page(s) {blank_pages}). A page of pure vector graphics (lines/"
+                        "shapes with no text or raster image) is a known false positive this check can't "
+                        "distinguish from a genuinely blank page — look at the rendered evidence to be sure.",
+                        evidence={"blank_pages": blank_pages},
+                    )
+                )
+            else:
+                checks.append(Check(id="blank_pages", name="No structurally blank pages", status=CheckStatus.PASS))
 
         if "require_metadata" in policy:
             for key, expected_value in policy["require_metadata"].items():

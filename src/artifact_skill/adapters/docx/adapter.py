@@ -11,13 +11,21 @@ Honest gap this format forces on us: DOCX has no fixed page count in its
 XML. Pagination depends on the layout engine (fonts, margins, the actual
 rendering pass) — python-docx cannot tell you how many pages a document
 will be, only Word (or LibreOffice) can, by actually laying it out. So
-`verify_structural()` reports `page_count` as `UNKNOWN` unconditionally,
-with an explanation, rather than fabricating a number from paragraph count
-or silently omitting the check. A real page count *is* available after
-`render()` succeeds (it's just "how many PDF pages came out"), but that is
-a render-time fact, not a structural one — conflating the two would blur
-exactly the "structural vs. visual" line this project insists on keeping
-sharp (see docs/verification.md).
+`verify_structural()` on its own reports `page_count` as `UNKNOWN`
+unconditionally, with an explanation, rather than fabricating a number
+from paragraph count or silently omitting the check — it never renders
+itself, keeping the structural/visual separation this project insists on
+(see docs/architecture.md) intact.
+
+That said (Issue #14): a real page count *is* available after `render()`
+succeeds, and `execute`/`receipt`'s lifecycle already renders for visual
+evidence in the common case anyway. `refine_structural_with_render()`
+(see `adapters/base.py`'s hook) upgrades that specific `page_count` check
+from `UNKNOWN` to a `PASS` reporting the measured count — but only when a
+render already happened as part of *this* lifecycle run, never by having
+`verify_structural()` render on its own. A bare `verify` call (no
+`execute`/`receipt`) still reports `UNKNOWN`, honestly, since nothing
+rendered.
 """
 
 from __future__ import annotations
@@ -33,6 +41,7 @@ from artifact_skill.core.capability import Capability, CapabilityStatus
 from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactInputError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
+from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.office_convert import convert_to_pdf, soffice_binary
 from artifact_skill.rendering.pdf_pages import render_pdf_pages
 from artifact_skill.security.paths import atomic_copy, check_input_size
@@ -157,6 +166,7 @@ class DocxAdapter(ArtifactAdapter):
             ) from exc
 
         paragraph_count = len(document.paragraphs)
+        all_text = "\n".join(p.text for p in document.paragraphs)
         text_paragraphs = sum(1 for p in document.paragraphs if p.text.strip())
         table_count = len(document.tables)
 
@@ -189,6 +199,10 @@ class DocxAdapter(ArtifactAdapter):
             "metadata": metadata,
             "page_width_emu": section.page_width if section else None,
             "page_height_emu": section.page_height if section else None,
+            # The list of markers found, not the full document text itself -
+            # inspect()'s output shouldn't balloon with (or leak) a large
+            # document's entire body just to report this one signal.
+            "leftover_markers": find_leftover_markers(all_text),
         }
         return InspectionReport(artifact=ref, details=details, warnings=warnings)
 
@@ -327,6 +341,22 @@ class DocxAdapter(ArtifactAdapter):
         else:
             checks.append(Check(id="broken_media", name="No broken media references", status=CheckStatus.PASS))
 
+        leftover_markers = details["leftover_markers"]
+        if leftover_markers:
+            checks.append(
+                Check(
+                    id="leftover_placeholder_text",
+                    name="No leftover generation placeholder text",
+                    status=CheckStatus.FAIL if policy.get("forbid_placeholder_text") else CheckStatus.WARN,
+                    message=f"Found likely-unreviewed placeholder text: {leftover_markers}.",
+                    evidence={"markers": leftover_markers},
+                )
+            )
+        else:
+            checks.append(
+                Check(id="leftover_placeholder_text", name="No leftover generation placeholder text", status=CheckStatus.PASS)
+            )
+
         if paragraph_count > 0:
             if details["text_paragraphs"] == 0:
                 checks.append(
@@ -372,3 +402,42 @@ class DocxAdapter(ArtifactAdapter):
         )
 
         return VerificationResult(kind="structural", checks=checks)
+
+    # ---- refine with render (Issue #14) -------------------------------
+
+    def refine_structural_with_render(
+        self, structural: VerificationResult, render: RenderResult | None
+    ) -> VerificationResult:
+        """`page_count` is honestly `UNKNOWN` from `verify_structural()`
+        alone (see this module's docstring) — but `execute`/`receipt`'s
+        lifecycle already renders for visual evidence when rendering is
+        available, and that render's page count *is* a real, measured fact
+        (just not a format-intrinsic one). Swap the `UNKNOWN` check for a
+        `PASS` reporting that measured count, clearly labeled as
+        render-derived rather than structural, when a render with at least
+        one page actually happened this run. Leaves `structural` untouched
+        (including the case where render failed or wasn't attempted) —
+        this is upgrade-only, never a guess.
+        """
+        if render is None or not render.files:
+            return structural
+        new_checks = [
+            Check(
+                id="page_count",
+                name="Page count (measured via render)",
+                status=CheckStatus.PASS,
+                message=f"{len(render.files)} page(s), as measured by this machine's LibreOffice-based render "
+                "pipeline just now. Not a structural (format-intrinsic) fact — a different machine's "
+                "LibreOffice version/fonts could measure a different count for the same input.",
+                evidence={"page_count": len(render.files), "measured_via": render.backend},
+            )
+            if c.id == "page_count"
+            else c
+            for c in structural.checks
+        ]
+        return VerificationResult(
+            kind=structural.kind,
+            checks=new_checks,
+            evidence_files=structural.evidence_files,
+            inspected_by=structural.inspected_by,
+        )

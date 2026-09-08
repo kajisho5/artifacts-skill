@@ -31,6 +31,7 @@ from artifact_skill.core.capability import Capability, CapabilityStatus
 from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactInputError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
+from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.office_convert import convert_to_pdf, soffice_binary
 from artifact_skill.rendering.pdf_pages import render_pdf_pages
 from artifact_skill.security.paths import atomic_copy, check_input_size
@@ -168,6 +169,7 @@ class PptxAdapter(ArtifactAdapter):
         text_bearing_slides = 0
         has_chart = False
         has_notes = 0
+        all_text_parts: list[str] = []
 
         for i, slide in enumerate(prs.slides):
             slide_has_text = False
@@ -176,6 +178,7 @@ class PptxAdapter(ArtifactAdapter):
                     has_chart = True
                 if shape.has_text_frame and shape.text_frame.text.strip():
                     slide_has_text = True
+                    all_text_parts.append(shape.text_frame.text)
                 if shape.is_placeholder and shape.has_text_frame and not shape.text_frame.text.strip():
                     empty_placeholders += 1
                 if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
@@ -208,6 +211,7 @@ class PptxAdapter(ArtifactAdapter):
             "text_bearing_slides": text_bearing_slides,
             "has_chart": has_chart,
             "slides_with_notes": has_notes,
+            "leftover_markers": find_leftover_markers("\n".join(all_text_parts)),
         }
         return InspectionReport(artifact=ref, details=details, warnings=warnings)
 
@@ -341,6 +345,22 @@ class PptxAdapter(ArtifactAdapter):
                 )
             )
 
+        if "require_slide_aspect_ratio" in policy and details["slide_width_in"] and details["slide_height_in"]:
+            expected_ratio = policy["require_slide_aspect_ratio"]
+            tolerance = policy.get("aspect_ratio_tolerance", 0.02)
+            actual_ratio = details["slide_width_in"] / details["slide_height_in"]
+            ok = abs(actual_ratio - expected_ratio) <= tolerance
+            checks.append(
+                Check(
+                    id="slide_aspect_ratio",
+                    name="Slide aspect ratio matches requirement",
+                    status=CheckStatus.PASS if ok else CheckStatus.FAIL,
+                    message=f"expected {expected_ratio:.4f} (+/-{tolerance}), got {actual_ratio:.4f} "
+                    f"({details['slide_width_in']}in x {details['slide_height_in']}in).",
+                    evidence={"expected_ratio": expected_ratio, "actual_ratio": round(actual_ratio, 4)},
+                )
+            )
+
         if details["broken_media"]:
             checks.append(
                 Check(
@@ -353,6 +373,22 @@ class PptxAdapter(ArtifactAdapter):
             )
         else:
             checks.append(Check(id="broken_media", name="No broken media references", status=CheckStatus.PASS))
+
+        leftover_markers = details["leftover_markers"]
+        if leftover_markers:
+            checks.append(
+                Check(
+                    id="leftover_placeholder_text",
+                    name="No leftover generation placeholder text",
+                    status=CheckStatus.FAIL if policy.get("forbid_placeholder_text") else CheckStatus.WARN,
+                    message=f"Found likely-unreviewed placeholder text: {leftover_markers}.",
+                    evidence={"markers": leftover_markers},
+                )
+            )
+        else:
+            checks.append(
+                Check(id="leftover_placeholder_text", name="No leftover generation placeholder text", status=CheckStatus.PASS)
+            )
 
         max_empty = policy.get("max_empty_placeholders", 0)
         if details["empty_placeholders"] > max_empty:

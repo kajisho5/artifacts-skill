@@ -49,6 +49,34 @@ def test_verify_empty_pdf_fails_page_count(empty_pdf, adapter):
     assert result.status == CheckStatus.FAIL
 
 
+def test_inspect_blank_page_pdf_identifies_the_blank_page(blank_page_pdf, adapter):
+    ref = ArtifactRef.from_path(blank_page_pdf)
+    report = adapter.inspect(ref)
+    assert report.details["blank_pages"] == [2]
+
+
+def test_verify_good_pdf_has_no_blank_pages(good_pdf, adapter):
+    ref = ArtifactRef.from_path(good_pdf)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "blank_pages")
+    assert check.status == CheckStatus.PASS
+
+
+def test_verify_blank_page_pdf_warns_by_default(blank_page_pdf, adapter):
+    ref = ArtifactRef.from_path(blank_page_pdf)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "blank_pages")
+    assert check.status == CheckStatus.WARN
+    assert check.evidence["blank_pages"] == [2]
+
+
+def test_verify_blank_page_pdf_fails_under_strict_policy(blank_page_pdf, adapter):
+    ref = ArtifactRef.from_path(blank_page_pdf)
+    result = adapter.verify_structural(ref, {"forbid_blank_pages": True})
+    check = next(c for c in result.checks if c.id == "blank_pages")
+    assert check.status == CheckStatus.FAIL
+
+
 def test_verify_encrypted_pdf_warns_by_default(encrypted_pdf, adapter):
     ref = ArtifactRef.from_path(encrypted_pdf)
     result = adapter.verify_structural(ref, {})

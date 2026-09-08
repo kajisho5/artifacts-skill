@@ -51,10 +51,17 @@ because it's a real, recurring shape, not a one-off gap:
   (presence is detected, internal chart data correctness is not) and
   `SKIPPED` — not `PASS` — on a chart-free deck, so a chart-free deck's
   status is unaffected while a chart-bearing one honestly reflects the gap.
-- DOCX's `page_count` is `UNKNOWN` unconditionally, because the format
-  itself has no fixed pagination in its XML — this one isn't a "not
-  implemented yet" gap like font embedding was; it's structurally
-  unanswerable without actually rendering the document.
+- DOCX's `page_count` is `UNKNOWN` from `verify_structural()` alone,
+  because the format itself has no fixed pagination in its XML — it's
+  structurally unanswerable without actually rendering the document. A
+  bare `verify` call (no render) still reports it this way, honestly.
+  But `execute`/`receipt`'s lifecycle already renders for visual evidence
+  in the common case, and (Issue #14) `DocxAdapter.refine_structural_with_render()`
+  upgrades that specific check to a real, measured `PASS` when a render
+  with at least one page happened as part of that same run — never by
+  having `verify_structural()` render on its own. See `adapters/base.py`'s
+  `refine_structural_with_render()` hook and `docs/adapters.md`'s DOCX
+  section.
 - XLSX's `formula_recalculation` is `UNKNOWN` whenever any formula is
   present, unconditionally, by deliberate design choice (see Issue #5 /
   `docs/adapters.md`'s XLSX section) — recalculating would mean shelling
@@ -121,6 +128,46 @@ Pass a `policy` object to `verify`/`receipt`:
 
 Unset keys simply don't add their corresponding check — they don't default
 to strict or lenient in a way that changes other checks' behavior.
+
+## Named policy presets (Issue #14)
+
+The default policy (`{}`) barely gates anything — with no policy, roughly
+the only thing that reliably fails a PDF is zero pages. `policies.py`'s
+`PRESETS` (`print-a4`, `print-letter`, `slides-16x9`,
+`spreadsheet-no-errors`, `web-no-external`) are named starting points for
+`verify`/`receipt`'s `--policy-preset <name>` (CLI) or `policy_preset`
+(MCP) — a plain policy dict under the hood, resolved and merged with any
+explicit `--policy`/`policy` (explicit fields win on conflict) before
+`verify_structural()` ever sees it. This is deliberately not a new engine
+concept: Core still only ever applies whatever policy dict it ends up
+with. See `policies.py`'s module docstring for the full design note,
+including why a preset's format-specific keys are safe to apply to an
+unrelated format (every policy read is a `.get()`, never an assumption
+that a key is meaningful).
+
+## Leftover generation artifacts (Issue #14)
+
+An agent's own generation step is exactly the thing most likely to leave
+"Click to add title," "Lorem ipsum," or a stray "TODO"/"FIXME" behind —
+and the default policy didn't catch any of it. `leftover_text.py`'s
+`find_leftover_markers()` is a small, literal (case-insensitive substring)
+marker list — deliberately not a heuristic/NLP classifier, since a false
+positive here dents trust in every other check. PPTX (shape/placeholder
+text), DOCX (paragraph text), and HTML (body text, explicitly excluding
+`<script>`/`<style>` content — that's code, not document text) each call
+it during `inspect()` and surface a `leftover_placeholder_text` check:
+`WARN` by default, `FAIL` under `policy["forbid_placeholder_text"]`.
+
+## Blank pages (PDF, Issue #14)
+
+`page_count` catches zero pages; it doesn't catch *N* pages where one is
+genuinely empty in the middle of an otherwise-normal document. PDF's
+`blank_pages` check flags any page with neither extractable text nor an
+embedded image (`WARN` by default, `FAIL` under
+`policy["forbid_blank_pages"]`), naming the specific page number(s). Known,
+documented false-positive case: a page of pure vector graphics (lines/
+shapes, no text or raster image) looks identical to a blank page to this
+check — see `PdfAdapter.limitations()`.
 
 ## Receipt-level status
 

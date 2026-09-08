@@ -57,6 +57,7 @@ from artifact_skill.core.capability import Capability, CapabilityStatus
 from artifact_skill.core.errors import ArtifactInputError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
+from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.chromium_render import render_local_file
 from artifact_skill.security.paths import check_input_size
 
@@ -72,13 +73,17 @@ class _ResourceCollector(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.title: str | None = None
         self._in_title = False
+        self._in_skip_tag = False  # script/style content is code, not document text
         self.resources: list[tuple[str, str]] = []  # (tag, url)
         self.parse_errors = 0
+        self.text_parts: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attr_map = dict(attrs)
         if tag == "title":
             self._in_title = True
+        if tag in ("script", "style"):
+            self._in_skip_tag = True
         target_attr = _RESOURCE_ATTRS.get(tag)
         if target_attr and attr_map.get(target_attr):
             self.resources.append((tag, attr_map[target_attr]))
@@ -86,10 +91,14 @@ class _ResourceCollector(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         if tag == "title":
             self._in_title = False
+        if tag in ("script", "style"):
+            self._in_skip_tag = False
 
     def handle_data(self, data: str) -> None:
         if self._in_title and data.strip():
             self.title = (self.title or "") + data
+        if not self._in_skip_tag and data.strip():
+            self.text_parts.append(data)
 
 
 def _classify_resource(url: str, html_dir: Path) -> str:
@@ -205,6 +214,9 @@ class HtmlAdapter(ArtifactAdapter):
             "local_resources_present": local_present,
             "local_resources_missing": local_missing,
             "size_bytes": ref.size_bytes,
+            # The list of markers found, not the full body text - inspect()'s
+            # output shouldn't balloon with a large page's entire text.
+            "leftover_markers": find_leftover_markers("\n".join(parser.text_parts)),
         }
         return InspectionReport(artifact=ref, details=details, warnings=warnings)
 
@@ -283,5 +295,21 @@ class HtmlAdapter(ArtifactAdapter):
             )
         else:
             checks.append(Check(id="external_resources", name="No external resource references", status=CheckStatus.PASS))
+
+        leftover_markers = details["leftover_markers"]
+        if leftover_markers:
+            checks.append(
+                Check(
+                    id="leftover_placeholder_text",
+                    name="No leftover generation placeholder text",
+                    status=CheckStatus.FAIL if policy.get("forbid_placeholder_text") else CheckStatus.WARN,
+                    message=f"Found likely-unreviewed placeholder text: {leftover_markers}.",
+                    evidence={"markers": leftover_markers},
+                )
+            )
+        else:
+            checks.append(
+                Check(id="leftover_placeholder_text", name="No leftover generation placeholder text", status=CheckStatus.PASS)
+            )
 
         return VerificationResult(kind="structural", checks=checks)

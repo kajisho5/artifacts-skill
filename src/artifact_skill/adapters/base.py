@@ -119,3 +119,26 @@ class ArtifactAdapter(ABC):
         fix loop exists when it doesn't — silence here is the honest answer).
         """
         return None
+
+    def refine_structural_with_render(
+        self, structural: VerificationResult, render: RenderResult | None
+    ) -> VerificationResult:
+        """Optional (Issue #14): given the structural result already
+        computed by `verify_structural()` and this exact lifecycle run's
+        own `RenderResult` (`None` if nothing was rendered), return a
+        possibly-updated `VerificationResult`.
+
+        Default: no-op (return `structural` unchanged) — most adapters
+        have nothing render-derived to add. Exists so a format whose
+        structural check is honestly `UNKNOWN` for something only a real
+        render can answer (DOCX's `page_count` — see that adapter's
+        module docstring) can upgrade *that specific check* using a REAL
+        measurement from a render that already happened as part of this
+        run, without `verify_structural()` itself ever rendering — keeping
+        the structural/visual separation this project insists on (see
+        `docs/architecture.md`) intact. Only called from
+        `core/engine.py::run_lifecycle()` (the `execute`/`receipt` path,
+        where a render may already be happening anyway); a bare `verify`
+        call never renders and never calls this.
+        """
+        return structural

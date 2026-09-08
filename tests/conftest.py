@@ -36,6 +36,13 @@ def empty_pdf(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
+def blank_page_pdf(tmp_path: Path) -> Path:
+    dst = tmp_path / "blank_page.pdf"
+    shutil.copy(FIXTURES_DIR / "blank_page.pdf", dst)
+    return dst
+
+
+@pytest.fixture()
 def encrypted_pdf(tmp_path: Path) -> Path:
     dst = tmp_path / "encrypted.pdf"
     shutil.copy(FIXTURES_DIR / "encrypted.pdf", dst)
@@ -78,6 +85,13 @@ def empty_placeholder_pptx(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
+def leftover_placeholder_text_pptx(tmp_path: Path) -> Path:
+    dst = tmp_path / "leftover_placeholder_text.pptx"
+    shutil.copy(PPTX_FIXTURES_DIR / "leftover_placeholder_text.pptx", dst)
+    return dst
+
+
+@pytest.fixture()
 def zero_slide_pptx(tmp_path: Path) -> Path:
     dst = tmp_path / "zero_slide.pptx"
     shutil.copy(PPTX_FIXTURES_DIR / "zero_slide.pptx", dst)
@@ -109,6 +123,13 @@ def good_docx(tmp_path: Path) -> Path:
 def empty_docx(tmp_path: Path) -> Path:
     dst = tmp_path / "empty.docx"
     shutil.copy(DOCX_FIXTURES_DIR / "empty.docx", dst)
+    return dst
+
+
+@pytest.fixture()
+def leftover_placeholder_docx(tmp_path: Path) -> Path:
+    dst = tmp_path / "leftover_placeholder.docx"
+    shutil.copy(DOCX_FIXTURES_DIR / "leftover_placeholder.docx", dst)
     return dst
 
 
@@ -151,6 +172,13 @@ def no_formula_xlsx(tmp_path: Path) -> Path:
 def corrupt_xlsx(tmp_path: Path) -> Path:
     dst = tmp_path / "corrupt.xlsx"
     shutil.copy(XLSX_FIXTURES_DIR / "corrupt.xlsx", dst)
+    return dst
+
+
+@pytest.fixture()
+def external_link_xlsx(tmp_path: Path) -> Path:
+    dst = tmp_path / "external_link.xlsx"
+    shutil.copy(XLSX_FIXTURES_DIR / "external_link.xlsx", dst)
     return dst
 
 
@@ -214,6 +242,13 @@ def missing_local_resource_html(tmp_path: Path) -> Path:
 def external_resource_html(tmp_path: Path) -> Path:
     dst = tmp_path / "external_resource.html"
     shutil.copy(HTML_FIXTURES_DIR / "external_resource.html", dst)
+    return dst
+
+
+@pytest.fixture()
+def leftover_placeholder_html(tmp_path: Path) -> Path:
+    dst = tmp_path / "leftover_placeholder.html"
+    shutil.copy(HTML_FIXTURES_DIR / "leftover_placeholder.html", dst)
     return dst
 
 

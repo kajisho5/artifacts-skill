@@ -77,6 +77,29 @@ def test_verify_empty_placeholder_passes_when_policy_allows_it(empty_placeholder
     assert check.status == CheckStatus.PASS
 
 
+def test_verify_good_deck_has_no_leftover_placeholder_text(good_pptx, adapter):
+    ref = ArtifactRef.from_path(good_pptx)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.PASS
+
+
+def test_verify_leftover_placeholder_text_deck_warns_by_default(leftover_placeholder_text_pptx, adapter):
+    ref = ArtifactRef.from_path(leftover_placeholder_text_pptx)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.WARN
+    assert "click to add" in check.evidence["markers"]
+    assert "lorem ipsum" in check.evidence["markers"]
+
+
+def test_verify_leftover_placeholder_text_deck_fails_under_strict_policy(leftover_placeholder_text_pptx, adapter):
+    ref = ArtifactRef.from_path(leftover_placeholder_text_pptx)
+    result = adapter.verify_structural(ref, {"forbid_placeholder_text": True})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.FAIL
+
+
 def test_verify_good_deck_slide_count_requirement(good_pptx, adapter):
     ref = ArtifactRef.from_path(good_pptx)
     ok = adapter.verify_structural(ref, {"require_slide_count": 2})
@@ -84,6 +107,25 @@ def test_verify_good_deck_slide_count_requirement(good_pptx, adapter):
 
     mismatch = adapter.verify_structural(ref, {"require_slide_count": 5})
     assert next(c for c in mismatch.checks if c.id == "slide_count_requirement").status == CheckStatus.FAIL
+
+
+def test_verify_good_deck_slide_aspect_ratio_requirement(good_pptx, adapter):
+    """good_2slide.pptx is a 10in x 7.5in (4:3, ratio 1.3333) deck."""
+    ref = ArtifactRef.from_path(good_pptx)
+    ok = adapter.verify_structural(ref, {"require_slide_aspect_ratio": 4 / 3})
+    check = next(c for c in ok.checks if c.id == "slide_aspect_ratio")
+    assert check.status == CheckStatus.PASS
+
+    mismatch = adapter.verify_structural(ref, {"require_slide_aspect_ratio": 16 / 9})
+    check = next(c for c in mismatch.checks if c.id == "slide_aspect_ratio")
+    assert check.status == CheckStatus.FAIL
+    assert check.evidence["expected_ratio"] == 16 / 9
+
+
+def test_verify_slide_aspect_ratio_check_absent_without_policy(good_pptx, adapter):
+    ref = ArtifactRef.from_path(good_pptx)
+    result = adapter.verify_structural(ref, {})
+    assert not any(c.id == "slide_aspect_ratio" for c in result.checks)
 
 
 def test_chart_validity_skipped_when_no_charts(good_pptx, adapter):

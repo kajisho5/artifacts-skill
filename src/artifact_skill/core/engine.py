@@ -164,6 +164,8 @@ def run_lifecycle(
                 checks=[Check(id="not_required", name="Structural verification", status=CheckStatus.SKIPPED,
                                message="This operation's contract does not require structural verification.")],
             )
+        else:
+            structural = adapter.refine_structural_with_render(structural, rendered)
 
         should_retry = structural.status == CheckStatus.FAIL and iteration < max_iterations
         if should_retry:

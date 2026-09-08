@@ -43,6 +43,7 @@ from artifact_skill.core.errors import ArtifactError, ArtifactInputError, ErrorC
 from artifact_skill.core.operation import default_output_path
 from artifact_skill.core.schema_validate import validate_against_schema
 from artifact_skill.doctor.detect import detect_environment
+from artifact_skill.policies import resolve_policy
 from artifact_skill.rendering.contact_sheet import build_before_after, build_contact_sheet
 
 SERVER_NAME = "artifact-skill"
@@ -170,7 +171,8 @@ def _h_render(args: dict[str, Any]) -> dict[str, Any]:
 def _h_verify(args: dict[str, Any]) -> dict[str, Any]:
     ref = ArtifactRef.from_path(args["input"])
     adapter = adapter_for(ref)
-    return adapter.verify_structural(ref, args.get("policy", {})).to_dict()
+    policy = _resolve_policy_arg(args)
+    return adapter.verify_structural(ref, policy).to_dict()
 
 
 def _h_look(args: dict[str, Any]) -> dict[str, Any]:
@@ -193,12 +195,20 @@ def _h_receipt(args: dict[str, Any]) -> dict[str, Any]:
     operation = args["operation"]
     output_path = Path(args["output"]) if args.get("output") else default_output_path(input_path, operation)
     evidence_dir = Path(args.get("evidence_dir", "reports"))
+    policy = _resolve_policy_arg(args)
     result = run_lifecycle(
         input_path, operation, args.get("args", {}), output_path,
-        policy=args.get("policy", {}), evidence_dir=evidence_dir,
+        policy=policy, evidence_dir=evidence_dir,
         max_iterations=args.get("max_iterations", 1),
     )
     return result.receipt.to_dict() if result.receipt else {"status": "fail", "error": "execution did not complete"}
+
+
+def _resolve_policy_arg(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return resolve_policy(args.get("policy_preset"), args.get("policy", {}))
+    except KeyError as exc:
+        raise ArtifactInputError(code="ARTIFACT_INVALID_ARGS", message=str(exc)) from exc
 
 
 _HANDLERS = {

@@ -107,3 +107,24 @@ def test_initialize_response_falls_back_without_a_requested_version():
 def test_initialize_response_falls_back_with_no_params_at_all():
     response = _handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
     assert response["result"]["protocolVersion"] == PROTOCOL_VERSION
+
+
+# --- policy presets over MCP (Issue #14) -----------------------------------
+
+
+def test_verify_accepts_a_policy_preset(good_pdf):
+    """good_2page.pdf is US Letter; print-a4 requires A4, so this preset
+    alone should be enough to fail the page-size check over MCP too."""
+    result = call_tool(f"{CAPABILITY_PREFIX}.verify", {"input": str(good_pdf), "policy_preset": "print-a4"})
+    assert result["isError"] is False
+    payload = json.loads(result["content"][0]["text"])
+    check = next(c for c in payload["checks"] if c["id"] == "page_size_requirement")
+    assert check["status"] == "fail"
+
+
+def test_verify_unknown_policy_preset_returns_structured_error(good_pdf):
+    result = call_tool(f"{CAPABILITY_PREFIX}.verify", {"input": str(good_pdf), "policy_preset": "not-a-real-preset"})
+    assert result["isError"] is True
+    payload = json.loads(result["content"][0]["text"])
+    assert payload["error"]["code"] == "ARTIFACT_INVALID_ARGS"
+    assert "not-a-real-preset" in payload["error"]["message"]
