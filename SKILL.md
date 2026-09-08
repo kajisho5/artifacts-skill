@@ -116,7 +116,7 @@ plain language already — surface them, don't paraphrase around them).
 default policy (`{}`) barely gates anything — a document with leftover
 "Lorem ipsum"/"Click to add title" text, for example, only ever `WARN`s
 (exit 0) under an empty policy, not `FAIL`s. Reach for a named preset
-(`print-a4`, `print-letter`, `slides-16x9`, `spreadsheet-no-errors`,
+(`print-a4`, `print-letter`, `slides-16x9`, `spreadsheet-no-cached-errors`,
 `web-no-external` — see `policies.py`) before writing a policy dict by
 hand; every preset already sets `forbid_placeholder_text: true`, so
 leftover generation artifacts are a hard `FAIL` under any of them, not a

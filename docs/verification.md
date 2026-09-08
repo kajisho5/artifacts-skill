@@ -134,7 +134,7 @@ to strict or lenient in a way that changes other checks' behavior.
 The default policy (`{}`) barely gates anything — with no policy, roughly
 the only thing that reliably fails a PDF is zero pages. `policies.py`'s
 `PRESETS` (`print-a4`, `print-letter`, `slides-16x9`,
-`spreadsheet-no-errors`, `web-no-external`) are named starting points for
+`spreadsheet-no-cached-errors`, `web-no-external`) are named starting points for
 `verify`/`receipt`'s `--policy-preset <name>` (CLI) or `policy_preset`
 (MCP) — a plain policy dict under the hood, resolved and merged with any
 explicit `--policy`/`policy` (explicit fields win on conflict) before
@@ -144,6 +144,31 @@ with. See `policies.py`'s module docstring for the full design note,
 including why a preset's format-specific keys are safe to apply to an
 unrelated format (every policy read is a `.get()`, never an assumption
 that a key is meaningful).
+
+### Why `spreadsheet-no-cached-errors`, not `spreadsheet-no-errors` (Issue #19)
+
+The original name (`spreadsheet-no-errors`) promised more than the preset
+can actually verify. XLSX's `formula_recalculation` check is `UNKNOWN`
+whenever the workbook contains any formula at all, unconditionally — see
+`docs/adapters.md`'s XLSX section for why this project doesn't shell out
+to LibreOffice to recalculate and close that gap. `UNKNOWN` outranks
+`WARN`/`PASS` in `aggregate()`'s worst-status-wins precedence, so a
+perfectly clean workbook — no cached errors, no external links, no
+leftover placeholder text — still shows an overall receipt `status:
+unknown`, not `pass`, the moment it contains one formula. That is
+`aggregate()` doing exactly its job (spec §43, "Unknown is first-class");
+it is not something a preset should quietly work around by, say, folding
+`formula_recalculation` out of the top-level status for this one preset
+— that would reintroduce the "silently ignore something we couldn't
+check" failure mode this project's whole verification model exists to
+avoid. The rename is the honest fix: the preset gates what it can
+actually promise — no cached error token in any formula's stored result
+— not "every formula is provably correct." A caller that needs to tell
+"found a real error" apart from "couldn't verify one way or the other"
+should read `formula_cached_errors` and `formula_recalculation` by `id`,
+not just the aggregate — the same "inspect `checks[].status` by `id`"
+guidance already given above for DOCX's `page_count`/XLSX's
+`formula_recalculation` applies here too.
 
 ## Leftover generation artifacts (Issue #14)
 

@@ -77,3 +77,16 @@ def test_print_presets_are_a_real_submission_gate_not_just_page_size():
 
 def test_slides_preset_requires_at_least_one_slide():
     assert PRESETS["slides-16x9"]["min_slides"] == 1
+
+
+def test_spreadsheet_preset_is_named_for_what_it_actually_promises():
+    """Issue #19: renamed from spreadsheet-no-errors, since the preset
+    cannot actually promise 'no errors' - formula_recalculation is
+    UNKNOWN whenever any formula exists (openpyxl never recalculates),
+    and UNKNOWN outranks PASS in aggregation, so a workbook with formulas
+    but zero real problems still shows an overall UNKNOWN under this
+    preset. 'no-cached-errors' matches what forbid_placeholder_text/
+    forbid_external_links/formula_cached_errors can actually verify."""
+    assert "spreadsheet-no-errors" not in PRESETS
+    p = PRESETS["spreadsheet-no-cached-errors"]
+    assert p["forbid_external_links"] is True

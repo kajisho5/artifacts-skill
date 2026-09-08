@@ -115,6 +115,24 @@ def test_print_a4_preset_fails_leftover_placeholder_text_not_just_warns(leftover
     assert proc.returncode == 1
 
 
+def test_spreadsheet_preset_shows_unknown_not_pass_on_a_clean_workbook_with_a_formula(good_xlsx, tmp_path):
+    """Issue #19: the honest, documented behavior this preset was renamed
+    over (spreadsheet-no-errors -> spreadsheet-no-cached-errors) - a
+    workbook with zero cached errors, zero external links, zero leftover
+    text still reports overall UNKNOWN (not PASS) the moment it contains
+    any formula, since formula_recalculation is UNKNOWN-by-design and
+    UNKNOWN outranks PASS in aggregation. Confirms this is really what
+    the CLI returns end to end, not just at the adapter level."""
+    proc = run_cli(
+        ["verify", str(good_xlsx), "--policy-preset", "spreadsheet-no-cached-errors", "--json"], cwd=tmp_path
+    )
+    data = json.loads(proc.stdout)
+    check_by_id = {c["id"]: c for c in data["checks"]}
+    assert check_by_id["formula_cached_errors"]["status"] == "pass"
+    assert check_by_id["formula_recalculation"]["status"] == "unknown"
+    assert data["status"] == "unknown"
+
+
 def test_verify_fail_gives_nonzero_exit(empty_pdf, tmp_path):
     proc = run_cli(["verify", str(empty_pdf), "--json"], cwd=tmp_path)
     assert proc.returncode == 1
