@@ -442,8 +442,70 @@ def test_limitations_names_the_real_known_caveats(adapter):
     known-true strings, not just "is a non-empty list"."""
     text = " ".join(adapter.limitations())
     assert "not decrypted automatically" in text
-    assert "JavaScript actions are detected but not executed" in text
+    assert "never executed or analyzed further" in text
     assert "blank_pages" in text
+
+
+def _pdf_with_openaction_javascript(tmp_path):
+    """Build a minimal PDF whose /OpenAction (not /Names /JavaScript) runs
+    JavaScript - the exact real-world payload location FIX_PROMPT P2-2
+    found this adapter previously missed entirely."""
+    import pypdf
+    from pypdf.generic import DictionaryObject, NameObject, TextStringObject
+
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    action = DictionaryObject()
+    action[NameObject("/S")] = NameObject("/JavaScript")
+    action[NameObject("/JS")] = TextStringObject("app.alert('hi');")
+    writer._root_object[NameObject("/OpenAction")] = action
+    path = tmp_path / "openaction_js.pdf"
+    with open(path, "wb") as f:
+        writer.write(f)
+    return path
+
+
+def _pdf_with_page_level_aa_javascript(tmp_path):
+    """Same idea, but the JavaScript sits in a page's own /AA (additional
+    actions) dict rather than the document catalog."""
+    import pypdf
+    from pypdf.generic import DictionaryObject, NameObject, TextStringObject
+
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    action = DictionaryObject()
+    action[NameObject("/S")] = NameObject("/JavaScript")
+    action[NameObject("/JS")] = TextStringObject("app.alert('page open');")
+    aa = DictionaryObject()
+    aa[NameObject("/O")] = action
+    writer.pages[0][NameObject("/AA")] = aa
+    path = tmp_path / "page_aa_js.pdf"
+    with open(path, "wb") as f:
+        writer.write(f)
+    return path
+
+
+def test_inspect_detects_javascript_in_openaction(adapter, tmp_path):
+    """FIX_PROMPT P2-2: /Names /JavaScript is only one of several places a
+    PDF can carry JavaScript - confirmed by direct reproduction before this
+    fix that a crafted /OpenAction JavaScript action passed has_javascript
+    == False."""
+    path = _pdf_with_openaction_javascript(tmp_path)
+    report = adapter.inspect(ArtifactRef.from_path(path))
+    assert report.details["has_javascript"] is True
+
+
+def test_inspect_detects_javascript_in_page_level_additional_actions(adapter, tmp_path):
+    path = _pdf_with_page_level_aa_javascript(tmp_path)
+    report = adapter.inspect(ArtifactRef.from_path(path))
+    assert report.details["has_javascript"] is True
+
+
+def test_verify_openaction_javascript_fails_under_default_policy(adapter, tmp_path):
+    path = _pdf_with_openaction_javascript(tmp_path)
+    result = adapter.verify_structural(ArtifactRef.from_path(path), {})
+    check = next(c for c in result.checks if c.id == "javascript")
+    assert check.status == CheckStatus.FAIL
 
 
 def test_render_honors_a_custom_limits_max_pages(good_pdf, adapter, tmp_path):

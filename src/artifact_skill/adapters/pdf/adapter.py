@@ -40,6 +40,22 @@ _STANDARD_14_FONTS = {
 }
 
 
+def _action_is_javascript(action: object) -> bool:
+    """True if a PDF action dictionary is (or chains to, via /Next) a
+    JavaScript action. Best-effort structural check only — never executes
+    or interprets the script itself."""
+    seen = 0
+    while action is not None and seen < 64:  # bound a malicious /Next cycle
+        seen += 1
+        try:
+            if action.get("/S") == "/JavaScript":  # type: ignore[attr-defined]
+                return True
+            action = action.get("/Next")  # type: ignore[attr-defined]
+        except AttributeError:
+            return False
+    return False
+
+
 def _has(module: str) -> bool:
     return importlib.util.find_spec(module) is not None
 
@@ -374,7 +390,10 @@ class PdfAdapter(ArtifactAdapter):
     def limitations(self) -> list[str]:
         return [
             "Encrypted PDFs are detected but not decrypted automatically.",
-            "JavaScript actions are detected but not executed or analyzed further.",
+            "JavaScript detection is partial: it checks the /Names /JavaScript tree, /OpenAction, and "
+            "document- and page-level /AA (additional actions), but not annotation-level actions (e.g. a "
+            "form field's /AA) or JavaScript reachable only via an embedded file. Detected JavaScript is "
+            "never executed or analyzed further.",
             "blank_pages flags a page with neither extractable text nor an embedded image; a page of pure "
             "vector graphics (lines/shapes only) is a false positive this check cannot distinguish from a "
             "genuinely blank page.",
@@ -429,12 +448,43 @@ class PdfAdapter(ArtifactAdapter):
         has_javascript = False
         has_forms = False
         if not is_encrypted:
+            # FIX_PROMPT P2-2: the document-level name tree (/Names
+            # /JavaScript) is only one of several places a PDF can carry
+            # JavaScript. /OpenAction (runs when the document opens) and
+            # /AA (additional actions, at both the document catalog and
+            # per-page level - e.g. a page's /O action fires when it's
+            # opened) are at least as common a real-world payload location
+            # and were previously invisible to this check entirely
+            # (confirmed by direct reproduction: a crafted /OpenAction
+            # JavaScript action with no /Names entry passed has_javascript
+            # == False before this fix). Still not exhaustive - see
+            # limitations().
             try:
                 root = reader.trailer["/Root"]
                 names = root.get("/Names")
                 has_javascript = bool(names and "/JavaScript" in names)
             except Exception:  # noqa: BLE001 - best-effort detection, never fatal
                 has_javascript = False
+            if not has_javascript:
+                try:
+                    root = reader.trailer["/Root"]
+                    if _action_is_javascript(root.get("/OpenAction")):
+                        has_javascript = True
+                    else:
+                        catalog_aa = root.get("/AA")
+                        if catalog_aa and any(_action_is_javascript(a) for a in catalog_aa.values()):
+                            has_javascript = True
+                except Exception:  # noqa: BLE001, S110 - best-effort detection, never fatal
+                    pass
+            if not has_javascript:
+                try:
+                    for page in reader.pages:
+                        page_aa = page.get("/AA")
+                        if page_aa and any(_action_is_javascript(a) for a in page_aa.values()):
+                            has_javascript = True
+                            break
+                except Exception:  # noqa: BLE001, S110 - best-effort detection, never fatal
+                    pass
             try:
                 has_forms = "/AcroForm" in reader.trailer["/Root"]
             except Exception:  # noqa: BLE001
