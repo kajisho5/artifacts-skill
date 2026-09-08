@@ -21,3 +21,5 @@ jobs:
       - run: python -m pytest tests/ -q
       - run: artifact-skill doctor --json
       - run: artifact-skill contract --json
+      - run: python3 tests/benchmark/run_benchmark.py
+      - run: python3 examples/standalone_contract_consumer.py tests/fixtures/pdf/good_2page.pdf

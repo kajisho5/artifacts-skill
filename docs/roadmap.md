@@ -127,16 +127,88 @@ tested fixer (`pdf.fit_page_size`, see the "Fix-loop honesty note" above)
 — see `docs/adapters.md` for the full per-adapter writeups. Remaining
 candidates: Issue #9 (PyPI/npm distribution — requires explicit
 confirmation before executing, since publishing is an external,
-irreversible action) and Issue #10 (Phase 7 below).
+irreversible action). Issue #10 is resolved (see below) — the only
+open item on the roadmap tracker is Issue #9.
 
 ## Later
 
-- **Phase 7 — Ecosystem integration, CI, benchmark, artifact corpus.**
-  Expand `tests/fixtures/` into a scored benchmark per spec §54 (count of
-  known-broken fixtures correctly detected per format); publish
-  `contract --json` in a way an external orchestrator (spec §40's
-  "AI-video-production-OS" framing) can consume without invoking this tool
-  itself.
+Nothing currently — Issue #9 (PyPI/npm publishing) is the only item left
+on the tracker, and it requires explicit user confirmation before
+executing since publishing is an external, irreversible action.
+
+## Phase 7 — Ecosystem integration + scored benchmark (Issue #10 — resolved)
+
+**Scored benchmark.** `tests/benchmark/` (see `docs/benchmark.md` for the
+full design writeup) is a declarative case table
+(`tests/benchmark/cases.py`) plus a runner
+(`tests/benchmark/run_benchmark.py`) scoring every deliberately-broken
+fixture in `tests/fixtures/` against what `verify_structural()` (or, for
+three formats, type detection itself) actually does with it — every
+expected outcome was established by running the real adapter against the
+real fixture and reading back the result, not predicted from source, per
+spec §67. Enforced on every CI run as parametrized pytest cases
+(`tests/benchmark/test_benchmark.py`), not just a number in a doc. Also
+runs as a standalone script in CI for a human-readable report. Building
+the case table surfaced a real shape this project hadn't explicitly
+tracked before: PPTX/DOCX/XLSX's `corrupt.*` fixtures (and HTML's
+`binary_garbage.html`) don't reach their own adapter's
+`verify_structural()` at all — being zip-based OOXML, garbage bytes no
+longer even sniff as that container type, so `ArtifactRef.from_path()`
+returns `UNKNOWN` and `adapters/registry.py::get_adapter()` itself raises
+`ARTIFACT_TYPE_UNSUPPORTED` one layer earlier. Still "correctly detected
+as broken," just not via a `Check`.
+
+**Ecosystem integration.** `examples/standalone_contract_consumer.py` is
+the dogfood proof the issue asked for: a script that imports nothing from
+`artifact_skill` and *discovers* which tool to call from
+`artifact-skill contract --json`'s own declared semantics
+(`side_effects.mutates_input`/`writes_files`, `input_schema`) rather than
+hardcoding a tool name — proving an external, unfamiliar orchestrator
+(spec §40's "AI-video-production-OS" framing) really could drive this
+tool from the contract alone. Exercised on every CI run via
+`tests/integration/test_ecosystem_contract_consumer.py`, not just run
+once by hand. The finer-grained `artifact-skill.<format>.<capability>`
+lookup convention `docs/contract.md` mentions was deliberately left
+unbuilt — nothing outside this repo consumes it yet, and speculatively
+building it now would be exactly the kind of premature abstraction
+`docs/architecture.md` argues against.
+
+**Cross-platform verification (spec §36).** This project's CI only runs
+`ubuntu-latest`, so "verified on macOS/Windows" would be a claim nothing
+actually checked — the honest version of this work is a direct code
+audit against known Windows/POSIX differences, documenting what was
+checked and what remains genuinely unverifiable without a real
+Windows/macOS run:
+- **Found and fixed a real bug**: `security/subprocess_exec.py`'s
+  executable-allowlist check compared a resolved path's bare filename
+  directly against adapters' platform-neutral allowlist names
+  (`"soffice"`) — on Windows, `shutil.which()` returns a path ending in
+  `soffice.exe`, which would never match and would have made every
+  LibreOffice-backed render fail with `ARTIFACT_SUBPROCESS_NOT_ALLOWLISTED`
+  on that platform. Fixed and covered by a test that's meaningful on this
+  Linux CI too — see `docs/security.md`'s "Cross-platform allowlist
+  matching."
+- **Checked and confirmed already correct**: `security/paths.py`'s
+  `resolve_within`/`atomic_write_bytes` (both built on `pathlib.Path` and
+  `os.replace`, which are cross-platform by construction — `os.replace`
+  is atomic on Windows too, via `MoveFileEx`, not just on POSIX);
+  `security/paths.py::safe_extract_zip`'s symlink-member check (reads the
+  zip's own stored Unix-style `external_attr` mode bits — a property of
+  the archive format itself, not the host OS running this code, so it
+  behaves identically regardless of platform); `doctor/detect.py` and
+  `rendering/office_convert.py` (both `shutil.which`-based, which already
+  handles `PATHEXT` resolution on Windows); the npm wrapper
+  (`bin/artifact-skill.js`, which falls back through `artifact-skill` →
+  `python3 -m` → `python -m`, using Node's own cross-platform
+  `path.delimiter` for `PYTHONPATH`).
+- **Not verified, and said so rather than assumed**: the npm wrapper
+  doesn't try the Windows `py` launcher specifically, only `python3`/
+  `python` — plausible on some Windows Python installs that don't
+  register either name on `PATH`, but this is a documented gap, not a
+  confirmed bug (unlike the subprocess allowlist issue above, nothing
+  demonstrated this actually breaks anything). A real Windows/macOS CI
+  run remains the only way to close this out completely; it is not set
+  up as part of this issue.
 
 ## Explicitly not planned (see spec §62)
 

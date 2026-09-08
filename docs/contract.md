@@ -100,6 +100,13 @@ capability probing — the latter is not yet exposed as a separate lookup
 API beyond the `doctor` report, since nothing outside this repo consumes it
 yet; `docs/roadmap.md` tracks this under ecosystem integration.
 
+**Dogfooded, not just asserted**: `examples/standalone_contract_consumer.py`
+is a script that imports nothing from `artifact_skill` and discovers
+which tool to call purely from `contract --json`'s declared semantics —
+proof that an external, unfamiliar consumer really can drive this tool
+from the contract alone (Issue #10). Run on every CI push, not just once
+by hand; see `docs/roadmap.md`'s "Phase 7" writeup.
+
 ## Versioning
 
 - `artifact-contract/v1` — this document's schema.

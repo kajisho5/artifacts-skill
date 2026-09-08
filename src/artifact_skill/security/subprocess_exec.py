@@ -12,6 +12,8 @@ Rules (spec #9, #26):
 
 from __future__ import annotations
 
+import ntpath
+import os
 import shutil
 import subprocess
 import tempfile
@@ -20,6 +22,33 @@ from pathlib import Path
 
 from artifact_skill.core.errors import ArtifactExecutionError, ArtifactSecurityError
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
+
+# Adapters write their allowlists using platform-neutral executable names
+# (e.g. "soffice"), but shutil.which()/an already-resolved absolute path
+# on Windows carries an executable extension (soffice.exe) that a bare
+# name never would — without stripping it, the same allowlist that works
+# on Linux/macOS would reject every resolved Windows executable. Found by
+# code audit (Issue #10's cross-platform verification), not by a Windows
+# test run this project's CI doesn't have.
+_STRIPPABLE_EXECUTABLE_EXTENSIONS = {".exe", ".bat", ".cmd", ".com"}
+
+
+def _executable_basename(argv0: str) -> str:
+    """Extract the bare executable name an allowlist entry expects.
+
+    Explicitly parses a backslash-containing path with `ntpath` rather
+    than relying on `pathlib.Path` alone: `Path` only becomes
+    `WindowsPath` (and so only understands `\\` as a separator) when
+    Python itself is running on Windows, which this project's Linux-only
+    CI never exercises. Branching on `ntpath` here — instead of trusting
+    that "it'll work once someone actually runs this on Windows" — is
+    what makes this logic verifiable by a test on this CI, not just
+    asserted.
+    """
+    parser = ntpath if "\\" in argv0 else os.path
+    name = parser.basename(argv0)
+    stem, ext = parser.splitext(name)
+    return stem if ext.lower() in _STRIPPABLE_EXECUTABLE_EXTENSIONS else name
 
 
 @dataclass
@@ -54,7 +83,7 @@ def run(
             message="argv must be a non-empty list of strings.",
             evidence={"argv": argv},
         )
-    exe_name = Path(argv[0]).name
+    exe_name = _executable_basename(argv[0])
     if exe_name not in allowlist:
         raise ArtifactSecurityError(
             code="ARTIFACT_SUBPROCESS_NOT_ALLOWLISTED",

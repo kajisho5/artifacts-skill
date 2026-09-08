@@ -103,7 +103,7 @@ def _chromium_capability() -> Capability:
     return Capability(
         "backend.chromium",
         CapabilityStatus.NOT_REQUIRED,
-        detail="No Chromium/Chrome binary found (only needed for the not-yet-implemented HTML/SVG adapters).",
+        detail="No Chromium/Chrome binary found (only needed for the HTML/SVG adapters' render()).",
     )
 
 

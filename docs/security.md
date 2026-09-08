@@ -37,6 +37,25 @@ by PPTX/DOCX/XLSX for LibreOffice-backed rendering) is the module's actual
 consumer, going through `run()` with an explicit `{"soffice",
 "libreoffice"}` allowlist for every invocation.
 
+**Cross-platform allowlist matching.** Adapters write allowlists using
+platform-neutral executable names (`"soffice"`), but the resolved,
+absolute path `shutil.which()` returns on Windows carries an executable
+extension (`soffice.exe`) that a bare allowlist name never would —
+comparing the two directly would reject every resolved executable on
+Windows. Found by direct code audit for Issue #10's cross-platform
+verification, not by an actual Windows CI run (this project's CI only
+runs `ubuntu-latest`). `run()`'s `_executable_basename()` strips a known
+executable extension (`.exe`/`.bat`/`.cmd`/`.com`, case-insensitively)
+before the allowlist check, and does so by explicitly parsing a
+backslash-containing path with the stdlib's `ntpath` module regardless of
+which OS is actually running the code — `pathlib.Path` alone only
+understands `\` as a separator when Python itself is running on Windows,
+which would make the fix untestable on this Linux-only CI. Branching on
+`ntpath` when a backslash is present is what makes
+`tests/security/test_subprocess_exec.py`'s Windows-path-shaped cases
+genuinely pass here, rather than merely being asserted to work on a
+platform nothing in this repository ever runs on.
+
 **Documented exception: the HTML adapter's Playwright/Chromium process.**
 `adapters/html/adapter.py::render()` calls Playwright's Python API
 (`sync_playwright()`, `chromium.launch()`), which spawns and manages its

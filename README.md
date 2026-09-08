@@ -122,8 +122,13 @@ stdio, schema-identical to the CLI.
   model, resource limits, network policy.
 - [`docs/research.md`](docs/research.md) — prior art and why this doesn't
   duplicate Anthropic's own document skills.
-- [`docs/roadmap.md`](docs/roadmap.md) — phase plan for DOCX/PPTX/XLSX/
-  HTML/SVG.
+- [`docs/roadmap.md`](docs/roadmap.md) — phase plan and what shipped in
+  each phase.
+- [`docs/benchmark.md`](docs/benchmark.md) — the scored fixture benchmark:
+  how many known-broken fixtures verification actually catches, computed
+  and enforced by CI, not asserted.
+- [`docs/adapters.md`](docs/adapters.md) — per-format adapter design
+  notes, backends, and real bugs found while building each one.
 
 ## License
 
