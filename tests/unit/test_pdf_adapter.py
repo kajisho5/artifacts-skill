@@ -477,7 +477,34 @@ def test_verify_page_size_requirement_checks_every_page_not_just_the_first(adapt
     result = adapter.verify_structural(ref, {"require_page_size_pt": (595, 842), "page_size_tolerance_pt": 1.0})
     check = next(c for c in result.checks if c.id == "page_size_requirement")
     assert check.status == CheckStatus.FAIL
-    assert check.evidence["mismatched_pages"] == [{"page": 2, "width_pt": 612.0, "height_pt": 792.0}]
+    assert check.evidence["mismatched_pages"] == [
+        {"page": 2, "width_pt": 612.0, "height_pt": 792.0, "orientation_swapped": False}
+    ]
+
+
+def test_verify_page_size_requirement_flags_an_orientation_swap_as_a_diagnostic_only(adapter, tmp_path):
+    """Real-data finding (Issue #40, using user-supplied PDFs): a page
+    measuring 841.89x595.28pt against a require_page_size_pt=(595, 842)
+    policy is A4 rotated to landscape, not a different, wrong size - the
+    tiny (~0.1-0.3pt) delta is real-world rounding drift, far under any
+    reasonable tolerance. This still FAILs (this policy never infers that
+    landscape should be accepted - see docs/architecture.md), but the
+    mismatched_pages entry now names the swap explicitly rather than
+    leaving 'wrong size' and 'right size, rotated' indistinguishable."""
+    import pypdf
+
+    writer = pypdf.PdfWriter()
+    writer.add_blank_page(width=841.89, height=595.28)  # A4 landscape
+    path = tmp_path / "landscape_a4.pdf"
+    with open(path, "wb") as f:
+        writer.write(f)
+
+    ref = ArtifactRef.from_path(path)
+    result = adapter.verify_structural(ref, {"require_page_size_pt": (595, 842), "page_size_tolerance_pt": 2.0})
+    check = next(c for c in result.checks if c.id == "page_size_requirement")
+    assert check.status == CheckStatus.FAIL
+    assert check.evidence["mismatched_pages"][0]["orientation_swapped"] is True
+    assert "landscape" in check.message.lower() or "swapped" in check.message.lower()
 
 
 def test_fix_returns_corrected_args_for_page_size_mismatch(adapter, good_pdf):
