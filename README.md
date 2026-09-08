@@ -229,6 +229,9 @@ negotiates the client's requested version rather than ignoring it (see
 - [`docs/benchmark.md`](docs/benchmark.md) — the scored fixture benchmark:
   how many known-broken fixtures verification actually catches, computed
   and enforced by CI, not asserted.
+- [`docs/performance.md`](docs/performance.md) — real wall-clock cost per
+  adapter (`inspect`/`execute`/`render`), runnable and re-measurable, not
+  a permanent claim.
 - [`docs/adapters.md`](docs/adapters.md) — per-format adapter design
   notes, backends, and real bugs found while building each one.
 
