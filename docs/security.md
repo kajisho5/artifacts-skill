@@ -126,10 +126,22 @@ comparing it.
 - **`atomic_write_bytes` / `atomic_copy`** — write to a same-directory temp
   file, `fsync`, then `os.replace`. No partial file is ever left at the
   target path, including on a crash mid-write.
-- **`safe_extract_zip`** — the entry point for any zip-based container
-  (used today by the OOXML content-type sniff in `core/artifact.py`'s type
-  detection, and reserved for the PPTX/DOCX/XLSX adapters' own extraction).
-  Rejects, before extracting anything:
+- **`safe_extract_zip`** — a real, tested utility for extracting a zip
+  archive to disk with path-escape and zip-bomb protection. **Not
+  currently called from any production code path** (self-audit finding,
+  FIX_PROMPT P1-1 — a prior version of this doc claimed it was "used
+  today by the OOXML content-type sniff," which was never true:
+  `core/artifact.py`'s `_sniff_zip_container()` reads directly via
+  `zipfile.ZipFile`/`zf.read()`, and PPTX/DOCX/XLSX's structural
+  read/write goes through python-pptx/python-docx/openpyxl's own
+  internal zip handling, neither of which calls this function). The
+  EPUB adapter (`adapters/epub/adapter.py`) reimplements the
+  decompression-bomb subset of these same checks directly rather than
+  calling this function, specifically because `inspect()` must never
+  write to disk (the adapter interface's own contract) and this
+  function's whole job is writing extracted members to disk — see that
+  adapter's module docstring for the full reasoning. Rejects, before
+  extracting anything:
   - more members than `Limits.max_zip_members` (default 20,000),
   - any member with an absolute path or a `..` segment,
   - any symlink member (these can point extraction output outside the
@@ -152,13 +164,28 @@ DoS ("billion laughs") by default: a few bytes of nested `<!ENTITY>`
 definitions can expand to gigabytes in memory *during parsing*, before the
 existing `check_input_size` file-size cap gets a chance to matter.
 
-`security/xml_safety.py::reject_xml_entity_declaration()` reads the first
-64 KB of a document and refuses to parse anything that declares a
-`<!ENTITY` or a `<!DOCTYPE` with an internal subset (`[...]`), raising
-`ARTIFACT_XML_ENTITY_DECLARATION_REJECTED` before the file ever reaches
-`ElementTree`, lxml, or Chromium. Legitimate documents have no legitimate
-use for a DOCTYPE/ENTITY declaration, so this is a hard rejection, not a
-size-limited allowance. Two callers:
+`security/xml_safety.py::reject_xml_entity_declaration()` scans the
+*entire* document (not a bounded prefix — see below) and refuses to parse
+anything that declares a `<!ENTITY` or a `<!DOCTYPE` with an internal
+subset (`[...]`), raising `ARTIFACT_XML_ENTITY_DECLARATION_REJECTED`
+before the file ever reaches `ElementTree`, lxml, or Chromium. Legitimate
+documents have no legitimate use for a DOCTYPE/ENTITY declaration, so
+this is a hard rejection, not a size-limited allowance.
+
+**Self-audit finding (FIX_PROMPT P1-2): this used to scan only a 64 KB
+prefix, and `reject_xml_entities_in_zip()` used to skip any zip member
+over 10 MB entirely.** Both confirmed directly as real bypasses — a
+DOCTYPE/ENTITY declaration pushed past 64 KB by a large-but-syntactically-
+legal leading XML comment, or placed inside a >10 MB zip member, went
+completely unscanned and reached the parser unguarded. Fixed by removing
+both limits: a substring search over the entire buffer this function is
+ever handed is cheap even at real-world scale (~0.2s measured directly
+for 200 MB), and the input is already bounded upstream by
+`check_input_size()`, so there was no real benefit to the bounded-prefix
+version, only a real gap. The EPUB adapter's own OPF/XHTML parser had the
+identical 10 MB-skip bypass independently (it calls this same function
+per zip member rather than through `reject_xml_entities_in_zip()`) and
+was fixed the same way. Two callers:
 
 - **`reject_xml_entities_in_file()`** — a single on-disk XML file. Used by
   the SVG adapter (originally the only caller, before this module was

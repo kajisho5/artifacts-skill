@@ -48,6 +48,41 @@ def test_inspect_entity_bomb_is_rejected_before_parsing(entity_bomb_epub, adapte
     assert exc_info.value.code == "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED"
 
 
+def test_inspect_rejects_an_entity_declaration_in_a_member_over_10mb(adapter, tmp_path):
+    """Self-audit finding (P1-2, the same bypass class fixed in
+    security/xml_safety.py): this adapter's own OPF parser used to skip
+    the entity-declaration check entirely for any member over 10MB -
+    ET.fromstring() would still run against it completely unguarded.
+    Confirmed directly (DID NOT RAISE) before this fix."""
+    import zipfile
+
+    path = tmp_path / "big_entity_bomb.epub"
+    entity_decl = (
+        '<?xml version="1.0"?>\n<!DOCTYPE package [<!ENTITY xxe "pwned">]>\n'
+        '<package xmlns="http://www.idpf.org/2007/opf">\n'
+        '  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">'
+        "<dc:title>&xxe;</dc:title></metadata>\n"
+        "  <manifest/><spine/>\n"
+        "<!-- "
+    )
+    padding = "A" * (11 * 1024 * 1024)
+    opf = entity_decl + padding + " --></package>\n"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip", zipfile.ZIP_STORED)
+        zf.writestr(
+            "META-INF/container.xml",
+            '<?xml version="1.0"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" '
+            'version="1.0"><rootfiles><rootfile full-path="OEBPS/content.opf" '
+            'media-type="application/oebps-package+xml"/></rootfiles></container>',
+        )
+        zf.writestr("OEBPS/content.opf", opf)
+
+    ref = ArtifactRef.from_path(path)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.inspect(ref)
+    assert exc_info.value.code == "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED"
+
+
 def test_verify_good_epub_passes_cleanly(good_epub, adapter):
     ref = ArtifactRef.from_path(good_epub)
     result = adapter.verify_structural(ref, {})

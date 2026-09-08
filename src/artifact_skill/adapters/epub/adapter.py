@@ -66,8 +66,14 @@ from artifact_skill.security.paths import atomic_write_bytes, check_input_size
 from artifact_skill.security.xml_safety import reject_xml_entity_declaration
 
 _CONTAINER_PATH = "META-INF/container.xml"
-_MAX_MEMBER_SCAN_BYTES = 10 * 1024 * 1024  # matches security/xml_safety.py's own bound
-_MAX_CONTENT_DOCS_SCANNED = 200  # leftover-text scan cap; spine order, not a hard EPUB limit
+# leftover-text scan cap only (see _scan_leftover_markers below) - spine
+# order, not a hard EPUB limit. NOT used to gate the entity-declaration
+# check anymore: that used to skip members over this size entirely (the
+# same P1-2 bypass class fixed in security/xml_safety.py — confirmed
+# directly that scanning even a 200MB buffer costs ~0.2s, so there is no
+# real reason to skip any member's entity check regardless of size).
+_MAX_MEMBER_SCAN_BYTES = 10 * 1024 * 1024
+_MAX_CONTENT_DOCS_SCANNED = 200
 _TAG_STRIP = re.compile(r"<[^>]+>")
 
 
@@ -84,10 +90,9 @@ def _parse_xml_member(zf: zipfile.ZipFile, name: str, archive_path: Path) -> ET.
             message=f"'{archive_path}' is missing expected member '{name}'.",
             evidence={"path": str(archive_path), "member": name},
         ) from exc
-    if len(data) <= _MAX_MEMBER_SCAN_BYTES:
-        reject_xml_entity_declaration(data, f"{archive_path}!{name}")
+    reject_xml_entity_declaration(data, f"{archive_path}!{name}")
     try:
-        return ET.fromstring(data)  # noqa: S314 - guarded above (when within the scan window)
+        return ET.fromstring(data)  # noqa: S314 - guarded above, unconditionally
     except ET.ParseError as exc:
         raise ArtifactInputError(
             code="ARTIFACT_EPUB_UNREADABLE",
