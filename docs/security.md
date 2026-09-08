@@ -103,9 +103,15 @@ policy below in an actively-enforced way, not just a documented one.
 ## Filesystem — `security/paths.py`
 
 - **`resolve_within(base_dir, candidate)`** — resolves a path and asserts
-  it stays inside `base_dir`; used for every archive-member path and every
-  output path before it touches disk. Raises `ARTIFACT_PATH_ESCAPE` on
-  `..`, an absolute escape, or a symlink that resolves outside the base.
+  it stays inside `base_dir`. Raises `ARTIFACT_PATH_ESCAPE` on `..`, an
+  absolute escape, or a symlink that resolves outside the base. Its one
+  call site (Issue #30 — a prior version of this doc overclaimed "every
+  output path" too) is inside `safe_extract_zip()` below, guarding an
+  archive member's path — the untrusted-input case a hostile zip can
+  actually exploit. An output path supplied by the CLI/MCP caller
+  (`--output`/`output`) is not run through it: that path comes from the
+  tool's own invoker, a trusted boundary in this project's threat model,
+  not a hostile file being processed.
 - **`atomic_write_bytes` / `atomic_copy`** — write to a same-directory temp
   file, `fsync`, then `os.replace`. No partial file is ever left at the
   target path, including on a crash mid-write.

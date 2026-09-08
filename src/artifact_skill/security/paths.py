@@ -16,10 +16,22 @@ from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 def resolve_within(base_dir: Path, candidate: Path) -> Path:
     """Resolve `candidate` and assert it stays inside `base_dir`.
 
-    Used for every output path and every archive-member path before it
-    touches the filesystem. Raises ArtifactSecurityError on escape
-    (`..`, an absolute path outside base_dir, or a symlink that resolves
-    outside base_dir).
+    Raises ArtifactSecurityError on escape (`..`, an absolute path outside
+    base_dir, or a symlink that resolves outside base_dir).
+
+    Its one call site (Issue #30) is `safe_extract_zip()`, guarding an
+    archive member's path — the untrusted-input case a hostile zip can
+    actually exploit (a member name like `../../etc/passwd`). It is not
+    applied to every output/input path in the system: the CLI/MCP output
+    path a caller supplies (`--output`/`output`) is not run through it —
+    that's a trusted boundary in this project's threat model (the caller
+    invoking this tool, not a hostile file being processed), not an
+    oversight. A prior version of this docstring — and the "Filesystem"
+    section of `docs/security.md` — overclaimed a blanket "every output
+    path and every archive-member path" scope this function never actually
+    had; broader enforcement of arbitrary output paths would be a
+    deliberate, separate feature decision, not something to silently
+    imply is already in place.
     """
     base_resolved = base_dir.resolve()
     target = (base_dir / candidate).resolve() if not candidate.is_absolute() else candidate.resolve()
