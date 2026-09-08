@@ -1,6 +1,7 @@
 # artifact-skill
 
-**Give your coding agent a production-grade artifact pipeline.**
+**A local-first verification and evidence-generation engine for
+AI-generated documents.**
 
 Your agent can already generate a PDF. It cannot tell you whether that PDF
 is actually correct — right page count, right page size, not encrypted,
@@ -8,6 +9,13 @@ no leftover placeholder text, text that's actually extractable, and a
 rendering that looks right when you open it. `artifact-skill` closes that
 gap: **inspect → plan → execute → render → structural verify → visual
 verify → receipt**, run locally, with no cloud account and no API key.
+
+Verification is the point of this project, not an afterthought bolted onto
+a bigger editing tool. The mutating-operation catalog (see the table
+below) is intentionally small and still growing — this is not a
+document-generation or full-editing tool, and isn't trying to be one. See
+[**"What this is not"**](SKILL.md#what-this-is-not) in `SKILL.md` for what
+this project deliberately doesn't do.
 
 ```
 Input                     artifact-skill                    Output

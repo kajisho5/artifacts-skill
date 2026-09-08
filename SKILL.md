@@ -21,6 +21,42 @@ SVG have no mutating operations by design (inspect/render/verify only —
 their natural "edit" is markup, i.e. source-code editing, not a
 property-set operation this skill owns).
 
+## What this is not
+
+- **Not a document-generation tool.** This skill inspects, mutates a small
+  set of safe properties (metadata, page selection/rotation, resize,
+  format conversion), renders, and verifies — it does not create a PDF or
+  slide deck from a prompt, template, or outline. Generate the file first
+  (with whatever tool you already use for that), then bring it here.
+- **Not OCR.** Text extraction here is limited to what's already
+  extractable from the file's own structure (PDF text layer, DOCX/PPTX/
+  XLSX XML). Scanned images with no text layer are out of scope.
+- **Not a design or layout judge.** This skill renders pages to images and
+  runs structural checks (page count, size, encryption, leftover
+  placeholder text, and similar), but it never decides whether a layout
+  "looks good," whether a color scheme works, or whether content is
+  well-organized. That's a visual judgment call for you (the agent) or a
+  human to make by actually looking at the rendered images — see the
+  "Brain vs Hands" split in `docs/architecture.md`.
+- **Not a cloud format-conversion service.** Everything runs locally
+  against locally-installed backends (`pypdf`/`pypdfium2`, python-pptx/
+  python-docx/openpyxl, LibreOffice, Playwright+Chromium, Pillow). No file
+  is ever uploaded anywhere, and no functionality depends on a cloud
+  account or API key.
+
+### Division of labor with Anthropic's own document skills
+
+If Anthropic's own `docx`/`pdf`/`pptx`/`xlsx` skills
+(`github.com/anthropics/skills`) are also installed in your environment,
+they are the ones that *generate* those files from a prompt or template.
+This skill does not compete with them — **generation is theirs,
+verification is this skill's.** A typical flow: generate the document with
+those skills (or any other generator), then run it through this skill's
+inspect → execute → render → verify → receipt lifecycle before telling the
+user the job is done. Don't route a "create a slide deck about X" request
+here; do route a "make sure the deck you just created actually has 10
+slides and no encryption" request here.
+
 ## The workflow
 
 Follow this order. Do not skip straight to "execute" on a file you have not
@@ -78,10 +114,12 @@ artifact-skill render page.html --out-dir reports/rendered
 artifact-skill verify page.html --policy '{"require_title":true,"forbid_external_resources":false}'
 ```
 
-Supported PDF operations today: `metadata_set` (title/author/subject/keywords)
-and `merge` (append additional PDFs). Supported PPTX, DOCX, and XLSX
-operations today: `metadata_set` (title/author/subject/keywords). Supported
-image (PNG/JPEG/WebP) operations today: `resize` and `convert_format`. Run
+Supported PDF operations today: `metadata_set` (title/author/subject/keywords),
+`merge` (append additional PDFs), `fit_page_size`, `extract_pages`,
+`delete_pages`, and `rotate_pages`. Supported PPTX operations: `metadata_set`
+and `strip_placeholders`. Supported DOCX and XLSX operations today:
+`metadata_set` (title/author/subject/keywords). Supported image (PNG/JPEG/
+WebP) operations today: `resize` and `convert_format`. Run
 `artifact-skill contract --json` for the exact, current, machine-readable
 schema of every command — treat it as the source of truth over this prose
 if they ever disagree.

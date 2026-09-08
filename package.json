@@ -1,7 +1,7 @@
 {
   "name": "artifact-skill",
   "version": "0.1.0",
-  "description": "Give your coding agent a production-grade artifact pipeline: inspect, plan, execute, render, verify, and receipt AI-generated documents, locally.",
+  "description": "A local-first verification and evidence-generation engine for AI-generated documents: inspect, plan, execute, render, verify, and receipt PDF/PPTX/DOCX/XLSX/image/HTML/SVG artifacts, locally.",
   "bin": {
     "artifact-skill": "bin/artifact-skill.js"
   },

@@ -1,5 +1,16 @@
 # Roadmap
 
+> **Status for a new contributor (2026-09-08):** all format adapters,
+> the fix loop, MCP protocol negotiation, JSON Schema files, verification
+> policy presets, an expanded mutation-operation catalog, and real
+> LibreOffice/Chromium/macOS CI coverage are done — see GitHub issue #2
+> (the roadmap tracker) for the authoritative, currently-open-vs-closed
+> list, since this file reads chronologically (what happened, in what
+> order) rather than as a live checklist. As of this writing the only
+> items still open are Issue #9 (publish to PyPI/npm — deliberately not
+> started without the repo owner's explicit go-ahead, since it's an
+> external, irreversible action) and anything filed after this note.
+
 Phases per the original design brief. **Phase 0-1, Phase 2 (PDF + PPTX),
 Phase 3 (DOCX + XLSX), a working slice of Phase 4/5, and all of Phase 6
 (Image + HTML + SVG) are done as of this writing** — everything below
