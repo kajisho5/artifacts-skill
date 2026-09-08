@@ -245,10 +245,23 @@ capability (`html.fetch_remote_assets` or similar) that defaults to *off*
 `core/operation.py:default_output_path()` never returns the input path.
 Every `execute()` implementation writes only to the `output_path` it is
 given; the PDF adapter's `execute()` never opens `ref.path` in write mode.
-`tests/security/test_original_protection.py` asserts the input file's
-SHA-256 is bit-identical before and after every operation, including when a
-caller passes `--output` equal to the input path (Original Protection wins
-over the caller's literal request — see that test for the exact behavior).
+
+For most of this project's history that was the *entire* guarantee — a
+caller's own `--output` argument was never checked against the input path
+at all, so `--output` equal to (or resolving to, or a hard/symlink alias
+of) the input silently overwrote it. This was a real, reproduced bug
+(external review, "P0-1"), not a hypothetical: `execute --output
+report.pdf` on an input literally named `report.pdf` really did overwrite
+it. `security/paths.py::reject_output_overwrites_input()` — called from
+`core/engine.py::build_plan()`, the one chokepoint every `plan`/
+`execute`/`receipt` call goes through, CLI and MCP alike — now rejects
+with `ARTIFACT_OUTPUT_OVERWRITES_INPUT` *before* any adapter's `plan()` or
+`execute()` runs, checking both `.resolve()` equality (catches the
+literal-same-path, relative/absolute, and symlink-aliasing cases) and
+`(st_dev, st_ino)` equality when both paths already exist (catches a hard
+link, which `.resolve()` can't see). `tests/security/test_original_protection.py`
+proves this for every implemented format, not just PDF, and separately
+proves `plan` (not just `execute`) refuses too.
 
 ## What's explicitly not handled yet (and why that's stated, not hidden)
 

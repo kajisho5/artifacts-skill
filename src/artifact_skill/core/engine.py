@@ -32,6 +32,7 @@ from artifact_skill.core.verification import Check, CheckStatus, VerificationRes
 from artifact_skill.policies import unknown_policy_keys
 from artifact_skill.receipt.model import ProductionReceipt, ReceiptBuilder
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
+from artifact_skill.security.paths import reject_output_overwrites_input
 
 
 def _now_iso() -> str:
@@ -47,6 +48,7 @@ class LifecycleResult:
 
 
 def build_plan(input_path: Path, operation: str, args: dict[str, Any], output_path: Path) -> tuple[ArtifactRef, ArtifactAdapter, OperationPlan]:
+    reject_output_overwrites_input(Path(input_path), Path(output_path))
     ref = ArtifactRef.from_path(input_path)
     adapter = adapter_for(ref)
     _validate_operation_args(adapter, operation, args)

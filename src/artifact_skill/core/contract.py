@@ -223,7 +223,7 @@ TOOLS: list[ToolContract] = [
         verification_policy={"structural_required": False, "visual_required": False},
         visual_requirement="not_applicable",
         evidence="operation plan (JSON)",
-        errors=["ARTIFACT_OPERATION_UNKNOWN", "ARTIFACT_INPUT_NOT_FOUND"],
+        errors=["ARTIFACT_OPERATION_UNKNOWN", "ARTIFACT_INPUT_NOT_FOUND", "ARTIFACT_OUTPUT_OVERWRITES_INPUT"],
     ),
     ToolContract(
         name="execute",
@@ -264,6 +264,7 @@ TOOLS: list[ToolContract] = [
             "ARTIFACT_PDF_ENCRYPTED",
             "ARTIFACT_CAPABILITY_MISSING",
             "ARTIFACT_PATH_ESCAPE",
+            "ARTIFACT_OUTPUT_OVERWRITES_INPUT",
         ],
     ),
     ToolContract(
@@ -397,6 +398,7 @@ TOOLS: list[ToolContract] = [
             "ARTIFACT_CAPABILITY_MISSING",
             "ARTIFACT_PDF_ENCRYPTED",
             "ARTIFACT_PATH_ESCAPE",
+            "ARTIFACT_OUTPUT_OVERWRITES_INPUT",
         ],
     ),
 ]
