@@ -66,3 +66,45 @@ def test_receipt_status_reflects_structural_failure(empty_pdf, tmp_path):
         evidence_dir=evidence_dir, dry_run=False,
     )
     assert result.receipt.status == CheckStatus.FAIL
+
+
+def test_fix_loop_actually_fixes_page_size_mismatch(good_pdf, tmp_path):
+    """The one real fixer registered today (PdfAdapter.fix() for
+    fit_page_size, Issue #8): iteration 1 scales to the wrong target
+    (a plausible caller mistake), the required-page-size policy fails
+    structural verify, the fixer reads the expected size straight off
+    that failure's evidence, and iteration 2 succeeds with it — proving
+    the fix-loop architecture works end-to-end, not just in the abstract.
+    """
+    output_path = tmp_path / "out.pdf"
+    evidence_dir = tmp_path / "reports"
+
+    result = run_lifecycle(
+        good_pdf, "fit_page_size", {"width_pt": 100, "height_pt": 100}, output_path,
+        policy={"require_page_size_pt": (612, 792), "page_size_tolerance_pt": 1.0},
+        evidence_dir=evidence_dir, dry_run=False, max_iterations=3,
+    )
+
+    assert result.receipt is not None
+    assert result.receipt.iterations == 2
+    assert result.receipt.status == CheckStatus.PASS
+    assert result.receipt.operations[0]["args"] == {"width_pt": 100, "height_pt": 100}
+    assert result.receipt.operations[0]["succeeded"] is True
+    assert result.receipt.operations[1]["args"] == {"width_pt": 612, "height_pt": 792}
+    assert not any("no automatic fixer" in lim for lim in result.receipt.limitations)
+
+
+def test_fix_loop_gives_up_honestly_when_max_iterations_too_low(good_pdf, tmp_path):
+    """With only 1 iteration allowed, the loop must not attempt a fix at
+    all — it reports the failure as-is rather than silently succeeding."""
+    output_path = tmp_path / "out.pdf"
+    evidence_dir = tmp_path / "reports"
+
+    result = run_lifecycle(
+        good_pdf, "fit_page_size", {"width_pt": 100, "height_pt": 100}, output_path,
+        policy={"require_page_size_pt": (612, 792), "page_size_tolerance_pt": 1.0},
+        evidence_dir=evidence_dir, dry_run=False, max_iterations=1,
+    )
+
+    assert result.receipt.iterations == 1
+    assert result.receipt.status == CheckStatus.FAIL

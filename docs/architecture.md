@@ -121,14 +121,18 @@ Two things are deliberately *not* automated:
    never sets `inspected_by="agent"` or a pass/fail verdict on its own —
    only an agent that actually looked at the rendered PNGs can do that (see
    "Brain/Hands split" below).
-2. **Fixing.** `ArtifactAdapter.fix()` defaults to `None` (no fixer). The
-   PDF adapter does not currently override it — there is no PDF operation
-   in the MVP whose structural failure has an obvious automatic
-   correction, and pretending one exists would violate spec's "no
-   hallucinated success" rule. The loop architecture exists and is tested
-   (`tests/unit/test_engine_lifecycle.py`); it simply has nothing to plug in
-   yet for PDF. A future operation (e.g. "fit page contents to bounds")
-   can implement a real fixer without touching `engine.py`.
+2. **Fixing.** `ArtifactAdapter.fix()` defaults to `None` (no fixer) — most
+   adapters still don't override it, since most structural failures have
+   no safe automatic correction, and pretending one exists would violate
+   spec's "no hallucinated success" rule. `PdfAdapter` is the one
+   exception (Issue #8): its `fit_page_size` operation pairs with a
+   `fix()` that corrects exactly one evidence-backed failure shape (a
+   page-size-policy mismatch) and returns `None` for anything else. The
+   loop architecture (`tests/unit/test_engine_lifecycle.py`) and this one
+   real fixer (`tests/unit/test_pdf_adapter.py`) are both tested end to
+   end — see `docs/roadmap.md`'s "Fix-loop honesty note" for the design
+   rationale. Any other adapter can add its own fixer the same way,
+   without touching `engine.py`.
 
 ## Brain / Hands split
 

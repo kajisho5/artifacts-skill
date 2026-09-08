@@ -154,6 +154,25 @@ def _font_embedding_check(fonts: list[dict[str, Any]], policy: dict[str, Any]) -
     )
 
 
+def _require_positive_page_size(args: dict[str, Any]) -> tuple[float, float]:
+    try:
+        width_pt = float(args["width_pt"])
+        height_pt = float(args["height_pt"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ArtifactInputError(
+            code="ARTIFACT_INVALID_ARGS",
+            message="fit_page_size requires numeric 'width_pt' and 'height_pt'.",
+            evidence={"args": args},
+        ) from exc
+    if width_pt <= 0 or height_pt <= 0:
+        raise ArtifactInputError(
+            code="ARTIFACT_INVALID_ARGS",
+            message=f"fit_page_size requires positive dimensions, got ({width_pt}, {height_pt}).",
+            evidence={"width_pt": width_pt, "height_pt": height_pt},
+        )
+    return width_pt, height_pt
+
+
 class PdfAdapter(ArtifactAdapter):
     id = "pdf"
     artifact_type = ArtifactType.PDF
@@ -198,6 +217,28 @@ class PdfAdapter(ArtifactAdapter):
                 render_required=True,
                 postconditions=["output page count == sum of input page counts"],
                 known_limitations=["Does not attempt to de-duplicate shared fonts across inputs."],
+            ),
+            "fit_page_size": OperationSpec(
+                name="fit_page_size",
+                description="Scale every page's content and media box to an exact target size, in points.",
+                args_schema={
+                    "type": "object",
+                    "properties": {
+                        "width_pt": {"type": "number", "exclusiveMinimum": 0},
+                        "height_pt": {"type": "number", "exclusiveMinimum": 0},
+                    },
+                    "required": ["width_pt", "height_pt"],
+                    "additionalProperties": False,
+                },
+                structural_verification_required=True,
+                visual_verification_required=False,
+                render_required=False,
+                postconditions=["output page count == input page count"],
+                known_limitations=[
+                    "Scaling is non-uniform (width and height are stretched independently to hit the "
+                    "target size exactly); it does not preserve aspect ratio on its own. Pass a "
+                    "target that already matches the input's aspect ratio to avoid distortion."
+                ],
             ),
         }
 
@@ -364,6 +405,8 @@ class PdfAdapter(ArtifactAdapter):
                         evidence={"path": str(extra_path)},
                     )
                 files_touched.append(str(extra_path))
+        elif operation == "fit_page_size":
+            _require_positive_page_size(args)
 
         return OperationPlan(
             operation=f"pdf.{operation}",
@@ -421,6 +464,20 @@ class PdfAdapter(ArtifactAdapter):
                         evidence={"path": str(extra)},
                     )
                 writer.append(extra_reader)
+            _write_pdf(writer, output_path)
+        elif operation == "fit_page_size":
+            width_pt, height_pt = _require_positive_page_size(args)
+            reader = pypdf.PdfReader(str(ref.path))
+            if reader.is_encrypted:
+                raise ArtifactExecutionError(
+                    code="ARTIFACT_PDF_ENCRYPTED",
+                    message="Cannot resize an encrypted PDF without decrypting it first.",
+                    evidence={"path": str(ref.path)},
+                )
+            writer = pypdf.PdfWriter()
+            writer.append(reader)
+            for page in writer.pages:
+                page.scale_to(width_pt, height_pt)
             _write_pdf(writer, output_path)
         else:
             raise ArtifactInputError(
@@ -524,6 +581,15 @@ class PdfAdapter(ArtifactAdapter):
                     status=CheckStatus.PASS if ok else CheckStatus.FAIL,
                     message=f"expected ({expected_w}, {expected_h})pt, got "
                     f"({first['width_pt']}, {first['height_pt']})pt.",
+                    # width_pt/height_pt here (not a nested pair) is what
+                    # PdfAdapter.fix() reads to build corrected fit_page_size
+                    # args — keep this shape stable, it's a fixer contract.
+                    evidence={
+                        "expected_width_pt": expected_w,
+                        "expected_height_pt": expected_h,
+                        "actual_width_pt": first["width_pt"],
+                        "actual_height_pt": first["height_pt"],
+                    },
                 )
             )
 
@@ -576,6 +642,39 @@ class PdfAdapter(ArtifactAdapter):
         checks.append(_font_embedding_check(details.get("fonts", []), policy))
 
         return VerificationResult(kind="structural", checks=checks)
+
+    # ---- fix -----------------------------------------------------------
+
+    def fix(
+        self, ref: ArtifactRef, operation: str, args: dict[str, Any], failed_result: VerificationResult
+    ) -> dict[str, Any] | None:
+        """The one real fixer this adapter has: `fit_page_size` re-run at
+        whatever size `verify_structural`'s `page_size_requirement` check
+        (driven by `policy["require_page_size_pt"]`) actually expected.
+
+        This covers exactly one failure shape — the caller asked
+        `fit_page_size` to scale to a size that turns out not to satisfy a
+        separately-configured page-size policy (e.g. a unit mix-up, points
+        vs. inches) — and nothing else. Any other structural failure on
+        this operation (or any failure on a different operation) has no
+        obvious safe correction here, so this returns None for it, per
+        spec #16: no fixer is better than a fake one.
+        """
+        if operation != "fit_page_size":
+            return None
+        check = next((c for c in failed_result.checks if c.id == "page_size_requirement"), None)
+        if check is None or check.status != CheckStatus.FAIL or not check.evidence:
+            return None
+        expected_w = check.evidence.get("expected_width_pt")
+        expected_h = check.evidence.get("expected_height_pt")
+        if expected_w is None or expected_h is None:
+            return None
+        if args.get("width_pt") == expected_w and args.get("height_pt") == expected_h:
+            # Already targeting the expected size and still failing (e.g. a
+            # rounding edge past the policy's tolerance) — retrying with the
+            # same args would loop pointlessly. Honest "can't fix this" exit.
+            return None
+        return {"width_pt": expected_w, "height_pt": expected_h}
 
 
 def _write_pdf(writer: Any, output_path: Path) -> None:

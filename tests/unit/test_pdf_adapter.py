@@ -7,7 +7,7 @@ import pytest
 from artifact_skill.adapters.pdf.adapter import PdfAdapter
 from artifact_skill.core.artifact import ArtifactRef
 from artifact_skill.core.errors import ArtifactExecutionError, ArtifactInputError
-from artifact_skill.core.verification import CheckStatus
+from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
 
 
 @pytest.fixture()
@@ -166,6 +166,92 @@ def test_render_empty_pdf_produces_zero_files_with_warning(empty_pdf, adapter, t
     result = adapter.render(ref, tmp_path / "rendered")
     assert result.files == []
     assert result.warnings
+
+
+def test_execute_fit_page_size_scales_to_exact_target(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    output_path = tmp_path / "fitted.pdf"
+    result_ref = adapter.execute(ref, "fit_page_size", {"width_pt": 400, "height_pt": 500}, output_path)
+    report = adapter.inspect(result_ref)
+    assert report.details["page_count"] == 2  # postcondition: page count preserved
+    for size in report.details["page_sizes"]:
+        assert size["width_pt"] == pytest.approx(400, abs=0.5)
+        assert size["height_pt"] == pytest.approx(500, abs=0.5)
+
+
+def test_execute_fit_page_size_rejects_non_positive_dimensions(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    with pytest.raises(ArtifactInputError) as exc_info:
+        adapter.execute(ref, "fit_page_size", {"width_pt": 0, "height_pt": 500}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+
+
+def test_execute_fit_page_size_on_encrypted_pdf_raises(encrypted_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(encrypted_pdf)
+    with pytest.raises(ArtifactExecutionError) as exc_info:
+        adapter.execute(ref, "fit_page_size", {"width_pt": 400, "height_pt": 500}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_PDF_ENCRYPTED"
+
+
+def test_verify_page_size_requirement_carries_fixer_evidence(good_pdf, adapter, tmp_path):
+    """The fit_page_size fixer (see test_fix_* below) reads
+    expected_width_pt/expected_height_pt straight off this check's
+    evidence — this locks in that shape as a contract."""
+    ref = ArtifactRef.from_path(good_pdf)
+    result = adapter.verify_structural(ref, {"require_page_size_pt": (300, 300), "page_size_tolerance_pt": 1.0})
+    check = next(c for c in result.checks if c.id == "page_size_requirement")
+    assert check.status == CheckStatus.FAIL
+    assert check.evidence["expected_width_pt"] == 300
+    assert check.evidence["expected_height_pt"] == 300
+    assert check.evidence["actual_width_pt"] == pytest.approx(612, abs=0.5)
+
+
+def test_fix_returns_corrected_args_for_page_size_mismatch(adapter, good_pdf):
+    """Given the exact failed_result shape verify_structural() produces,
+    fix() must read the expected size and hand back args that would fix it —
+    this is the unit-level guarantee behind the full retry-loop test in
+    test_engine_lifecycle.py."""
+    ref = ArtifactRef.from_path(good_pdf)
+    failed = VerificationResult(
+        kind="structural",
+        checks=[
+            Check(
+                id="page_size_requirement", name="Page size matches requirement", status=CheckStatus.FAIL,
+                evidence={"expected_width_pt": 612, "expected_height_pt": 792, "actual_width_pt": 100, "actual_height_pt": 100},
+            )
+        ],
+    )
+    fixed_args = adapter.fix(ref, "fit_page_size", {"width_pt": 100, "height_pt": 100}, failed)
+    assert fixed_args == {"width_pt": 612, "height_pt": 792}
+
+
+def test_fix_returns_none_for_operations_other_than_fit_page_size(adapter, good_pdf):
+    ref = ArtifactRef.from_path(good_pdf)
+    failed = VerificationResult(kind="structural", checks=[Check(id="page_count", name="Page count", status=CheckStatus.FAIL)])
+    assert adapter.fix(ref, "metadata_set", {"title": "x"}, failed) is None
+
+
+def test_fix_returns_none_when_already_at_expected_size(adapter, good_pdf):
+    """Retrying with identical args would loop pointlessly instead of
+    honestly giving up — this is the one case this fixer intentionally
+    doesn't handle, per spec #16."""
+    ref = ArtifactRef.from_path(good_pdf)
+    failed = VerificationResult(
+        kind="structural",
+        checks=[
+            Check(
+                id="page_size_requirement", name="Page size matches requirement", status=CheckStatus.FAIL,
+                evidence={"expected_width_pt": 612, "expected_height_pt": 792, "actual_width_pt": 611, "actual_height_pt": 792},
+            )
+        ],
+    )
+    assert adapter.fix(ref, "fit_page_size", {"width_pt": 612, "height_pt": 792}, failed) is None
+
+
+def test_fix_returns_none_when_no_page_size_check_present(adapter, good_pdf):
+    ref = ArtifactRef.from_path(good_pdf)
+    failed = VerificationResult(kind="structural", checks=[Check(id="page_count", name="Page count", status=CheckStatus.FAIL)])
+    assert adapter.fix(ref, "fit_page_size", {"width_pt": 100, "height_pt": 100}, failed) is None
 
 
 def test_capabilities_report_available_when_deps_installed(adapter):

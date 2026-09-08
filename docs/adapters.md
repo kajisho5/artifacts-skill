@@ -29,7 +29,9 @@ agent reading the error can tell "we haven't built this yet" apart from
   (rendering, Apache/BSD dual). See `docs/research.md` §5 for why not
   PyMuPDF.
 - **Operations**: `metadata_set` (title/author/subject/keywords),
-  `merge` (append one or more additional PDFs, in order).
+  `merge` (append one or more additional PDFs, in order), `fit_page_size`
+  (scale every page's content and media box to an exact `width_pt`/
+  `height_pt`, non-uniformly — see "Fix loop" below for why this exists).
 - **Structural checks**: PDF readability, page count (+ optional exact/
   range requirement), page size consistency (+ optional exact requirement
   with tolerance), encryption, embedded JavaScript actions, extractable
@@ -50,6 +52,23 @@ agent reading the error can tell "we haven't built this yet" apart from
 - **Known limitations** (also surfaced in every receipt via
   `adapter.limitations()`): encrypted PDFs are detected but not decrypted
   automatically; JavaScript is detected, not analyzed or executed.
+- **Fix loop (Issue #8)**: `PdfAdapter.fix()` is the one real, tested
+  fixer in this codebase (every other adapter still returns the base
+  class's `None`). It handles exactly one failure shape: `fit_page_size`
+  was asked to scale to a size that doesn't satisfy a separately
+  configured `policy["require_page_size_pt"]` (the `page_size_requirement`
+  structural check). `verify_structural()` now attaches
+  `expected_width_pt`/`expected_height_pt`/`actual_width_pt`/
+  `actual_height_pt` to that check's `evidence` specifically so `fix()`
+  can read the correct target back out of it rather than guessing;
+  `fix()` retries with those exact values. Anything else — a different
+  operation, a different failed check, or already targeting the expected
+  size and still failing — returns `None`, per spec §16 ("no fixer" is
+  the honest answer when there's nothing safe to try). See
+  `docs/roadmap.md`'s "Fix-loop honesty note" for the fuller design
+  writeup and `tests/unit/test_engine_lifecycle.py::test_fix_loop_actually_fixes_page_size_mismatch`
+  for the end-to-end proof (iteration 1 fails, `fix()` corrects the args,
+  iteration 2 passes).
 
 ## Implemented: PPTX (`adapters/pptx/adapter.py`)
 

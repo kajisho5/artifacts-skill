@@ -121,13 +121,13 @@ real adapter.
 ## Now / Next
 
 All four Tier 1 formats (PDF, PPTX, DOCX, XLSX) are implemented, the PDF
-font-embedding gap flagged since the MVP is closed, and all of Phase 6
-(Image, HTML, SVG) is done — see `docs/adapters.md` for the full
-per-adapter writeups. Candidates for the next slice of work: Issue #8 (a
-bounded auto-fix loop wired into the existing `fix()` adapter hook, still
-unused in Core's lifecycle), Issue #9 (PyPI/npm distribution — requires
-explicit confirmation before executing, since publishing is an external,
-irreversible action), and Issue #10 (Phase 7 below).
+font-embedding gap flagged since the MVP is closed, all of Phase 6
+(Image, HTML, SVG) is done, and Issue #8's fix loop now has one real,
+tested fixer (`pdf.fit_page_size`, see the "Fix-loop honesty note" above)
+— see `docs/adapters.md` for the full per-adapter writeups. Remaining
+candidates: Issue #9 (PyPI/npm distribution — requires explicit
+confirmation before executing, since publishing is an external,
+irreversible action) and Issue #10 (Phase 7 below).
 
 ## Later
 
@@ -147,15 +147,35 @@ judgment inside Core. If a future contributor is tempted to add one of
 these, that's a sign the request belongs in a different project layered on
 top of this one's receipt/contract output, not inside it.
 
-## Fix-loop honesty note
+## Fix-loop honesty note (Issue #8 — resolved)
 
 The fix loop (`core/engine.py`, bounded by `Limits.max_fix_iterations`,
-default 3) is architecturally generic today but has **zero registered
-fixers** — `ArtifactAdapter.fix()` defaults to `None`, and the PDF adapter
-doesn't override it. This is intentional: no PDF operation in the current
-MVP has an obvious, safe automatic correction for a structural failure.
-Adding a real fixer (e.g., for a future "fit content to page bounds"
-operation) is Phase 2+ work and should come with its own fixture pair
-(a deliberately-broken input and the expected fixed output) before it's
-considered done — a fixer with no test proving it fixes something is a stub,
-per spec §68.
+default 3) was architecturally generic from the start but had, until now,
+**zero registered fixers** — `ArtifactAdapter.fix()` defaults to `None`,
+and no adapter overrode it. That was intentional at the time: no operation
+in the MVP had an obvious, safe automatic correction for a structural
+failure, and spec §68 forbids treating a stub as done.
+
+`PdfAdapter` now has exactly one real fixer, proving the loop works
+end-to-end rather than only in the abstract: a new `fit_page_size`
+operation (`width_pt`/`height_pt` args, scales every page via pypdf's
+`PageObject.scale_to()`) pairs with `PdfAdapter.fix()`, which handles
+exactly one failure shape — `verify_structural()`'s existing
+`page_size_requirement` check (driven by `policy["require_page_size_pt"]`)
+failing because the operation was asked to scale to a size that doesn't
+satisfy that policy (a realistic mistake: unit mix-ups, an approximate
+target). The fixer reads the check's `expected_width_pt`/
+`expected_height_pt` evidence and retries with the corrected size.
+Anything else — a different operation, a different failed check, or
+already being at the expected size and still failing — returns `None`
+rather than guessing, per spec §16. `tests/unit/test_engine_lifecycle.py`
+exercises the full retry path (iteration 1 fails, `fix()` adjusts args,
+iteration 2 passes), and `tests/unit/test_pdf_adapter.py` unit-tests
+`fix()`'s decision logic directly, including its "give up honestly"
+branch.
+
+Any future fixer for another adapter/operation should follow the same
+shape: one well-defined failure mode with a deterministic, safe
+correction, evidence-driven rather than guessed, with a test proving the
+retry actually converges — not a speculative "smart" fixer that tries to
+handle everything.
