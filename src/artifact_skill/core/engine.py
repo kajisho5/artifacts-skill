@@ -77,9 +77,9 @@ def _validate_operation_args(adapter: ArtifactAdapter, operation: str, args: dic
 
 def run_lifecycle(
     input_path: Path,
-    operation: str,
+    operation: str | None,
     args: dict[str, Any],
-    output_path: Path,
+    output_path: Path | None,
     *,
     policy: dict[str, Any] | None = None,
     evidence_dir: Path,
@@ -98,6 +98,24 @@ def run_lifecycle(
     if max_iterations is None:
         max_iterations = limits.max_fix_iterations
     max_iterations = max(1, min(max_iterations, limits.max_fix_iterations))
+
+    if operation is None:
+        # No mutation requested (Issue #18): inspect -> render -> structural
+        # verify -> receipt, with no execute() call and no fix loop (there is
+        # no operation to retry). The only route in for a format with zero
+        # mutating operations (HTML, SVG) to get a real Production Receipt at
+        # all, rather than an agent hand-assembling one from separate
+        # inspect/render/verify calls.
+        return _run_verify_only_lifecycle(
+            input_path, policy=policy, evidence_dir=evidence_dir, dry_run=dry_run, capability_report=capability_report
+        )
+
+    if output_path is None:
+        raise ArtifactInputError(
+            code="ARTIFACT_INVALID_ARGS",
+            message="output_path is required when 'operation' is given.",
+            evidence={"operation": operation},
+        )
 
     ref, adapter, plan = build_plan(input_path, operation, args, output_path)
 
@@ -217,6 +235,64 @@ def run_lifecycle(
     evidence_dir.mkdir(parents=True, exist_ok=True)
     receipt.write(evidence_dir / "receipt.json")
     return LifecycleResult(plan=plan, receipt=receipt, output=output_ref, render=render_result)
+
+
+def _run_verify_only_lifecycle(
+    input_path: Path,
+    *,
+    policy: dict[str, Any],
+    evidence_dir: Path,
+    dry_run: bool,
+    capability_report: CapabilityReport | None,
+) -> LifecycleResult:
+    ref = ArtifactRef.from_path(input_path)
+    adapter = adapter_for(ref)
+    plan = OperationPlan(
+        operation="(none: verify-only)",
+        adapter=adapter.id,
+        input=ref.to_dict(),
+        output_path="",
+        required_capabilities=[f"{adapter.id}.structural"],
+        files_touched=[],
+        files_created=[],
+        rendering_strategy=f"{adapter.id}.render() against the original input; no mutation is planned.",
+        verification_strategy={"structural_required": True, "visual_required": False},
+        risks=[],
+        warnings=[],
+    )
+
+    if dry_run:
+        return LifecycleResult(plan=plan, receipt=None, output=None, render=None)
+
+    if capability_report is None:
+        capability_report = CapabilityReport()
+        for adapter_cap in adapter.capabilities():
+            capability_report.add(adapter_cap)
+
+    builder = ReceiptBuilder(ref, capability_report)
+    structural = adapter.verify_structural(ref, policy)
+    # spec_render_required=False: no operation was chosen, so there is no
+    # OperationSpec.visual_verification_required to consult - this matches
+    # the majority of registered operations today (every metadata_set-style
+    # operation across every format sets it False too; PDF's fit_page_size
+    # is the one exception, since it's the one operation that changes page
+    # geometry). A missing render capability reports SKIPPED, not UNKNOWN.
+    visual, rendered = _visual_evidence_result(
+        adapter=adapter, ref=ref, evidence_dir=evidence_dir,
+        capability_report=capability_report, spec_render_required=False,
+    )
+    structural = adapter.refine_structural_with_render(structural, rendered)
+    builder.set_structural(structural)
+    builder.set_visual(visual)
+    for lim in adapter.limitations():
+        builder.add_limitation(lim)
+    # One verification pass happened - there is no fix loop to count
+    # iterations of (nothing to retry without an operation).
+    builder.set_iterations(1)
+    receipt = builder.build()
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    receipt.write(evidence_dir / "receipt.json")
+    return LifecycleResult(plan=plan, receipt=receipt, output=None, render=rendered)
 
 
 def _visual_evidence_result(

@@ -134,7 +134,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_receipt = sub.add_parser("receipt", help="Run the full lifecycle and emit a Production Receipt.")
     p_receipt.add_argument("input")
-    p_receipt.add_argument("--operation", required=True)
+    p_receipt.add_argument(
+        "--operation",
+        help="Omit for a verify-only receipt (inspect -> render -> structural verify -> receipt, no "
+        "mutation, no fix loop) — the only way to get a Production Receipt for a format with zero "
+        "mutating operations (HTML, SVG). --output is invalid without --operation.",
+    )
     p_receipt.add_argument("--args", default="{}")
     p_receipt.add_argument("--output")
     p_receipt.add_argument("--policy", default="{}")
@@ -326,7 +331,12 @@ def _cmd_receipt(args: argparse.Namespace) -> int:
     op_args = _load_json_arg(args.args, "--args")
     policy = _resolve_policy_arg(args)
     input_path = Path(args.input)
-    output_path = Path(args.output) if args.output else default_output_path(input_path, args.operation)
+    if args.operation is None:
+        if args.output:
+            raise SystemExit("error: --output requires --operation (nothing is written without a mutation).")
+        output_path = None
+    else:
+        output_path = Path(args.output) if args.output else default_output_path(input_path, args.operation)
     evidence_dir = Path(args.evidence_dir) if args.evidence_dir else Path("reports")
 
     result = run_lifecycle(

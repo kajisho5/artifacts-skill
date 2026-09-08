@@ -351,8 +351,10 @@ TOOLS: list[ToolContract] = [
         name="receipt",
         description="Run the full lifecycle (inspect -> plan -> execute -> render -> structural verify "
         "-> [fix loop] -> receipt) for one mutating operation and emit a Production Receipt (schema "
-        "artifact-receipt/v1). A required operation - there is currently no verify-only receipt path; "
-        "for a format with no mutating operations (HTML, SVG) chain 'verify' + 'look' by hand instead.",
+        "artifact-receipt/v1). 'operation' is optional: omit it for a verify-only receipt (inspect -> "
+        "render -> structural verify -> receipt, no mutation, no fix loop) - the only way to get a "
+        "Production Receipt for a format with zero mutating operations (HTML, SVG). 'output' is invalid "
+        "without 'operation' (nothing is written without a mutation).",
         input_schema={
             "type": "object",
             "properties": {
@@ -369,10 +371,11 @@ TOOLS: list[ToolContract] = [
                 "max_iterations": {
                     "type": "integer", "minimum": 1, "maximum": 10,
                     "description": "Fix-loop retry cap. Default (when omitted): Limits.max_fix_iterations "
-                    "(currently 3) - omitting this does NOT mean 'don't retry.'",
+                    "(currently 3) - omitting this does NOT mean 'don't retry.' Meaningless without "
+                    "'operation' (there is no fix loop for a verify-only receipt).",
                 },
             },
-            "required": ["input", "operation"],
+            "required": ["input"],
             "additionalProperties": False,
         },
         output_schema={"type": "object", "properties": {"schema": {"type": "string"}, "status": {"type": "string"}}},

@@ -132,6 +132,17 @@ serves local-first better than shelling out to Poppler.
 `run_lifecycle()` implements: inspect → plan → execute → render →
 structural verify → visual evidence → fix (bounded retries) → receipt.
 
+`operation` is optional (Issue #18): passing `None` takes a separate,
+shorter branch — inspect → render → structural verify → receipt, with no
+`execute()` call and no fix loop (there is no operation to retry). This is
+the only route to a real Production Receipt for a format with zero
+mutating operations (HTML, SVG currently) — before this, the flagship
+`receipt` command was unusable for those two formats entirely, and an
+agent had to hand-assemble evidence from separate `inspect`/`render`/
+`verify` calls. `_run_verify_only_lifecycle()` is a small, separate
+function rather than a branch threaded through the main loop, so the
+mutating path's structure (and its tests) are untouched by this addition.
+
 Two things are deliberately *not* automated:
 
 1. **Visual judgment.** The engine renders pages and records that evidence

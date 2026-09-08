@@ -77,6 +77,18 @@ def test_real_receipt_with_a_failed_operation_matches_its_schema(encrypted_pdf, 
     assert errors == []
 
 
+def test_real_verify_only_receipt_matches_its_schema(good_pdf, tmp_path):
+    """Issue #18: an empty `operations` array and a receipt built with no
+    execute() call at all is a real, reachable shape now, not just a
+    theoretical one the schema happened to already allow."""
+    schema = _load_schema("artifact-receipt-v1.schema.json")
+    result = run_lifecycle(good_pdf, None, {}, None, evidence_dir=tmp_path / "reports", dry_run=False)
+    assert result.receipt is not None
+    assert result.receipt.operations == []  # sanity: this really exercises the empty-operations shape
+    errors = validate_against_schema(result.receipt.to_dict(), schema)
+    assert errors == []
+
+
 def test_schema_files_are_self_consistent_json():
     """Just confirms both files actually parse — a malformed schema file
     would otherwise only be caught the next time someone opens it."""

@@ -266,7 +266,9 @@ agent reading the error can tell "we haven't built this yet" apart from
   property-set operation this Skill should own. `operations()` returns
   `{}`, and `plan()`/`execute()` both raise a clear `ARTIFACT_OPERATION_
   UNKNOWN` for any operation name — `inspect`/`render`/`verify`/`look`
-  still work normally.
+  still work normally, and so does `receipt` with no `--operation`
+  (Issue #18's verify-only lifecycle path) — this is the one adapter type
+  that path was specifically built for.
 - **Structural checks**: readability (valid UTF-8 + parses), `<title>`
   presence (only checked when `policy.require_title` is set — a missing
   title isn't inherently wrong), local resource references that don't
@@ -305,7 +307,8 @@ agent reading the error can tell "we haven't built this yet" apart from
   second adapter needed it, the same pattern as `office_convert.py` for
   PPTX/DOCX/XLSX.
 - **No mutating operations** — same reasoning as HTML: SVG's natural edit
-  is markup.
+  is markup. `receipt` with no `--operation` works here too, for the same
+  reason (Issue #18).
 - **A real security control HTML doesn't need**: SVG is XML, and
   `xml.etree.ElementTree` (an `expat`-based parser) is not hardened
   against entity-expansion ("billion laughs") DoS — a tiny file can

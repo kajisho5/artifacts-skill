@@ -40,6 +40,65 @@ def test_real_run_produces_receipt_and_evidence(good_pdf, tmp_path):
     assert len(result.receipt.artifacts) == 2
 
 
+def test_verify_only_lifecycle_dry_run_performs_no_io(good_pdf, tmp_path):
+    """Issue #18: operation=None is the verify-only path - inspect -> render
+    -> structural verify -> receipt, with no execute() call. dry_run still
+    means zero I/O, same contract as the mutating path."""
+    evidence_dir = tmp_path / "reports"
+
+    result = run_lifecycle(good_pdf, None, {}, None, evidence_dir=evidence_dir, dry_run=True)
+
+    assert result.receipt is None
+    assert result.output is None
+    assert not evidence_dir.exists()
+    assert result.plan.operation == "(none: verify-only)"
+    assert result.plan.adapter == "pdf"
+
+
+def test_verify_only_lifecycle_produces_receipt_and_evidence(good_pdf, tmp_path):
+    evidence_dir = tmp_path / "reports"
+
+    result = run_lifecycle(good_pdf, None, {}, None, evidence_dir=evidence_dir, dry_run=False)
+
+    assert result.receipt is not None
+    assert result.output is None
+    assert result.receipt.operations == []  # nothing was executed
+    assert (evidence_dir / "receipt.json").exists()
+    assert result.receipt.status == CheckStatus.PASS
+    # good_2page.pdf is a clean, standard-font PDF - visual evidence should
+    # actually be produced in this dev environment (pypdfium2 renders PDF
+    # directly, no LibreOffice dependency to fail on).
+    assert result.receipt.verification["visual"]["status"] == CheckStatus.PASS.value
+    assert len(result.receipt.artifacts) >= 1
+
+
+def test_verify_only_lifecycle_reflects_structural_failure(empty_pdf, tmp_path):
+    """A verify-only receipt on a genuinely broken input must FAIL, the
+    same way the mutating path does - no operation happening doesn't mean
+    no verification happens."""
+    evidence_dir = tmp_path / "reports"
+
+    result = run_lifecycle(empty_pdf, None, {}, None, evidence_dir=evidence_dir, dry_run=False)
+
+    assert result.receipt.status == CheckStatus.FAIL
+    assert result.receipt.operations == []
+
+
+def test_verify_only_lifecycle_never_calls_execute(good_pdf, tmp_path, monkeypatch):
+    """Explicit guard against a regression where the verify-only path
+    accidentally falls through into the mutating branch and executes
+    something anyway."""
+    import artifact_skill.adapters.pdf.adapter as pdf_adapter_module
+
+    def _fail_if_called(*args, **kwargs):
+        raise AssertionError("execute() must never be called on the verify-only path")
+
+    monkeypatch.setattr(pdf_adapter_module.PdfAdapter, "execute", _fail_if_called)
+
+    result = run_lifecycle(good_pdf, None, {}, None, evidence_dir=tmp_path / "reports", dry_run=False)
+    assert result.receipt is not None  # didn't raise -> execute() was never reached
+
+
 def test_fix_loop_stops_at_one_iteration_when_no_fixer_registered(empty_pdf, tmp_path):
     """The PDF adapter has no fixer (adapters/base.py's default `fix()`
     returns None). A structural FAIL (empty_pdf has 0 pages) must not

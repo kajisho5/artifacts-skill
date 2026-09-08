@@ -96,11 +96,14 @@ inspected, and do not report success without having verified.
    skill will never claim it visually verified something for you — that
    would be a fabricated judgment (see `docs/architecture.md` "Brain vs
    Hands").
-7. **`receipt`** — or skip straight to this: it runs the whole
-   inspect→execute→render→verify→[fix loop]→receipt lifecycle for one
-   operation and writes `reports/receipt.json` (schema
-   `artifact-receipt/v1`), which is what you should point to as evidence
-   when you tell the user the job is done. The fix loop retries up to
+7. **`receipt`** — or skip straight to this: with `--operation`, it runs
+   the whole inspect→execute→render→verify→[fix loop]→receipt lifecycle
+   for that operation; without it, inspect→render→verify→receipt with no
+   mutation and no fix loop (the only way to get a receipt for a format
+   with zero mutating operations, like HTML/SVG). Either way it writes
+   `reports/receipt.json` (schema `artifact-receipt/v1`), which is what
+   you should point to as evidence when you tell the user the job is
+   done. The fix loop (operation-only) retries up to
    `Limits.max_fix_iterations` (3) by default — pass `--max-iterations 1`
    if you specifically want to disable it, not the other way around.
 
@@ -123,20 +126,27 @@ silent `WARN`. `execute`, `verify`, and `receipt` all accept
 ## Quick reference
 
 The most common task is verifying a document you (or another tool) already
-generated — most formats need no mutation at all, just a real policy:
+generated — most formats need no mutation at all, just a real policy.
+`receipt` with no `--operation` is the one-shot version: inspect → render →
+structural verify → receipt, no mutation, no fix loop — and it's the only
+way to get a Production Receipt at all for a format with zero mutating
+operations (HTML, SVG):
 
 ```bash
-artifact-skill doctor --json                                  # what's available on this machine
-artifact-skill verify report.pdf --policy-preset print-a4      # a real submission gate, not the empty default
-artifact-skill verify deck.pptx --policy-preset slides-16x9
-artifact-skill verify page.html --policy-preset web-no-external
-artifact-skill look report.pdf --out-dir reports/rendered      # then actually look at the rendered evidence
+artifact-skill doctor --json                                    # what's available on this machine
+artifact-skill receipt report.pdf --policy-preset print-a4       # a real submission gate, not the empty default
+artifact-skill receipt deck.pptx --policy-preset slides-16x9
+artifact-skill receipt page.html --policy-preset web-no-external # HTML has no operations — this still works
+artifact-skill look report.pdf --out-dir reports/rendered        # then actually look at the rendered evidence
 ```
 
+`--output` is invalid without `--operation` (nothing is written without a
+mutation) — plain `verify`/`look` still work standalone too, if you want
+just one piece of evidence rather than the full receipt.
+
 If the document also needs a mutation first (metadata, page selection,
-etc.), chain through `execute`/`receipt` instead — `receipt` runs the
-whole lifecycle (including the fix loop) in one call and still accepts
-`--policy-preset`:
+etc.), pass `--operation` — `receipt` still runs the whole lifecycle
+(including the fix loop) in one call and still accepts `--policy-preset`:
 
 ```bash
 artifact-skill inspect report.pdf --json

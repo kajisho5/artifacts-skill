@@ -211,8 +211,16 @@ def _h_look(args: dict[str, Any]) -> dict[str, Any]:
 
 def _h_receipt(args: dict[str, Any]) -> dict[str, Any]:
     input_path = Path(args["input"])
-    operation = args["operation"]
-    output_path = Path(args["output"]) if args.get("output") else default_output_path(input_path, operation)
+    operation = args.get("operation")
+    if operation is None:
+        if args.get("output"):
+            raise ArtifactInputError(
+                code="ARTIFACT_INVALID_ARGS",
+                message="'output' requires 'operation' (nothing is written without a mutation).",
+            )
+        output_path = None
+    else:
+        output_path = Path(args["output"]) if args.get("output") else default_output_path(input_path, operation)
     evidence_dir = Path(args.get("evidence_dir", "reports"))
     policy = _resolve_policy_arg(args)
     result = run_lifecycle(

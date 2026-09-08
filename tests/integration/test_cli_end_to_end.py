@@ -373,6 +373,37 @@ def test_html_has_no_mutating_operations(good_html, tmp_path):
     assert data["error"]["code"] == "ARTIFACT_OPERATION_UNKNOWN"
 
 
+def test_html_receipt_without_operation_gives_a_real_verify_only_receipt(good_html, tmp_path):
+    """Issue #18: HTML has zero mutating operations, so before this feature
+    `artifact-skill receipt page.html` had no way to succeed at all - an
+    agent had to hand-assemble inspect/render/verify calls instead of using
+    this project's own flagship 'get a Production Receipt' command."""
+    proc = run_cli(["receipt", str(good_html), "--json"], cwd=tmp_path)
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["status"] == "pass"
+    assert data["operations"] == []
+    assert (tmp_path / "reports" / "receipt.json").exists()
+
+
+def test_receipt_without_operation_rejects_output(good_html, tmp_path):
+    proc = run_cli(["receipt", str(good_html), "--output", "out.html", "--json"], cwd=tmp_path)
+    assert proc.returncode != 0
+    assert "requires --operation" in proc.stderr
+
+
+def test_pdf_receipt_without_operation_still_gates_on_policy(leftover_placeholder_pdf, tmp_path):
+    """A verify-only receipt goes through the same structural verify -
+    including policy - as the mutating path, not a weaker check."""
+    proc = run_cli(
+        ["receipt", str(leftover_placeholder_pdf), "--policy-preset", "print-a4", "--json"], cwd=tmp_path
+    )
+    data = json.loads(proc.stdout)
+    check_by_id = {c["id"]: c for c in data["verification"]["structural"]["checks"]}
+    assert check_by_id["leftover_placeholder_text"]["status"] == "fail"
+    assert proc.returncode == 1
+
+
 def test_svg_doctor_reports_structural_always_available(tmp_path):
     proc = run_cli(["doctor", "--json"], cwd=tmp_path)
     data = json.loads(proc.stdout)
