@@ -605,9 +605,19 @@ def test_html_receipt_without_operation_gives_a_real_verify_only_receipt(good_ht
 
 
 def test_receipt_without_operation_rejects_output(good_html, tmp_path):
+    """Self-audit finding (CLI/MCP parity audit): this test used to assert
+    the error text on stderr only ("requires --operation" in proc.stderr),
+    which passed identically whether or not --json was honored - masking
+    a real bug where this exact code path raised a bare SystemExit(str)
+    that ignored --json entirely (confirmed by direct reproduction before
+    the fix: --json produced a plain-text line, not JSON, on stdout).
+    Asserting the actual --json contract (parseable JSON on stdout with
+    the structured error code) is what would have caught that."""
     proc = run_cli(["receipt", str(good_html), "--output", "out.html", "--json"], cwd=tmp_path)
     assert proc.returncode != 0
-    assert "requires --operation" in proc.stderr
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_INVALID_ARGS"
+    assert "requires --operation" in data["error"]["message"]
 
 
 def test_pdf_receipt_without_operation_still_gates_on_policy(leftover_placeholder_pdf, tmp_path):

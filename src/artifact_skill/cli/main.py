@@ -375,7 +375,14 @@ def _cmd_receipt(args: argparse.Namespace) -> int:
     input_path = Path(args.input)
     if args.operation is None:
         if args.output:
-            raise SystemExit("error: --output requires --operation (nothing is written without a mutation).")
+            # Same CLI/MCP parity bug as _load_json_arg() above: a bare
+            # SystemExit(str) ignores --json, while MCP's _h_receipt
+            # already raises this as a structured ArtifactInputError for
+            # the identical condition.
+            raise ArtifactInputError(
+                code="ARTIFACT_INVALID_ARGS",
+                message="--output requires --operation (nothing is written without a mutation).",
+            )
         output_path = None
     else:
         output_path = Path(args.output) if args.output else default_output_path(input_path, args.operation)
