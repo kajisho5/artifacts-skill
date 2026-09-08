@@ -28,7 +28,14 @@ from artifact_skill.adapters.registry import adapter_for
 from artifact_skill.core.artifact import ArtifactRef
 from artifact_skill.core.contract import build_contract
 from artifact_skill.core.engine import build_plan, run_lifecycle
-from artifact_skill.core.errors import EXIT_CODE_BY_CATEGORY, EXIT_FAIL, EXIT_OK, ArtifactError, ErrorCategory
+from artifact_skill.core.errors import (
+    EXIT_CODE_BY_CATEGORY,
+    EXIT_FAIL,
+    EXIT_OK,
+    ArtifactError,
+    ArtifactInputError,
+    ErrorCategory,
+)
 from artifact_skill.core.operation import default_output_path
 from artifact_skill.core.verification import CheckStatus
 from artifact_skill.doctor.detect import detect_environment
@@ -167,12 +174,33 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _load_json_arg(raw: str, flag: str) -> dict[str, Any]:
+    # Self-audit finding (CLI/MCP parity audit): this used to raise a bare
+    # SystemExit(str) - a plain-text message to stderr that completely
+    # ignores --json, unlike every other error path in this CLI (which
+    # flows through main()'s `except ArtifactError` and honors --json by
+    # emitting structured {"error": {...}} JSON). Confirmed by direct
+    # reproduction: `verify doc.pdf --policy 'not json' --json` printed a
+    # plain "error: --policy is not valid JSON: ..." line, not JSON, even
+    # though --json was explicitly requested - the exact inconsistency an
+    # agent parsing this CLI's output as JSON would trip over. Raising
+    # ArtifactInputError here instead routes through the same structured
+    # path every other input-validation failure already uses.
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise SystemExit(f"error: {flag} is not valid JSON: {exc}") from exc
+        raise ArtifactInputError(
+            code="ARTIFACT_INVALID_ARGS",
+            message=f"{flag} is not valid JSON: {exc}",
+            remediation=f"{flag} must be a JSON object, e.g. '{{\"key\": \"value\"}}'.",
+            evidence={"flag": flag, "raw": raw},
+        ) from exc
     if not isinstance(value, dict):
-        raise SystemExit(f"error: {flag} must be a JSON object.")
+        raise ArtifactInputError(
+            code="ARTIFACT_INVALID_ARGS",
+            message=f"{flag} must be a JSON object, got {type(value).__name__}.",
+            remediation=f"{flag} must be a JSON object, e.g. '{{\"key\": \"value\"}}'.",
+            evidence={"flag": flag, "raw": raw},
+        )
     return value
 
 
@@ -181,7 +209,7 @@ def _resolve_policy_arg(args: argparse.Namespace) -> dict[str, Any]:
     try:
         return resolve_policy(getattr(args, "policy_preset", None), policy)
     except KeyError as exc:
-        raise SystemExit(f"error: {exc}") from exc
+        raise ArtifactInputError(code="ARTIFACT_INVALID_ARGS", message=str(exc)) from exc
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -42,6 +42,16 @@ _FORMAT_BY_TYPE = {
 _EXIF_ORIENTATION_TAG = 274
 
 
+def _fit_within(orig_w: int, orig_h: int, max_w: int, max_h: int) -> tuple[int, int]:
+    """The largest (width, height) that preserves orig_w/orig_h's aspect
+    ratio while fitting within max_w x max_h - same ratio math as Pillow's
+    `Image.thumbnail()`, but without its "only ever shrinks, never
+    enlarges" restriction (see the resize() call site for why that
+    restriction was a real bug here). Always returns at least 1x1."""
+    scale = min(max_w / orig_w, max_h / orig_h)
+    return max(1, round(orig_w * scale)), max(1, round(orig_h * scale))
+
+
 def _has(module: str) -> bool:
     return importlib.util.find_spec(module) is not None
 
@@ -231,9 +241,22 @@ class ImageAdapter(ArtifactAdapter):
             if operation == "resize":
                 width, height = args["width"], args["height"]
                 if args.get("maintain_aspect_ratio", True):
-                    fitted = img.copy()
-                    fitted.thumbnail((width, height), Image.LANCZOS)
-                    result_img = fitted
+                    # Self-audit finding (independent review): Pillow's
+                    # Image.thumbnail() is documented to only ever shrink,
+                    # never enlarge - so requesting a resize larger than the
+                    # source (e.g. width=800/height=800 on a 50x50 source,
+                    # the schema's own default maintain_aspect_ratio=True)
+                    # silently left the image completely untouched, and
+                    # verify_structural()'s dimensions check reported a
+                    # clean PASS since it only checks a caller-supplied
+                    # policy.require_width/height, not "did this operation's
+                    # own requested args actually take effect." Confirmed by
+                    # direct reproduction before this fix. Fixed by
+                    # computing the fit-within-box target size ourselves
+                    # (same ratio math thumbnail() uses) and always calling
+                    # resize() with it, so both upscale and downscale work.
+                    fit_w, fit_h = _fit_within(img.width, img.height, width, height)
+                    result_img = img.resize((fit_w, fit_h), Image.LANCZOS)
                 else:
                     result_img = img.resize((width, height), Image.LANCZOS)
                 save_kwargs: dict[str, Any] = {}

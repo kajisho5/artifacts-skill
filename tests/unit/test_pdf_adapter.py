@@ -182,6 +182,33 @@ def test_execute_metadata_set_writes_new_file_and_preserves_input(good_pdf, adap
     assert out_report.details["page_count"] == 2  # postcondition: page count preserved
 
 
+def test_verify_require_metadata_matches_lowercase_policy_keys(good_pdf, adapter, tmp_path):
+    """Independent-review finding: details["metadata"] is keyed by the PDF
+    Info dict's own native casing ("Title", not "title" - see the test
+    above), but require_metadata's own field names use metadata_set's
+    lowercase schema convention ("title"), matching every other adapter
+    (DOCX/PPTX/XLSX). A bare `.get(key)` against the Capitalized dict
+    always FAILed for this, the natural way to write this policy
+    (confirmed by direct reproduction before this fix)."""
+    ref = ArtifactRef.from_path(good_pdf)
+    result_ref = adapter.execute(ref, "metadata_set", {"title": "My Title", "author": "QA"}, tmp_path / "out.pdf")
+
+    result = adapter.verify_structural(result_ref, {"require_metadata": {"title": "My Title", "author": "QA"}})
+    title_check = next(c for c in result.checks if c.id == "metadata_title")
+    author_check = next(c for c in result.checks if c.id == "metadata_author")
+    assert title_check.status == CheckStatus.PASS
+    assert author_check.status == CheckStatus.PASS
+
+
+def test_verify_require_metadata_still_fails_on_a_real_mismatch(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    result_ref = adapter.execute(ref, "metadata_set", {"title": "Actual Title"}, tmp_path / "out.pdf")
+
+    result = adapter.verify_structural(result_ref, {"require_metadata": {"title": "Wrong Title"}})
+    check = next(c for c in result.checks if c.id == "metadata_title")
+    assert check.status == CheckStatus.FAIL
+
+
 def test_execute_metadata_set_on_encrypted_pdf_raises(encrypted_pdf, adapter, tmp_path):
     ref = ArtifactRef.from_path(encrypted_pdf)
     with pytest.raises(ArtifactExecutionError) as exc_info:
@@ -195,6 +222,61 @@ def test_execute_merge_doubles_page_count(good_pdf, adapter, tmp_path):
     result_ref = adapter.execute(ref, "merge", {"additional_inputs": [str(good_pdf)]}, output_path)
     report = adapter.inspect(result_ref)
     assert report.details["page_count"] == 4
+
+
+def test_execute_merge_rejects_an_oversized_additional_input(adapter, tmp_path, monkeypatch):
+    """Independent-review finding: check_input_size() is called for the
+    primary input via inspect(), but merge's additional_inputs never
+    passed through it on either plan() or execute() - pypdf.PdfReader()
+    loads a file entirely into memory, so the size cap this exists to
+    enforce was silently bypassed for every secondary merge input
+    (confirmed by direct reproduction before this fix: a file exceeding
+    the configured limit was correctly rejected as the primary input but
+    merged in without error as an additional_inputs entry).
+
+    Uses a small primary and a deliberately larger additional_inputs file,
+    with a limit between the two sizes - a blanket tiny limit on both
+    would pass even without this fix (the primary's own long-standing
+    check would fire first via inspect() and mask a missing additional-
+    inputs check entirely), so this specifically isolates the fix."""
+    import pypdf
+
+    from artifact_skill.core.errors import ArtifactSecurityError
+    from artifact_skill.security.limits import Limits
+
+    def _make_pdf(path, pages: int) -> None:
+        writer = pypdf.PdfWriter()
+        for _ in range(pages):
+            writer.add_blank_page(width=200, height=200)
+        with open(path, "wb") as f:
+            writer.write(f)
+
+    small = tmp_path / "small.pdf"
+    big = tmp_path / "big.pdf"
+    _make_pdf(small, pages=1)
+    _make_pdf(big, pages=20)
+    assert small.stat().st_size < big.stat().st_size
+
+    import artifact_skill.adapters.pdf.adapter as pdf_adapter_module
+
+    real_check = pdf_adapter_module.check_input_size
+    between = Limits(max_input_bytes=(small.stat().st_size + big.stat().st_size) // 2)
+
+    def _discriminating_check(path, limits=between):
+        return real_check(path, limits=limits)
+
+    monkeypatch.setattr(pdf_adapter_module, "check_input_size", _discriminating_check)
+
+    ref = ArtifactRef.from_path(small)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.execute(ref, "merge", {"additional_inputs": [str(big)]}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_INPUT_TOO_LARGE"
+    assert exc_info.value.evidence["path"] == str(big)
+
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.plan(ref, "merge", {"additional_inputs": [str(big)]}, tmp_path / "out2.pdf")
+    assert exc_info.value.code == "ARTIFACT_INPUT_TOO_LARGE"
+    assert exc_info.value.evidence["path"] == str(big)
 
 
 def test_execute_unknown_operation_raises(good_pdf, adapter, tmp_path):

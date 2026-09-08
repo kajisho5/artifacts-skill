@@ -355,6 +355,26 @@ def test_password_protected_looking_ooxml_gives_a_specific_actionable_error(tmp_
     assert proc.returncode == 3
 
 
+def test_malformed_policy_json_respects_the_json_flag(good_pdf, tmp_path):
+    """Self-audit finding (CLI/MCP parity audit): _load_json_arg() used to
+    raise a bare SystemExit(str) - a plain-text message to stderr that
+    completely ignores --json, unlike every other error path in this CLI.
+    Confirmed by direct reproduction before this fix: `verify doc.pdf
+    --policy 'not json' --json` printed a plain "error: ..." line, not
+    JSON, even though --json was explicitly requested."""
+    proc = run_cli(["verify", str(good_pdf), "--policy", "not valid json", "--json"], cwd=tmp_path)
+    assert proc.returncode != 0
+    data = json.loads(proc.stdout)  # must be parseable JSON, not a plain-text message
+    assert data["error"]["code"] == "ARTIFACT_INVALID_ARGS"
+
+
+def test_non_object_policy_json_respects_the_json_flag(good_pdf, tmp_path):
+    proc = run_cli(["verify", str(good_pdf), "--policy", '"just a string"', "--json"], cwd=tmp_path)
+    assert proc.returncode != 0
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_INVALID_ARGS"
+
+
 def test_receipt_max_iterations_above_the_limit_is_rejected_over_the_cli(good_pdf, tmp_path):
     """Self-audit finding (CLI/MCP parity): the CLI used to silently accept
     --max-iterations outside [1, Limits.max_fix_iterations] and just run

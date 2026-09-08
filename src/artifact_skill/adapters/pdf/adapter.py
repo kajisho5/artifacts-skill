@@ -560,6 +560,18 @@ class PdfAdapter(ArtifactAdapter):
                         message=f"Additional merge input does not exist: {extra_path}",
                         evidence={"path": str(extra_path)},
                     )
+                # Independent-review finding: check_input_size() is called
+                # for the primary input via inspect() above, but a merge's
+                # additional_inputs never passed through it on any code
+                # path - pypdf.PdfReader() loads a file entirely into
+                # memory, so the size cap check_input_size() exists to
+                # enforce was silently bypassed for every secondary merge
+                # input (confirmed by direct reproduction: a file exceeding
+                # the configured limit was correctly rejected as the
+                # primary input but merged in without error as an
+                # additional_inputs entry). Checked here (plan()) and again
+                # in execute() since either can be called independently.
+                check_input_size(extra_path)
                 files_touched.append(str(extra_path))
         elif operation == "fit_page_size":
             _require_positive_page_size(args)
@@ -617,6 +629,7 @@ class PdfAdapter(ArtifactAdapter):
             writer = pypdf.PdfWriter()
             writer.append(reader)
             for extra in args.get("additional_inputs", []):
+                check_input_size(Path(extra))
                 extra_reader = pypdf.PdfReader(str(extra))
                 if extra_reader.is_encrypted:
                     raise ArtifactExecutionError(
@@ -882,8 +895,25 @@ class PdfAdapter(ArtifactAdapter):
                 )
 
         if "require_metadata" in policy:
+            # Independent-review finding: details["metadata"] is keyed by
+            # the PDF Info dict's own native casing ("Title", "Author", ...
+            # - meta[key.lstrip("/")] in inspect(), deliberately preserved
+            # as-is for anyone inspecting the raw metadata; see the
+            # inspect() test asserting details["metadata"]["Title"]).
+            # Every other adapter (DOCX/PPTX/XLSX) builds its metadata dict
+            # with lowercase keys and looks up policy["require_metadata"]
+            # via key.lower() - this adapter alone did a bare `.get(key)`
+            # against Capitalized keys, so `require_metadata: {"title":
+            # ...}` (matching every field name in metadata_set's own
+            # schema, and how the identical policy key works on every
+            # other adapter) always FAILed regardless of the PDF's actual
+            # metadata (confirmed by direct reproduction before this fix).
+            # Normalizing only this lookup - not inspect()'s own output -
+            # fixes it without changing what a caller reading raw metadata
+            # sees.
+            metadata_lower = {k.lower(): v for k, v in details["metadata"].items()}
             for key, expected_value in policy["require_metadata"].items():
-                actual = details["metadata"].get(key)
+                actual = metadata_lower.get(key.lower())
                 ok = actual == expected_value
                 checks.append(
                     Check(
