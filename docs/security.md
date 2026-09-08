@@ -96,9 +96,20 @@ any more than it would require wrapping `pypdfium2`'s internal calls into
 PDFium. What this project *is* responsible for at that boundary — and
 does enforce — is what the browser process is allowed to do once running:
 `render()` installs a Playwright route handler that aborts every request
-that isn't `file://`/`data:`/`about:`, so navigating to an HTML page can
-never trigger a real network fetch, matching the network-off-by-default
-policy below in an actively-enforced way, not just a documented one.
+that isn't `data:`/`about:`, or a `file://` reference that stays inside
+the source document's own directory (`rendering/chromium_render.py::
+_file_url_is_within()`), so navigating to an HTML page can never trigger
+a real network fetch, matching the network-off-by-default policy below in
+an actively-enforced way, not just a documented one. The directory
+restriction on `file://` itself closes a real local-file-disclosure path
+(external review, "P0-2"), not a hypothetical one: before it existed,
+*any* `file://` URL was allowed through unconditionally, so a hostile
+document referencing `file:///etc/passwd` (or anything else outside its
+own directory) would have that file's content end up in the rendered PNG
+evidence — reproduced directly against a real Chromium launch. A symlink
+placed inside the document's directory but pointing outside it is caught
+the same way, since the check resolves the requested path before
+comparing it.
 
 ## Filesystem — `security/paths.py`
 

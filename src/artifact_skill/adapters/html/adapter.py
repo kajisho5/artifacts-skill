@@ -203,9 +203,13 @@ class HtmlAdapter(ArtifactAdapter):
                 try:
                     candidate.relative_to(html_dir.resolve())
                 except ValueError:
-                    # Escapes the HTML file's own directory — not a
-                    # rendering concern (render() blocks nothing local,
-                    # only external), but worth surfacing as a warning.
+                    # Escapes the HTML file's own directory - render()
+                    # actively blocks this file:// reference too (Grok
+                    # review P0-2: it used to let any file:// through,
+                    # this local one included), so this warning is about
+                    # an element that will show up broken/missing in the
+                    # rendered evidence, the same as a missing local
+                    # resource, not merely a theoretical risk.
                     warnings.append(f"Local resource reference escapes the document's directory: {url}")
                     continue
                 if candidate.is_file():

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import unquote, urlparse
 
 from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactExecutionError
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
@@ -26,6 +27,27 @@ if TYPE_CHECKING:
     from playwright.sync_api import ViewportSize
 
 _VIEWPORT: ViewportSize = {"width": 1280, "height": 800}
+
+
+def _file_url_is_within(url: str, allowed_root: Path) -> bool:
+    """True iff `url` is a `file://` URL whose path resolves to somewhere
+    inside `allowed_root` (Grok review P0-2: previously *any* `file://`
+    URL was allowed through unconditionally — a hostile HTML/SVG document
+    could pull in an arbitrary local file, e.g.
+    `<iframe src="file:///etc/passwd">`, and have its content end up in
+    the rendered PNG evidence, a real local-file-disclosure path, not a
+    hypothetical one; reproduced directly against a real Chromium launch
+    before this fix). `.resolve()` follows symlinks, so a symlink placed
+    inside `allowed_root` that points outside it is caught the same way a
+    literal `../` escape is.
+    """
+    if not url.startswith("file://"):
+        return False
+    try:
+        requested = Path(unquote(urlparse(url).path)).resolve()
+    except (OSError, ValueError):
+        return False
+    return requested == allowed_root or requested.is_relative_to(allowed_root)
 
 
 def require_playwright(capability_id: str) -> None:
@@ -51,10 +73,16 @@ def render_local_file(
 ) -> Path:
     """Screenshot `source_path` (loaded via a `file://` URL) to `out_path`.
 
-    Blocks every outgoing request that isn't `file://`/`data:`/`about:` —
-    see `adapters/html/adapter.py`'s module docstring for why that's an
-    active enforcement of this project's network-off-by-default policy,
-    not just a documented intention.
+    Blocks every outgoing request that isn't `data:`/`about:`, or a
+    `file://` reference that stays inside `source_path`'s own directory
+    (Issue P0-2) — see `adapters/html/adapter.py`'s module docstring for
+    why that's an active enforcement of this project's network-off-by-
+    default policy, not just a documented intention. A `file://` request
+    is not "external" in the network sense, but an arbitrary one is just
+    as much a confidentiality problem: a hostile document referencing
+    `file:///etc/passwd` (or anything outside its own directory) would
+    otherwise have that file's content end up in the rendered PNG
+    evidence.
 
     `full_page=False` for a standalone SVG document, not just HTML: an SVG
     navigated to directly (not embedded in an `<html><body>`) is Chromium's
@@ -76,6 +104,7 @@ def render_local_file(
     from playwright.sync_api import sync_playwright
 
     nav_timeout_ms = limits.render_timeout_seconds * 1000
+    allowed_root = source_path.resolve().parent
     out_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with sync_playwright() as pw:
@@ -85,7 +114,7 @@ def render_local_file(
 
                 def _block_external(route: Any) -> None:
                     url = route.request.url
-                    if url.startswith(("file://", "data:", "about:")):
+                    if url.startswith(("data:", "about:")) or _file_url_is_within(url, allowed_root):
                         route.continue_()
                     else:
                         route.abort()

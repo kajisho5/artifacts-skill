@@ -212,6 +212,59 @@ def test_render_blocks_external_requests_when_backend_works(tmp_path, adapter):
     # this test needing to inspect pixel data.
 
 
+def test_render_blocks_a_file_url_escaping_the_document_directory(tmp_path, adapter):
+    """Grok review P0-2: before rendering/chromium_render.py restricted
+    file:// to the document's own directory, ANY file:// URL was let
+    through unconditionally - a hostile document referencing
+    file:///etc/passwd (or anything outside its own directory) would have
+    that file's content end up in the rendered PNG evidence. Real
+    end-to-end proof against a real Chromium launch, not just the pure
+    boundary-check unit tests in test_chromium_render.py."""
+    doc_dir = tmp_path / "docroot"
+    doc_dir.mkdir()
+    outside_secret = tmp_path / "outside_secret.txt"
+    outside_secret.write_text("TOP SECRET - must never be fetched")
+    html_path = doc_dir / "escape.html"
+    html_path.write_text(f'<!doctype html><html><body><iframe src="file://{outside_secret}" id="leak"></iframe></body></html>')
+
+    ref = ArtifactRef.from_path(html_path)
+    if not _probe_html_render_works(adapter, ref, tmp_path):
+        pytest.skip("Playwright/Chromium in this environment cannot render (see adapter docstring)")
+
+    from playwright.sync_api import sync_playwright
+
+    from artifact_skill.rendering.chromium_render import _file_url_is_within
+
+    allowed_root = html_path.resolve().parent
+    requests_seen = []
+    aborted = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        try:
+            page = browser.new_page()
+
+            def _track(request):
+                requests_seen.append(request.url)
+
+            page.on("request", _track)
+
+            def _block_external(route):
+                url = route.request.url
+                if url.startswith(("data:", "about:")) or _file_url_is_within(url, allowed_root):
+                    route.continue_()
+                else:
+                    aborted.append(url)
+                    route.abort()
+
+            page.route("**/*", _block_external)
+            page.goto(f"file://{html_path.resolve()}", wait_until="load")
+        finally:
+            browser.close()
+
+    assert any(str(outside_secret) in u for u in requests_seen)  # the request was attempted...
+    assert any(str(outside_secret) in u for u in aborted)  # ...but aborted, not fulfilled.
+
+
 def test_limitations_names_the_real_known_caveats(adapter):
     """Issue #29: limitations() content had zero test coverage anywhere."""
     text = " ".join(adapter.limitations())
