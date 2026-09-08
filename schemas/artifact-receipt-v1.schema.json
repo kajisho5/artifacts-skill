@@ -1,0 +1,177 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kajisho5/artifacts-skill/schemas/artifact-receipt-v1.schema.json",
+  "title": "Artifact Skill — Production Receipt (artifact-receipt/v1)",
+  "description": "The document written to reports/receipt.json by `execute`/`receipt` (receipt/model.py::ProductionReceipt.to_dict()). Validated in tests/schemas/test_schema_files.py against a freshly-generated real receipt (from actually running the lifecycle against a fixture) on every CI run — see docs/verification.md for what each status value means and why UNKNOWN/SKIPPED/NOT_CHECKED are never collapsed into PASS or each other. Deliberately has no $ref/$defs (everything inlined): core/schema_validate.py, the dependency-free validator this repo checks documents against, doesn't resolve references — see that module's docstring.",
+  "type": "object",
+  "properties": {
+    "schema": { "type": "string", "enum": ["artifact-receipt/v1"] },
+    "status": {
+      "type": "string",
+      "enum": ["pass", "warn", "fail", "unknown", "not_checked", "skipped"]
+    },
+    "input": {
+      "type": "object",
+      "properties": {
+        "path": { "type": "string" },
+        "type": { "type": "string" },
+        "sha256": { "type": "string" },
+        "size_bytes": { "type": "integer" }
+      },
+      "required": ["path", "type", "sha256", "size_bytes"],
+      "additionalProperties": false
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "operation": { "type": "string" },
+          "adapter": { "type": "string" },
+          "args": { "type": "object" },
+          "started_at": { "type": "string" },
+          "finished_at": { "type": "string" },
+          "input_sha256": { "type": "string" },
+          "output_sha256": { "type": ["string", "null"] },
+          "output_path": { "type": ["string", "null"] },
+          "succeeded": { "type": "boolean" },
+          "warnings": { "type": "array", "items": { "type": "string" } },
+          "error": { "type": ["object", "null"] }
+        },
+        "required": [
+          "operation", "adapter", "args", "started_at", "finished_at",
+          "input_sha256", "output_sha256", "output_path", "succeeded",
+          "warnings", "error"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "verification": {
+      "type": "object",
+      "properties": {
+        "structural": {
+          "type": "object",
+          "properties": {
+            "kind": { "type": "string", "enum": ["structural"] },
+            "status": {
+              "type": "string",
+              "enum": ["pass", "warn", "fail", "unknown", "not_checked", "skipped"]
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "status": {
+                    "type": "string",
+                    "enum": ["pass", "warn", "fail", "unknown", "not_checked", "skipped"]
+                  },
+                  "message": { "type": "string" },
+                  "evidence": { "type": "object" }
+                },
+                "required": ["id", "name", "status", "message", "evidence"],
+                "additionalProperties": false
+              }
+            },
+            "evidence_files": { "type": "array", "items": { "type": "string" } },
+            "inspected_by": { "type": ["string", "null"] }
+          },
+          "required": ["kind", "status", "checks", "evidence_files", "inspected_by"],
+          "additionalProperties": false
+        },
+        "visual": {
+          "type": "object",
+          "properties": {
+            "kind": { "type": "string", "enum": ["visual"] },
+            "status": {
+              "type": "string",
+              "enum": ["pass", "warn", "fail", "unknown", "not_checked", "skipped"]
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "status": {
+                    "type": "string",
+                    "enum": ["pass", "warn", "fail", "unknown", "not_checked", "skipped"]
+                  },
+                  "message": { "type": "string" },
+                  "evidence": { "type": "object" }
+                },
+                "required": ["id", "name", "status", "message", "evidence"],
+                "additionalProperties": false
+              }
+            },
+            "evidence_files": { "type": "array", "items": { "type": "string" } },
+            "inspected_by": {
+              "type": ["string", "null"],
+              "description": "null until an Agent/human has actually looked at the rendered evidence and recorded a verdict; this engine never sets it itself (Brain/Hands split, docs/architecture.md)."
+            }
+          },
+          "required": ["kind", "status", "checks", "evidence_files", "inspected_by"],
+          "additionalProperties": false
+        }
+      },
+      "required": ["structural", "visual"],
+      "additionalProperties": false
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string" },
+          "role": { "type": "string" }
+        },
+        "required": ["path", "role"],
+        "additionalProperties": false
+      }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "limitations": { "type": "array", "items": { "type": "string" } },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "platform": { "type": "string" },
+        "platform_release": { "type": "string" },
+        "python_version": { "type": "string" },
+        "architecture": { "type": "string" }
+      },
+      "required": ["platform", "platform_release", "python_version", "architecture"],
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "A map of capability_id -> Capability. Keys are dynamic (per-adapter, e.g. \"pdf.structural\") so they aren't enumerated here.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["available", "missing", "unknown", "not_required", "not_implemented"]
+          },
+          "detail": { "type": "string" },
+          "detected_via": { "type": ["string", "null"] },
+          "version": { "type": ["string", "null"] }
+        },
+        "required": ["id", "status", "detail", "detected_via", "version"],
+        "additionalProperties": false
+      }
+    },
+    "timestamp": { "type": "string" },
+    "tool_version": { "type": "string" },
+    "iterations": { "type": "integer", "minimum": 1 }
+  },
+  "required": [
+    "schema", "status", "input", "operations", "verification", "artifacts",
+    "warnings", "limitations", "environment", "capabilities", "timestamp",
+    "tool_version", "iterations"
+  ],
+  "additionalProperties": false
+}

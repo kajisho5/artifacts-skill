@@ -134,6 +134,9 @@ negotiates the client's requested version rather than ignoring it (see
   lifecycle, why formats are additive.
 - [`docs/contract.md`](docs/contract.md) — the machine-readable contract
   schema, in full.
+- [`schemas/`](schemas/) — standalone JSON Schema files for the contract
+  and receipt documents, validated against real generated output on every
+  CI run (see `docs/contract.md`/`docs/verification.md`).
 - [`docs/verification.md`](docs/verification.md) — the six-state
   verification model and how aggregation works.
 - [`docs/security.md`](docs/security.md) — path/zip/subprocess safety

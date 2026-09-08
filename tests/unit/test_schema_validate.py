@@ -106,3 +106,43 @@ def test_real_fit_page_size_schema_end_to_end():
     assert validate_against_schema({"width_pt": 612}, schema) != []  # missing required
     assert validate_against_schema({"width_pt": 0, "height_pt": 792}, schema) != []  # not > 0
     assert validate_against_schema({"width_pt": 612, "height_pt": 792, "extra": 1}, schema) != []
+
+
+def test_nullable_type_accepts_null_or_the_named_type():
+    schema = {"type": "object", "properties": {"n": {"type": ["string", "null"]}}}
+    assert validate_against_schema({"n": "x"}, schema) == []
+    assert validate_against_schema({"n": None}, schema) == []
+    assert validate_against_schema({"n": 5}, schema) != []
+
+
+def test_nullable_object_type_skips_nested_validation_when_null():
+    schema = {
+        "type": "object",
+        "properties": {"sub": {"type": ["object", "null"], "properties": {"a": {"type": "string"}}, "required": ["a"]}},
+    }
+    assert validate_against_schema({"sub": None}, schema) == []
+    assert validate_against_schema({"sub": {"a": "x"}}, schema) == []
+    assert validate_against_schema({"sub": {}}, schema) != []  # missing required 'a'
+
+
+def test_additional_properties_as_schema_validates_dynamic_keyed_map():
+    schema = {
+        "type": "object",
+        "properties": {"fixed": {"type": "string"}},
+        "additionalProperties": {"type": "integer"},
+    }
+    assert validate_against_schema({"fixed": "x", "a": 1, "b": 2}, schema) == []
+    errors = validate_against_schema({"fixed": "x", "a": "not an int"}, schema)
+    assert errors
+    assert "$.a" in errors[0]
+
+
+def test_additional_properties_as_schema_does_not_apply_to_declared_properties():
+    schema = {
+        "type": "object",
+        "properties": {"fixed": {"type": "string"}},
+        "additionalProperties": {"type": "integer"},
+    }
+    # 'fixed' is declared with its own schema; additionalProperties must not
+    # also apply to it (it would wrongly reject a string against 'integer').
+    assert validate_against_schema({"fixed": "x"}, schema) == []

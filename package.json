@@ -8,6 +8,7 @@
   "files": [
     "bin",
     "src/artifact_skill",
+    "schemas",
     "pyproject.toml",
     "SKILL.md",
     "README.md",

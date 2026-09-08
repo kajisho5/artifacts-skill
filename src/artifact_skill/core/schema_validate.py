@@ -8,14 +8,21 @@ schema nobody validates against is exactly the kind of drift-prone,
 hand-authored duplication this project tries to avoid elsewhere.
 
 It supports exactly the subset of JSON Schema this project's own schemas
-use: `type`, `properties`, `required`, `additionalProperties`, `items`,
-`minItems`, `enum`, `minimum`, `maximum`, `exclusiveMinimum`. This is a
-deliberate, small implementation, not a general one: adding the
+use: `type` (a single type name, or a list of them for a nullable field —
+`["string", "null"]`), `properties`, `required`, `additionalProperties`
+(as `false`, to forbid extra keys, or as a schema, to validate a
+dynamic-keyed map's values — e.g. `artifact-receipt-v1.schema.json`'s
+`capabilities` map), `items`, `minItems`, `enum`, `minimum`, `maximum`,
+`exclusiveMinimum`. This is a deliberate, small implementation, not a
+general one: adding the
 `jsonschema` PyPI package would put a new mandatory dependency on `core/`,
 which this project has kept at zero (`pyproject.toml`'s
 `dependencies = []`) as part of being local-first. If a future schema
 needs a JSON Schema feature this module doesn't cover, that is a signal to
 keep the schema simple, not a reason to reach for a general validator.
+No `$ref`/`$defs` support either — `schemas/*.schema.json` (Issue #16)
+inline everything rather than referencing a shared definition, for the
+same reason.
 """
 
 from __future__ import annotations
@@ -41,19 +48,33 @@ def validate_against_schema(value: Any, schema: dict[str, Any] | None, *, path: 
 
 def _validate(value: Any, schema: dict[str, Any], path: str, errors: list[str]) -> None:
     schema_type = schema.get("type")
-    if schema_type is not None and not _check_type(value, schema_type):
+    if schema_type is not None and not _type_matches(value, schema_type):
         errors.append(f"{path}: expected type '{schema_type}', got '{type(value).__name__}'")
         return  # further checks against a wrong-typed value would be noise
 
     if "enum" in schema and value not in schema["enum"]:
         errors.append(f"{path}: {value!r} is not one of {schema['enum']}")
 
-    if schema_type == "object":
+    # For a list-of-types (nullable) schema, nested object/array/number
+    # validation only applies against whichever concrete type the value
+    # actually matched — e.g. a null value matching ["string", "null"]
+    # has no properties/items/bounds to check further.
+    concrete_type = schema_type
+    if isinstance(schema_type, list):
+        concrete_type = next((t for t in schema_type if _check_type(value, t)), None)
+
+    if concrete_type == "object":
         _validate_object(value, schema, path, errors)
-    elif schema_type == "array":
+    elif concrete_type == "array":
         _validate_array(value, schema, path, errors)
-    elif schema_type in ("number", "integer"):
+    elif concrete_type in ("number", "integer"):
         _validate_number(value, schema, path, errors)
+
+
+def _type_matches(value: Any, schema_type: str | list[str]) -> bool:
+    if isinstance(schema_type, list):
+        return any(_check_type(value, t) for t in schema_type)
+    return _check_type(value, schema_type)
 
 
 def _check_type(value: Any, schema_type: str) -> bool:
@@ -74,10 +95,17 @@ def _validate_object(value: Any, schema: dict[str, Any], path: str, errors: list
     for key in schema.get("required", []):
         if key not in value:
             errors.append(f"{path}: missing required property '{key}'")
-    if schema.get("additionalProperties") is False:
+    additional = schema.get("additionalProperties")
+    if additional is False:
         for key in value:
             if key not in properties:
                 errors.append(f"{path}: unexpected property '{key}' (additionalProperties: false)")
+    elif isinstance(additional, dict):
+        # A dynamic-keyed map (e.g. capability_id -> Capability): every key
+        # not explicitly declared in `properties` must match this schema.
+        for key, sub_value in value.items():
+            if key not in properties:
+                _validate(sub_value, additional, f"{path}.{key}", errors)
     for key, sub_schema in properties.items():
         if key in value:
             _validate(value[key], sub_schema, f"{path}.{key}", errors)

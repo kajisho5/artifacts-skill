@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kajisho5/artifacts-skill/schemas/artifact-contract-v1.schema.json",
+  "title": "Artifact Skill — Contract (artifact-contract/v1)",
+  "description": "The document `artifact-skill contract --json` emits (core/contract.py::build_contract()). Generated from the code that runs, not maintained by hand beside it — see docs/contract.md. Validated in tests/schemas/test_schema_files.py against a freshly-generated real contract document on every CI run, so this file cannot silently drift from what the tool actually emits.",
+  "type": "object",
+  "properties": {
+    "schema": { "type": "string", "enum": ["artifact-contract/v1"] },
+    "tool_name": { "type": "string" },
+    "tool_version": { "type": "string" },
+    "description": { "type": "string" },
+    "capability_id_prefix": { "type": "string" },
+    "tools": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "input_schema": {
+            "type": "object",
+            "description": "A nested JSON Schema document describing this tool's call arguments. Not itself expanded here — validate a specific tool's arguments against this sub-document directly, the same way core/schema_validate.py does internally."
+          },
+          "output_schema": {
+            "type": "object",
+            "description": "A nested JSON Schema document (loosely, best-effort) describing this tool's successful result shape."
+          },
+          "artifact_types": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "capabilities": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "side_effects": {
+            "type": "object",
+            "properties": {
+              "mutates_input": { "type": "boolean", "enum": [false] },
+              "writes_files": { "type": "boolean" },
+              "dry_run_supported": { "type": "boolean" }
+            },
+            "required": ["mutates_input", "writes_files", "dry_run_supported"],
+            "additionalProperties": false
+          },
+          "verification_policy": {
+            "type": "object",
+            "description": "Free-form: values are booleans or the literal string \"operation-dependent\" for execute/receipt, whose real per-operation policy comes from the adapter's own OperationSpec (see docs/contract.md)."
+          },
+          "visual_requirement": { "type": "string" },
+          "evidence": { "type": "string" },
+          "errors": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "required": [
+          "name", "description", "input_schema", "output_schema",
+          "artifact_types", "capabilities", "side_effects",
+          "verification_policy", "visual_requirement", "evidence", "errors"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "exit_codes": {
+      "type": "object",
+      "properties": {
+        "ok": { "type": "integer" },
+        "fail": { "type": "integer" },
+        "input": { "type": "integer" },
+        "capability": { "type": "integer" },
+        "security": { "type": "integer" },
+        "execution": { "type": "integer" },
+        "verification": { "type": "integer" },
+        "internal": { "type": "integer" }
+      },
+      "required": ["ok", "fail", "input", "capability", "security", "execution", "verification", "internal"],
+      "additionalProperties": false
+    },
+    "network_policy": { "type": "string", "enum": ["off_by_default"] },
+    "input_mutation_policy": { "type": "string", "enum": ["never"] }
+  },
+  "required": [
+    "schema", "tool_name", "tool_version", "description", "capability_id_prefix",
+    "tools", "exit_codes", "network_policy", "input_mutation_policy"
+  ],
+  "additionalProperties": false
+}

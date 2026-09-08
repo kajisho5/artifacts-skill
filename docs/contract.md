@@ -10,6 +10,14 @@ the MCP `tools/list` set, and `TOOLS` never disagree.
 Run `artifact-skill contract --json` for the live, exact document; what
 follows is a guide to reading it, not a copy that can drift out of date.
 
+**Published JSON Schema** (Issue #16): [`schemas/artifact-contract-v1.schema.json`](../schemas/artifact-contract-v1.schema.json)
+is a real, standalone JSON Schema file an external consumer can validate a
+contract document against without running this tool or reading its source.
+`tests/schemas/test_schema_files.py::test_real_contract_document_matches_its_schema`
+validates a freshly-generated real `build_contract()` output against it on
+every CI run — the schema file can't silently drift from what the tool
+actually emits.
+
 ## Top-level shape
 
 ```json

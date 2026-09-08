@@ -131,3 +131,13 @@ whose structural checks all passed can still show overall `UNKNOWN` if
 visual evidence couldn't be produced (missing render capability) or if a
 structural check is itself `UNKNOWN` (as font-embedding is today) — this is
 the same "don't hide the unknown" rule applied one level up.
+
+**Published JSON Schema** (Issue #16): [`schemas/artifact-receipt-v1.schema.json`](../schemas/artifact-receipt-v1.schema.json)
+is a real, standalone JSON Schema file — an external consumer (or CI in
+another repo) can validate a `reports/receipt.json` against it without
+running this tool. `tests/schemas/test_schema_files.py` validates real
+receipts from three different lifecycle outcomes (clean success, a
+structural `FAIL`, and an operation that raises outright) against it on
+every CI run, specifically to exercise the nullable fields
+(`output_sha256`, `output_path`, `error`, `inspected_by`) both populated
+and `null`.
