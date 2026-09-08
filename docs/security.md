@@ -81,6 +81,22 @@ policy below in an actively-enforced way, not just a documented one.
 - **`check_input_size`** — rejects an input file above
   `Limits.max_input_bytes` (default 500 MB) before any adapter opens it.
 
+## XML entity expansion — SVG adapter
+
+SVG is XML, and `xml.etree.ElementTree` (like most `expat`-based parsers)
+is not hardened against entity-expansion DoS ("billion laughs"): a few
+bytes of nested `<!ENTITY>` definitions can expand to gigabytes in memory
+*during parsing*, before the existing `check_input_size` file-size cap
+gets a chance to matter. `adapters/svg/adapter.py`'s
+`_reject_xml_entities()` reads the first 64 KB of the file and refuses to
+parse anything that declares a `<!ENTITY` or a `<!DOCTYPE` with an
+internal subset (`[...]`), raising `ARTIFACT_XML_ENTITY_DECLARATION_REJECTED`
+before the file ever reaches `ElementTree` or Chromium. This runs at the
+start of both `inspect()` and `render()` — a rendered SVG goes through
+Chromium's own XML parser, so the same file must be rejected before either
+path. Legitimate SVG files have no legitimate use for a DOCTYPE/ENTITY
+declaration, so this is a hard rejection, not a size-limited allowance.
+
 ## Resource limits — `security/limits.py`
 
 A single `Limits` dataclass (`DEFAULT_LIMITS`) is the only place any of

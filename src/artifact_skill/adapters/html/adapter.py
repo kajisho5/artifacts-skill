@@ -54,9 +54,10 @@ from urllib.parse import urlparse
 from artifact_skill.adapters.base import ArtifactAdapter, OperationSpec, RenderResult
 from artifact_skill.core.artifact import ArtifactRef, ArtifactType, InspectionReport
 from artifact_skill.core.capability import Capability, CapabilityStatus
-from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactExecutionError, ArtifactInputError
+from artifact_skill.core.errors import ArtifactInputError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
+from artifact_skill.rendering.chromium_render import render_local_file
 from artifact_skill.security.paths import check_input_size
 
 _RESOURCE_ATTRS = {"img": "src", "script": "src", "link": "href", "iframe": "src", "source": "src"}
@@ -228,46 +229,7 @@ class HtmlAdapter(ArtifactAdapter):
     # ---- render ----------------------------------------------------
 
     def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
-        if not _has("playwright"):
-            raise ArtifactCapabilityError(
-                code="ARTIFACT_CAPABILITY_MISSING",
-                message="playwright is not installed; cannot render HTML to an image.",
-                remediation="Install with: pip install 'artifact-skill[html]' (or `pip install playwright` "
-                "then `playwright install chromium`).",
-                evidence={"capability_id": "html.render"},
-            )
-        from playwright.sync_api import Error as PlaywrightError
-        from playwright.sync_api import sync_playwright
-
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / "page-001.png"
-        try:
-            with sync_playwright() as pw:
-                browser = pw.chromium.launch()
-                try:
-                    page = browser.new_page(viewport={"width": 1280, "height": 800})
-
-                    def _block_external(route: Any) -> None:
-                        url = route.request.url
-                        if url.startswith(("file://", "data:", "about:")):
-                            route.continue_()
-                        else:
-                            route.abort()
-
-                    page.route("**/*", _block_external)
-                    page.goto(f"file://{ref.path.resolve()}", wait_until="load", timeout=30_000)
-                    page.screenshot(path=str(out_path), full_page=True)
-                finally:
-                    browser.close()
-        except PlaywrightError as exc:
-            raise ArtifactExecutionError(
-                code="ARTIFACT_RENDER_BACKEND_FAILED",
-                message=f"Playwright/Chromium failed to render '{ref.path}': {exc}",
-                remediation="If this mentions a missing executable, run `playwright install chromium`. "
-                "A present `playwright` package does not guarantee a matching browser build is installed.",
-                evidence={"error": str(exc)},
-            ) from exc
-
+        out_path = render_local_file(ref.path, out_dir / "page-001.png", capability_id="html.render")
         return RenderResult(kind="page_images", files=[out_path], backend="playwright+chromium")
 
     # ---- verify ------------------------------------------------------

@@ -1,6 +1,6 @@
 ---
 name: artifact-skill
-description: Local-first execution and verification engine for real-world artifacts (PDF now; DOCX/PPTX/XLSX/HTML/SVG planned). Use it whenever you create or modify a document-like file and need to prove it is actually correct before calling the job done — inspect what a file really is, plan a mutation before touching it, execute it without overwriting the original, render it to images, run structural checks, and get a machine-readable Production Receipt. Trigger on requests like "make sure this PDF is correct", "verify this document before I send it", "did the page count come out right", "check this file isn't corrupted", or any time you are about to say a generated artifact is "done" without having checked it.
+description: Local-first execution and verification engine for real-world artifacts (PDF, PPTX, DOCX, XLSX, PNG/JPEG/WebP, HTML, SVG). Use it whenever you create or modify a document-like file and need to prove it is actually correct before calling the job done — inspect what a file really is, plan a mutation before touching it, execute it without overwriting the original, render it to images, run structural checks, and get a machine-readable Production Receipt. Trigger on requests like "make sure this PDF is correct", "verify this document before I send it", "did the page count come out right", "check this file isn't corrupted", or any time you are about to say a generated artifact is "done" without having checked it.
 license: MIT
 compatibility: "Requires Python 3.10+. PDF support requires the `pdf` extra (pypdf, pypdfium2, Pillow)."
 ---
@@ -14,13 +14,12 @@ renders to images, and verifies — and it never just tells you "done"
 without evidence.
 
 **Currently implemented: PDF, PPTX, DOCX, XLSX** (all four Tier 1 formats),
-**PNG/JPEG/WebP, and HTML.** SVG is designed for (see
-`docs/architecture.md`, `docs/roadmap.md`) but not yet built — running
-this skill against that format returns a clear
-`ARTIFACT_ADAPTER_NOT_IMPLEMENTED` error, never a silent no-op. HTML has
-no mutating operations by design (inspect/render/verify only — its natural
-"edit" is markup, i.e. source-code editing, not a property-set operation
-this skill owns).
+**PNG/JPEG/WebP, HTML, and SVG.** Every format from the original design
+brief's Tier 1 and Tier 2 is built. A genuinely unrecognized file returns
+a clear `ARTIFACT_TYPE_UNSUPPORTED` error, never a silent no-op. HTML and
+SVG have no mutating operations by design (inspect/render/verify only —
+their natural "edit" is markup, i.e. source-code editing, not a
+property-set operation this skill owns).
 
 ## The workflow
 

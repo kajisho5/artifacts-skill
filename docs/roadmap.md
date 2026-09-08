@@ -1,12 +1,15 @@
 # Roadmap
 
 Phases per the original design brief. **Phase 0-1, Phase 2 (PDF + PPTX),
-Phase 3 (DOCX + XLSX), a working slice of Phase 4/5, and the Image + HTML
-slices of Phase 6 are done as of this writing** — everything below "Now"
-is planned, not implemented, and nothing in this codebase claims otherwise
-(`doctor`/`registry.py` report unimplemented formats explicitly). All four
-Tier 1 formats from the original design brief (PDF/PPTX/DOCX/XLSX) are now
-implemented, plus PNG/JPEG/WebP and HTML from Tier 2 — only SVG remains.
+Phase 3 (DOCX + XLSX), a working slice of Phase 4/5, and all of Phase 6
+(Image + HTML + SVG) are done as of this writing** — everything below
+"Now" is planned, not implemented, and nothing in this codebase claims
+otherwise (`doctor`/`registry.py` report unimplemented formats
+explicitly). All four Tier 1 formats from the original design brief
+(PDF/PPTX/DOCX/XLSX) are now implemented, plus PNG/JPEG/WebP, HTML, and
+SVG from Tier 2 — `adapters/registry.py`'s `_PLANNED` dict is now empty,
+meaning every `ArtifactType` this project currently knows about has a
+real adapter.
 
 ## Done
 
@@ -93,25 +96,41 @@ implemented, plus PNG/JPEG/WebP and HTML from Tier 2 — only SVG remains.
   attached, never a crash). Also the first adapter to *actively enforce*
   the network-off-by-default policy rather than only reporting on it — see
   `docs/security.md`'s Network policy section for how and why.
+- **Phase 6 (SVG slice).** `adapters/svg/adapter.py`: inspect (stdlib
+  `xml.etree.ElementTree` only, no optional dependency beyond the shared
+  `playwright` render backend), render (reuses HTML's Playwright/Chromium
+  pipeline via the newly-extracted `rendering/chromium_render.py`),
+  structural verify. No mutating operations, same rationale as HTML. Two
+  real findings, not just a port of HTML's adapter:
+  - `Page.screenshot(full_page=True)` **hangs** (not errors — hangs until
+    Playwright's own timeout) against a standalone SVG document; only
+    discovered via a genuinely-hung test run. Fixed by adding a
+    `full_page` parameter to the shared `render_local_file()` helper
+    (`True` for HTML's existing behavior, `False` for SVG) — documented as
+    a real limitation (SVG evidence images may be viewport-cropped) in
+    `limitations()`, not silently worked around.
+  - SVG is XML, and `xml.etree.ElementTree` is not hardened against
+    entity-expansion DoS ("billion laughs") the way the existing
+    `check_input_size` byte-cap alone does not prevent — a small file can
+    expand to gigabytes in memory during parsing. Self-identified (not
+    user-reported) and fixed with a new, tested security control,
+    `_reject_xml_entities()`, applied before both `inspect()` and
+    `render()` ever touch the file; see `docs/security.md`'s "XML entity
+    expansion" section.
 
 ## Now / Next
 
 All four Tier 1 formats (PDF, PPTX, DOCX, XLSX) are implemented, the PDF
-font-embedding gap flagged since the MVP is closed, and the Image and HTML
-slices of Phase 6 are done. SVG (needing a rasterization path — likely the
-same Chromium backend HTML now uses) is what's left of Phase 6 — see
-"Later" below, and `docs/adapters.md`'s "Writing a new adapter" checklist
-for how to start it.
+font-embedding gap flagged since the MVP is closed, and all of Phase 6
+(Image, HTML, SVG) is done — see `docs/adapters.md` for the full
+per-adapter writeups. Candidates for the next slice of work: Issue #8 (a
+bounded auto-fix loop wired into the existing `fix()` adapter hook, still
+unused in Core's lifecycle), Issue #9 (PyPI/npm distribution — requires
+explicit confirmation before executing, since publishing is an external,
+irreversible action), and Issue #10 (Phase 7 below).
 
 ## Later
 
-- **Phase 6 (remaining) — SVG.** Rasterize via the same Chromium backend
-  the HTML adapter now uses (a `<svg>` root loads fine as a standalone
-  page), or evaluate a pure-Python SVG rasterizer as a lighter-weight
-  alternative. Network access for externally-referenced assets stays off
-  by default per `docs/security.md` — the HTML adapter's active
-  request-blocking approach (not just reporting) is the pattern to reuse,
-  not reinvent.
 - **Phase 7 — Ecosystem integration, CI, benchmark, artifact corpus.**
   Expand `tests/fixtures/` into a scored benchmark per spec §54 (count of
   known-broken fixtures correctly detected per format); publish

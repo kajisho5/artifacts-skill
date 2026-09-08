@@ -11,6 +11,7 @@ DOCX_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "docx"
 XLSX_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "xlsx"
 IMAGE_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "image"
 HTML_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "html"
+SVG_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "svg"
 
 
 @pytest.fixture()
@@ -234,4 +235,53 @@ def binary_garbage_html(tmp_path: Path) -> Path:
 def mislabeled_pdf_as_html(tmp_path: Path) -> Path:
     dst = tmp_path / "mislabeled_pdf.html"
     shutil.copy(HTML_FIXTURES_DIR / "mislabeled_pdf.html", dst)
+    return dst
+
+
+@pytest.fixture()
+def good_svg(tmp_path: Path) -> Path:
+    dst = tmp_path / "good.svg"
+    shutil.copy(SVG_FIXTURES_DIR / "good.svg", dst)
+    return dst
+
+
+@pytest.fixture()
+def missing_local_resource_svg(tmp_path: Path) -> Path:
+    dst = tmp_path / "missing_local_resource.svg"
+    shutil.copy(SVG_FIXTURES_DIR / "missing_local_resource.svg", dst)
+    return dst
+
+
+@pytest.fixture()
+def external_resource_svg(tmp_path: Path) -> Path:
+    dst = tmp_path / "external_resource.svg"
+    shutil.copy(SVG_FIXTURES_DIR / "external_resource.svg", dst)
+    return dst
+
+
+@pytest.fixture()
+def no_size_svg(tmp_path: Path) -> Path:
+    dst = tmp_path / "no_size.svg"
+    shutil.copy(SVG_FIXTURES_DIR / "no_size.svg", dst)
+    return dst
+
+
+@pytest.fixture()
+def malformed_svg(tmp_path: Path) -> Path:
+    dst = tmp_path / "malformed.svg"
+    shutil.copy(SVG_FIXTURES_DIR / "malformed.svg", dst)
+    return dst
+
+
+@pytest.fixture()
+def entity_bomb_svg(tmp_path: Path) -> Path:
+    dst = tmp_path / "entity_bomb.svg"
+    shutil.copy(SVG_FIXTURES_DIR / "entity_bomb.svg", dst)
+    return dst
+
+
+@pytest.fixture()
+def mislabeled_pdf_as_svg(tmp_path: Path) -> Path:
+    dst = tmp_path / "mislabeled_pdf.svg"
+    shutil.copy(SVG_FIXTURES_DIR / "mislabeled_pdf.svg", dst)
     return dst

@@ -86,16 +86,16 @@ def test_input_not_found_gives_input_exit_code(tmp_path):
     assert data["error"]["code"] == "ARTIFACT_INPUT_NOT_FOUND"
 
 
-def test_unimplemented_format_gives_clear_capability_error(tmp_path):
-    """SVG is the only type still on the `_PLANNED` list (registry.py) as
-    of this test — PDF/PPTX/DOCX/XLSX/Image/HTML moved off it as their
-    adapters landed, so this specifically needs a format that's genuinely
-    not implemented yet."""
-    svg_like = tmp_path / "shape.svg"
-    svg_like.write_bytes(b'<svg xmlns="http://www.w3.org/2000/svg"><circle r="5"/></svg>')
-    proc = run_cli(["inspect", str(svg_like), "--json"], cwd=tmp_path)
+def test_unrecognized_content_gives_clear_type_unsupported_error(tmp_path):
+    """Every currently-known ArtifactType has a real adapter now (`_PLANNED`
+    is empty — see tests/unit/test_registry.py for that code path's own
+    coverage), so this needs content that doesn't match *any* format's
+    magic-byte signature at all, to exercise ARTIFACT_TYPE_UNSUPPORTED."""
+    unknown_like = tmp_path / "mystery.bin"
+    unknown_like.write_bytes(b"\x00\x01\x02\x03 this matches no known format signature \xff\xfe")
+    proc = run_cli(["inspect", str(unknown_like), "--json"], cwd=tmp_path)
     data = json.loads(proc.stdout)
-    assert data["error"]["code"] in ("ARTIFACT_ADAPTER_NOT_IMPLEMENTED", "ARTIFACT_TYPE_UNSUPPORTED")
+    assert data["error"]["code"] == "ARTIFACT_TYPE_UNSUPPORTED"
     assert proc.returncode == 3
 
 
@@ -288,5 +288,37 @@ def test_html_inspect_and_verify(good_html, tmp_path):
 def test_html_has_no_mutating_operations(good_html, tmp_path):
     proc = run_cli(["execute", str(good_html), "--operation", "metadata_set", "--args", "{}", "--json"], cwd=tmp_path)
     assert proc.returncode == 2  # ArtifactInputError -> input category
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_OPERATION_UNKNOWN"
+
+
+def test_svg_doctor_reports_structural_always_available(tmp_path):
+    proc = run_cli(["doctor", "--json"], cwd=tmp_path)
+    data = json.loads(proc.stdout)
+    assert data["capabilities"]["svg.structural"]["status"] == "available"
+    assert "svg.render" in data["capabilities"]
+
+
+def test_svg_inspect_and_verify(good_svg, tmp_path):
+    inspect_proc = run_cli(["inspect", str(good_svg), "--json"], cwd=tmp_path)
+    assert inspect_proc.returncode == 0
+    data = json.loads(inspect_proc.stdout)
+    assert data["details"]["has_explicit_size"] is True
+
+    verify_proc = run_cli(["verify", str(good_svg), "--json"], cwd=tmp_path)
+    assert verify_proc.returncode == 0
+    assert json.loads(verify_proc.stdout)["status"] == "pass"
+
+
+def test_svg_entity_bomb_rejected_via_cli(entity_bomb_svg, tmp_path):
+    proc = run_cli(["inspect", str(entity_bomb_svg), "--json"], cwd=tmp_path)
+    assert proc.returncode == 4  # ArtifactSecurityError -> security category
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED"
+
+
+def test_svg_has_no_mutating_operations(good_svg, tmp_path):
+    proc = run_cli(["execute", str(good_svg), "--operation", "metadata_set", "--args", "{}", "--json"], cwd=tmp_path)
+    assert proc.returncode == 2
     data = json.loads(proc.stdout)
     assert data["error"]["code"] == "ARTIFACT_OPERATION_UNKNOWN"

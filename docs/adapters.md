@@ -242,21 +242,59 @@ agent reading the error can tell "we haven't built this yet" apart from
   asynchronously after `load` may not be captured; ARIA/accessibility
   structure is not inspected.
 
+## Implemented: SVG (`adapters/svg/adapter.py`)
+
+- **Backends**: structural inspection uses only the standard library
+  (`xml.etree.ElementTree`) — `svg.structural` is always `AVAILABLE`, same
+  design as HTML. Rendering reuses `rendering/chromium_render.py` — the
+  exact module the HTML adapter's render logic was extracted into once a
+  second adapter needed it, the same pattern as `office_convert.py` for
+  PPTX/DOCX/XLSX.
+- **No mutating operations** — same reasoning as HTML: SVG's natural edit
+  is markup.
+- **A real security control HTML doesn't need**: SVG is XML, and
+  `xml.etree.ElementTree` (an `expat`-based parser) is not hardened
+  against entity-expansion ("billion laughs") DoS — a tiny file can
+  decompress to gigabytes in memory before parsing completes, which the
+  file-size cap in `security/limits.py` doesn't prevent on its own. Both
+  `inspect()` and `render()` call `_reject_xml_entities()` first, which
+  refuses to proceed at all if the file declares a `<!ENTITY` or a
+  `<!DOCTYPE` with an internal subset — legitimate SVGs essentially never
+  need one, so this is the same shape of defense as the zip-bomb
+  compression-ratio check in `security/paths.py`: refuse outright rather
+  than parse and hope the parser's own limits save it.
+- **Structural checks**: well-formed XML with an `<svg>` root, explicit
+  sizing (`width`/`height` or `viewBox` — `WARN` if neither is present,
+  since a viewer then falls back to an arbitrary default size), local
+  resource references (`image`/`use`/`script` `href`/`xlink:href`) that
+  don't resolve to a file on disk (`FAIL`), and external resource
+  references (`WARN` by default, `FAIL` under
+  `policy.forbid_external_resources`) — deliberately not scanning `<style>`
+  `@import`/`url()` references, see limitations.
+- **A real rendering bug found and fixed while building this adapter**:
+  `Page.screenshot(full_page=True)` hangs until timeout against a
+  standalone SVG document (Chromium's synthetic top-level-document wrapper
+  for a bare `<svg>` root doesn't behave like an HTML page for full-page
+  sizing purposes) — confirmed directly, not assumed. `render_local_file()`
+  in `rendering/chromium_render.py` now takes a `full_page` parameter;
+  HTML keeps the default `True`, SVG passes `False`. A viewport-sized
+  screenshot works reliably; a very large SVG's evidence image may be
+  cropped to the viewport rather than showing all of its content (see
+  `limitations()`).
+- **Render**: same Chromium backend and active network-blocking as HTML.
+
 ## Planned, not implemented
 
-Registered in `_PLANNED` with the phase each is targeted for (see
-`docs/roadmap.md` for phase definitions):
+Every currently-known `ArtifactType` now has a real adapter — `_PLANNED`
+is empty. See `docs/roadmap.md`'s "Later" section for what's out of scope
+for the near term entirely (audio/video/3D/CAD, per the original design
+brief's Tier 3 and beyond) rather than "planned but not started."
 
-| Type | Phase | Primary backend candidate |
-|---|---|---|
-| SVG | 6 | Playwright/Chromium rasterization (same backend as HTML), or a pure-Python SVG rasterizer |
-
-None of these are stubbed as "implemented." `doctor` reports the backend
-libraries' import/PATH availability today (informationally, so a
-contributor or user can see what to install ahead of time) even though no
-adapter yet consumes them — this is deliberate: spec §68 forbids treating a
-stub as done, but there's no harm in telling the truth about what's on the
-machine early.
+`doctor` reports backend libraries' import/PATH availability
+informationally (so a contributor or user can see what to install ahead
+of time) even for adapters not yet consuming a given backend — this is
+deliberate: spec §68 forbids treating a stub as done, but there's no harm
+in telling the truth about what's on the machine early.
 
 ## Writing a new adapter — checklist
 

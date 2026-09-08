@@ -13,9 +13,7 @@ from artifact_skill.core.artifact import ArtifactRef, ArtifactType
 from artifact_skill.core.errors import ArtifactCapabilityError
 
 _REGISTRY: dict[ArtifactType, type[ArtifactAdapter]] = {}
-_PLANNED: dict[ArtifactType, str] = {
-    ArtifactType.SVG: "Phase 6 (see docs/roadmap.md)",
-}
+_PLANNED: dict[ArtifactType, str] = {}
 
 
 def register(adapter_cls: type[ArtifactAdapter]) -> type[ArtifactAdapter]:
@@ -68,6 +66,7 @@ def _register_builtin_adapters() -> None:
     from artifact_skill.adapters.image.adapter import ImageAdapter
     from artifact_skill.adapters.pdf.adapter import PdfAdapter
     from artifact_skill.adapters.pptx.adapter import PptxAdapter
+    from artifact_skill.adapters.svg.adapter import SvgAdapter
     from artifact_skill.adapters.xlsx.adapter import XlsxAdapter
 
     register(PdfAdapter)
@@ -75,6 +74,7 @@ def _register_builtin_adapters() -> None:
     register(DocxAdapter)
     register(XlsxAdapter)
     register(HtmlAdapter)
+    register(SvgAdapter)
     register_for_types(
         ImageAdapter, [ArtifactType.IMAGE_PNG, ArtifactType.IMAGE_JPEG, ArtifactType.IMAGE_WEBP]
     )

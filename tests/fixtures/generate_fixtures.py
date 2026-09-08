@@ -43,6 +43,7 @@ DOCX_OUT_DIR = Path(__file__).parent / "docx"
 XLSX_OUT_DIR = Path(__file__).parent / "xlsx"
 IMAGE_OUT_DIR = Path(__file__).parent / "image"
 HTML_OUT_DIR = Path(__file__).parent / "html"
+SVG_OUT_DIR = Path(__file__).parent / "svg"
 
 
 # ---------------------------------------------------------------- PDF ----
@@ -361,6 +362,59 @@ def make_mislabeled_pdf_as_html() -> None:
     path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
 
 
+# ---------------------------------------------------------------- SVG ----
+
+def make_good_svg() -> None:
+    path = SVG_OUT_DIR / "good.svg"
+    path.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">'
+        '<circle cx="50" cy="50" r="40" fill="red"/></svg>\n'
+    )
+
+
+def make_missing_local_resource_svg() -> None:
+    path = SVG_OUT_DIR / "missing_local_resource.svg"
+    path.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">'
+        '<image href="does-not-exist.png" width="10" height="10"/></svg>\n'
+    )
+
+
+def make_external_resource_svg() -> None:
+    path = SVG_OUT_DIR / "external_resource.svg"
+    path.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100">'
+        '<image href="https://example.com/some-image.png" width="10" height="10"/></svg>\n'
+    )
+
+
+def make_no_size_svg() -> None:
+    path = SVG_OUT_DIR / "no_size.svg"
+    path.write_text('<svg xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="5" r="4"/></svg>\n')
+
+
+def make_malformed_svg() -> None:
+    path = SVG_OUT_DIR / "malformed.svg"
+    path.write_text('<svg xmlns="http://www.w3.org/2000/svg"><circle cx="5" cy="5" r="4"></svg>\n')  # unclosed <circle>
+
+
+def make_entity_bomb_svg() -> None:
+    """A DOCTYPE declaring a custom entity — not an actual expansion bomb
+    (a real one would be unpleasant to keep in a test fixture directory),
+    just enough to prove _reject_xml_entities() catches the pattern before
+    any parsing is attempted."""
+    path = SVG_OUT_DIR / "entity_bomb.svg"
+    path.write_text(
+        '<?xml version="1.0"?>\n<!DOCTYPE svg [<!ENTITY lol "lol">]>\n'
+        '<svg xmlns="http://www.w3.org/2000/svg"><title>&lol;</title></svg>\n'
+    )
+
+
+def make_mislabeled_pdf_as_svg() -> None:
+    path = SVG_OUT_DIR / "mislabeled_pdf.svg"
+    path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
+
+
 if __name__ == "__main__":
     PDF_OUT_DIR.mkdir(parents=True, exist_ok=True)
     PPTX_OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -368,6 +422,7 @@ if __name__ == "__main__":
     XLSX_OUT_DIR.mkdir(parents=True, exist_ok=True)
     IMAGE_OUT_DIR.mkdir(parents=True, exist_ok=True)
     HTML_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    SVG_OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     make_good_2page()
     make_empty_0page()
@@ -410,9 +465,18 @@ if __name__ == "__main__":
     make_binary_garbage_html()
     make_mislabeled_pdf_as_html()
 
+    make_good_svg()
+    make_missing_local_resource_svg()
+    make_external_resource_svg()
+    make_no_size_svg()
+    make_malformed_svg()
+    make_entity_bomb_svg()
+    make_mislabeled_pdf_as_svg()
+
     print(f"Wrote PDF fixtures to {PDF_OUT_DIR}")
     print(f"Wrote PPTX fixtures to {PPTX_OUT_DIR}")
     print(f"Wrote DOCX fixtures to {DOCX_OUT_DIR}")
     print(f"Wrote XLSX fixtures to {XLSX_OUT_DIR}")
     print(f"Wrote image fixtures to {IMAGE_OUT_DIR}")
     print(f"Wrote HTML fixtures to {HTML_OUT_DIR}")
+    print(f"Wrote SVG fixtures to {SVG_OUT_DIR}")

@@ -53,13 +53,14 @@ just a claim.
 | XLSX | ✅ | ✅ | ✅ (LibreOffice + `pypdfium2`) | `metadata_set` |
 | Image (PNG/JPEG/WebP) | ✅ | ✅ | ✅ (Pillow) | `resize`, `convert_format` |
 | HTML | ✅ | ✅ | ✅ (Playwright + Chromium) | — (inspect/render/verify only, by design) |
-| SVG | planned | planned | planned | — |
-| HTML / SVG / Image | planned | planned | planned | — |
+| SVG | ✅ | ✅ | ✅ (Playwright + Chromium) | — (inspect/render/verify only, by design) |
 
-Unimplemented formats fail loudly with `ARTIFACT_ADAPTER_NOT_IMPLEMENTED`
-— never a silent no-op. See `docs/roadmap.md` for the phase plan and
-`docs/architecture.md` for why the Core/Adapter split makes adding a
-format additive, not a rewrite.
+All formats from the original design brief's Tier 1 and Tier 2 are now
+implemented. A genuinely unrecognized file fails loudly with
+`ARTIFACT_TYPE_UNSUPPORTED`; a recognized-but-not-yet-built format would
+fail with `ARTIFACT_ADAPTER_NOT_IMPLEMENTED` — never a silent no-op. See
+`docs/roadmap.md` for the phase plan and `docs/architecture.md` for why
+the Core/Adapter split makes adding a format additive, not a rewrite.
 
 ## Design principles
 
