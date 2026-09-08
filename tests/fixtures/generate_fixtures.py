@@ -18,8 +18,23 @@ import pypdf
 from docx import Document
 from openpyxl import Workbook
 from pptx import Presentation
+from pypdf.generic import NameObject
 from reportlab.lib.pagesizes import letter
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
+
+# A handful of common install locations for a real TTF, used only to build
+# the font-embedding fixtures below. Not vendored into the repo (keeps it
+# free of binary font assets); if none of these exist, those two fixtures
+# are skipped with a warning rather than failing the whole script — every
+# other fixture is independent of having a system font available.
+_CANDIDATE_TTF_PATHS = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "C:\\Windows\\Fonts\\arial.ttf",
+]
 
 PDF_OUT_DIR = Path(__file__).parent / "pdf"
 PPTX_OUT_DIR = Path(__file__).parent / "pptx"
@@ -61,6 +76,57 @@ def make_encrypted() -> None:
 def make_corrupt_pdf() -> None:
     path = PDF_OUT_DIR / "corrupt.pdf"
     path.write_bytes(b"%PDF-1.4\n%% this is not a real pdf body, just garbage\nendobj trailer garbage")
+
+
+def _find_system_ttf() -> str | None:
+    for candidate in _CANDIDATE_TTF_PATHS:
+        if Path(candidate).is_file():
+            return candidate
+    return None
+
+
+def make_embedded_font_pdf() -> bool:
+    """A page using a genuinely embedded TrueType font (not one of the
+    standard 14) — verify_structural()'s font_embedding check should PASS."""
+    ttf_path = _find_system_ttf()
+    if ttf_path is None:
+        return False
+    path = PDF_OUT_DIR / "embedded_font.pdf"
+    pdfmetrics.registerFont(TTFont("EmbeddedTestFont", ttf_path))
+    c = canvas.Canvas(str(path), pagesize=letter)
+    c.setFont("EmbeddedTestFont", 14)
+    c.drawString(100, 700, "Embedded font test")
+    c.showPage()
+    c.save()
+    return True
+
+
+def make_nonembedded_custom_font_pdf() -> bool:
+    """Same starting point as embedded_font.pdf, but with the embedded
+    font's /FontFile2 stripped and its name changed to a plausible
+    non-standard font — verify_structural()'s font_embedding check should
+    WARN (or FAIL, with policy `forbid_unembedded_fonts`)."""
+    embedded_path = PDF_OUT_DIR / "embedded_font.pdf"
+    if not embedded_path.is_file():
+        return False
+    path = PDF_OUT_DIR / "nonembedded_custom_font.pdf"
+    reader = pypdf.PdfReader(str(embedded_path))
+    writer = pypdf.PdfWriter()
+    writer.append(reader)
+    page = writer.pages[0]
+    for font_ref in page["/Resources"]["/Font"].values():
+        font = font_ref.get_object()
+        base_font = str(font.get("/BaseFont", ""))
+        if "+" in base_font:  # the subset-tagged (embedded) font, not standard Helvetica
+            font[NameObject("/BaseFont")] = NameObject("/CustomNonEmbedded")
+            descriptor = font["/FontDescriptor"].get_object()
+            for key in ("/FontFile", "/FontFile2", "/FontFile3"):
+                if key in descriptor:
+                    del descriptor[key]
+            descriptor[NameObject("/FontName")] = NameObject("/CustomNonEmbedded")
+    with open(path, "wb") as f:
+        writer.write(f)
+    return True
 
 
 def make_mislabeled_html() -> None:
@@ -229,6 +295,11 @@ if __name__ == "__main__":
     make_encrypted()
     make_corrupt_pdf()
     make_mislabeled_html()
+    if make_embedded_font_pdf():
+        make_nonembedded_custom_font_pdf()
+    else:
+        print("WARNING: no system TTF found in _CANDIDATE_TTF_PATHS; skipped "
+              "embedded_font.pdf / nonembedded_custom_font.pdf (leaving any existing copies as-is).")
 
     make_good_2slide_pptx()
     make_empty_placeholder_pptx()

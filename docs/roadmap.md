@@ -54,11 +54,22 @@ original design brief (PDF/PPTX/DOCX/XLSX) are now implemented.
   them and this dev sandbox's LibreOffice can't be relied on to produce
   them either) — see `docs/adapters.md` for the full design writeup and
   `tests/fixtures/generate_fixtures.py` for how those fixtures are made.
+- **PDF font embedding (Issue #7).** `adapters/pdf/adapter.py`'s
+  `font_embedding` check was, since the original MVP, unconditionally
+  `UNKNOWN` — the canonical example this project used to explain "Unknown
+  is first-class" (spec §43). It's now real: walks each page's
+  `/Resources/Font` (through `Type0` composite fonts to the descendant's
+  `/FontDescriptor`), checks for a `/FontFile`/`/FontFile2`/`/FontFile3`
+  stream, and exempts the 14 standard PDF fonts. A plain, standard-font
+  PDF now genuinely rolls up to overall `PASS`, not `UNKNOWN` — see
+  `docs/verification.md` for the before/after and `docs/adapters.md` for
+  the implementation detail.
 
 ## Now / Next
 
-All four Tier 1 formats (PDF, PPTX, DOCX, XLSX) are implemented. Nothing
-is currently in progress — see "Later" below for what's next, and
+All four Tier 1 formats (PDF, PPTX, DOCX, XLSX) are implemented, and the
+PDF font-embedding gap flagged since the MVP is closed. Nothing is
+currently in progress — see "Later" below for what's next, and
 `docs/adapters.md`'s "Writing a new adapter" checklist for how to start
 one of them.
 

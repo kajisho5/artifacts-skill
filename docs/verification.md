@@ -32,25 +32,43 @@ process gap — it must not drag a clean result down the way an
 
 A `WARN` means "we looked, and it's probably fine, but note this." An
 `UNKNOWN` means "we don't actually know" — that's a strictly weaker claim
-than a warning and must not be hidden behind one. This is why, in the
-current PDF adapter, `verify_structural()` always includes a
-`font_embedding: UNKNOWN` check (font embedding completeness genuinely
-isn't checked yet) — and why that means **every** `artifact-skill verify`
-call on a real PDF today aggregates to `UNKNOWN` overall, not `PASS`, even
-when every other check passes. The PPTX adapter has the same shape of
-check for a different gap: `chart_validity` is `UNKNOWN` on any deck that
-contains a chart (presence is detected, internal chart data correctness
-is not) and `SKIPPED` — not `PASS` — on a deck with no charts at all, so a
-chart-free deck's status is unaffected while a chart-bearing one honestly
-reflects the gap.
+than a warning and must not be hidden behind one.
 
-This is intentional, not an oversight to "fix" by dropping the check. It is
-the direct, faithful expression of spec §43 ("Unknown is first-class") and
+The PDF adapter's `font_embedding` check used to be the canonical example
+of this: for a long stretch of this project it was unconditionally
+`UNKNOWN`, and every real PDF's `verify` rolled up to `UNKNOWN` overall as
+a result — not because anything was wrong, but because embedding
+completeness genuinely wasn't checked yet. That's now implemented (Issue
+#7; see `docs/adapters.md`'s PDF section): fonts are inspected via
+`pypdf`'s object model, standard-14 fonts are exempt (every conformant
+viewer renders them correctly unembedded), and a non-embedded custom font
+is `WARN` by default or `FAIL` under `policy.forbid_unembedded_fonts`. A
+plain, standard-font PDF genuinely rolls up to `PASS` now.
+
+The pattern that check demonstrated is still very much alive elsewhere,
+because it's a real, recurring shape, not a one-off gap:
+- PPTX's `chart_validity` is `UNKNOWN` on any deck containing a chart
+  (presence is detected, internal chart data correctness is not) and
+  `SKIPPED` — not `PASS` — on a chart-free deck, so a chart-free deck's
+  status is unaffected while a chart-bearing one honestly reflects the gap.
+- DOCX's `page_count` is `UNKNOWN` unconditionally, because the format
+  itself has no fixed pagination in its XML — this one isn't a "not
+  implemented yet" gap like font embedding was; it's structurally
+  unanswerable without actually rendering the document.
+- XLSX's `formula_recalculation` is `UNKNOWN` whenever any formula is
+  present, unconditionally, by deliberate design choice (see Issue #5 /
+  `docs/adapters.md`'s XLSX section) — recalculating would mean shelling
+  out to a LibreOffice macro interface for a speculative benefit, so this
+  adapter reports the honest gap instead of closing it that way.
+
+None of these are oversights to "fix" by dropping the check. They are the
+direct, faithful expression of spec §43 ("Unknown is first-class") and
 §17 ("PASS/WARN/FAIL ... 絶対に混同しない"). A caller that wants a strict
 PASS/FAIL gate on only the checks it cares about should inspect
 `checks[].status` by `id`, not rely on the aggregate `status` field, when
-some dimensions are known-unimplemented. The CLI reflects this by exit
-code (see below) rather than by quietly rounding UNKNOWN up to PASS.
+some dimensions are known-unimplemented or structurally unanswerable. The
+CLI reflects this by exit code (see below) rather than by quietly
+rounding UNKNOWN up to PASS.
 
 ## Exit codes for verification status
 

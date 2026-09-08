@@ -33,13 +33,23 @@ agent reading the error can tell "we haven't built this yet" apart from
 - **Structural checks**: PDF readability, page count (+ optional exact/
   range requirement), page size consistency (+ optional exact requirement
   with tolerance), encryption, embedded JavaScript actions, extractable
-  text ratio, arbitrary metadata field matching, and an explicit
-  `font_embedding: UNKNOWN` (not implemented — see `docs/verification.md`).
+  text ratio, arbitrary metadata field matching, and font embedding.
+- **Font embedding (Issue #7)**: walks each page's `/Resources/Font`
+  (following `Type0` composite fonts to their descendant's
+  `/FontDescriptor`) and checks for a `/FontFile`, `/FontFile2`, or
+  `/FontFile3` stream. The 14 standard PDF fonts (Helvetica, Times,
+  Courier, Symbol, ZapfDingbats and their bold/italic variants) are exempt
+  — every conformant viewer must render them correctly unembedded, so
+  their absence isn't a defect. Anything else unembedded is `WARN` by
+  default, or `FAIL` under `policy.forbid_unembedded_fonts`. Before this
+  was implemented, `font_embedding` was unconditionally `UNKNOWN`, which
+  meant every real PDF's `verify` rolled up to `UNKNOWN` rather than
+  `PASS` — see `docs/verification.md` for that history and why it was
+  intentional at the time, not a bug.
 - **Render**: one PNG per page at 150 DPI via `pypdfium2`.
 - **Known limitations** (also surfaced in every receipt via
-  `adapter.limitations()`): font embedding completeness not checked;
-  encrypted PDFs are detected but not decrypted automatically; JavaScript
-  is detected, not analyzed or executed.
+  `adapter.limitations()`): encrypted PDFs are detected but not decrypted
+  automatically; JavaScript is detected, not analyzed or executed.
 
 ## Implemented: PPTX (`adapters/pptx/adapter.py`)
 

@@ -72,11 +72,46 @@ def test_verify_good_pdf_page_count_requirement(good_pdf, adapter):
     assert next(c for c in mismatch.checks if c.id == "page_count_requirement").status == CheckStatus.FAIL
 
 
-def test_font_embedding_is_always_unknown_not_hidden(good_pdf, adapter):
+def test_font_embedding_passes_for_standard14_font(good_pdf, adapter):
+    """good_2page.pdf uses plain Helvetica (reportlab's default) — a
+    standard-14 font is fine unembedded; every conformant viewer must
+    render it correctly without one."""
     ref = ArtifactRef.from_path(good_pdf)
     result = adapter.verify_structural(ref, {})
     font_check = next(c for c in result.checks if c.id == "font_embedding")
-    assert font_check.status == CheckStatus.UNKNOWN
+    assert font_check.status == CheckStatus.PASS
+
+
+def test_font_embedding_passes_when_custom_font_is_embedded(embedded_font_pdf, adapter):
+    ref = ArtifactRef.from_path(embedded_font_pdf)
+    result = adapter.verify_structural(ref, {})
+    font_check = next(c for c in result.checks if c.id == "font_embedding")
+    assert font_check.status == CheckStatus.PASS
+
+
+def test_font_embedding_warns_by_default_when_custom_font_not_embedded(nonembedded_custom_font_pdf, adapter):
+    ref = ArtifactRef.from_path(nonembedded_custom_font_pdf)
+    result = adapter.verify_structural(ref, {})
+    font_check = next(c for c in result.checks if c.id == "font_embedding")
+    assert font_check.status == CheckStatus.WARN
+    assert "CustomNonEmbedded" in font_check.evidence["unembedded_fonts"]
+
+
+def test_font_embedding_fails_under_strict_policy(nonembedded_custom_font_pdf, adapter):
+    ref = ArtifactRef.from_path(nonembedded_custom_font_pdf)
+    result = adapter.verify_structural(ref, {"forbid_unembedded_fonts": True})
+    font_check = next(c for c in result.checks if c.id == "font_embedding")
+    assert font_check.status == CheckStatus.FAIL
+
+
+def test_verify_good_pdf_now_passes_cleanly_overall(good_pdf, adapter):
+    """Regression guard: before the font-embedding check was implemented
+    (Issue #7), this always rolled up to UNKNOWN because font_embedding
+    was unconditionally UNKNOWN — see docs/verification.md's history of
+    this. A plain, standard-font PDF should now genuinely PASS overall."""
+    ref = ArtifactRef.from_path(good_pdf)
+    result = adapter.verify_structural(ref, {})
+    assert result.status == CheckStatus.PASS
 
 
 def test_execute_metadata_set_writes_new_file_and_preserves_input(good_pdf, adapter, tmp_path):

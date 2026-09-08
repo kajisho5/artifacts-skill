@@ -47,6 +47,20 @@ def mislabeled_html_pdf(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
+def embedded_font_pdf(tmp_path: Path) -> Path:
+    dst = tmp_path / "embedded_font.pdf"
+    shutil.copy(FIXTURES_DIR / "embedded_font.pdf", dst)
+    return dst
+
+
+@pytest.fixture()
+def nonembedded_custom_font_pdf(tmp_path: Path) -> Path:
+    dst = tmp_path / "nonembedded_custom_font.pdf"
+    shutil.copy(FIXTURES_DIR / "nonembedded_custom_font.pdf", dst)
+    return dst
+
+
+@pytest.fixture()
 def good_pptx(tmp_path: Path) -> Path:
     dst = tmp_path / "good_2slide.pptx"
     shutil.copy(PPTX_FIXTURES_DIR / "good_2slide.pptx", dst)

@@ -96,8 +96,6 @@ over the caller's literal request — see that test for the exact behavior).
 
 - **Macro execution**: out of scope entirely — this project never executes
   embedded macros/scripts in any artifact, and has no code path that could.
-- **Font embedding completeness** (PDF): detection not yet implemented;
-  reported as `UNKNOWN`, not silently skipped (see `docs/verification.md`).
 - **Malware/antivirus scanning**: out of scope. This project's guarantees
   are about structural correctness and safe extraction, not content
   safety classification.

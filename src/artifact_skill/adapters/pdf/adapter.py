@@ -25,6 +25,18 @@ from artifact_skill.security.paths import atomic_write_bytes, check_input_size
 
 _PT_PER_INCH = 72.0
 
+# The 14 base fonts every PDF-conformant viewer is required to render
+# correctly without an embedded font program (PDF spec Annex D). A font
+# with one of these base names is not a defect when it isn't embedded —
+# everything else is, because there is no guarantee the viewer has a
+# matching font to substitute.
+_STANDARD_14_FONTS = {
+    "Courier", "Courier-Bold", "Courier-BoldOblique", "Courier-Oblique",
+    "Helvetica", "Helvetica-Bold", "Helvetica-BoldOblique", "Helvetica-Oblique",
+    "Times-Roman", "Times-Bold", "Times-BoldItalic", "Times-Italic",
+    "Symbol", "ZapfDingbats",
+}
+
 
 def _has(module: str) -> bool:
     return importlib.util.find_spec(module) is not None
@@ -54,6 +66,92 @@ def _require_pypdfium2():
     import pypdfium2
 
     return pypdfium2
+
+
+def _collect_font_info(reader: Any) -> list[dict[str, Any]]:
+    """One entry per distinct font resource referenced across all pages:
+    `{name, subtype, embedded, is_standard14}`. `embedded` is determined
+    by the presence of a `FontFile`/`FontFile2`/`FontFile3` stream on the
+    font's `/FontDescriptor` — for a composite (`Type0`) font, that
+    descriptor lives on the descendant font, not the Type0 wrapper itself.
+    A font is only ever counted once (by its object id), so a font used
+    on every page of a long document doesn't get repeated entries.
+    """
+    seen_ids: set[int] = set()
+    fonts: list[dict[str, Any]] = []
+    for page in reader.pages:
+        resources = page.get("/Resources")
+        if not resources:
+            continue
+        font_dict = resources.get("/Font")
+        if not font_dict:
+            continue
+        for font_ref in font_dict.values():
+            try:
+                font_id = font_ref.idnum
+            except AttributeError:
+                font_id = id(font_ref)
+            if font_id in seen_ids:
+                continue
+            seen_ids.add(font_id)
+            font = font_ref.get_object()
+            base_font = str(font.get("/BaseFont", "")).lstrip("/")
+            subtype = str(font.get("/Subtype", "")).lstrip("/")
+
+            descriptor = font.get("/FontDescriptor")
+            if descriptor is None and subtype == "Type0":
+                # Composite font: the real glyph data (and thus the
+                # embedding evidence) lives on the descendant font.
+                descendants = font.get("/DescendantFonts")
+                if descendants:
+                    try:
+                        descriptor = descendants[0].get_object().get("/FontDescriptor")
+                    except Exception:  # noqa: BLE001 - malformed descendant, treat as no descriptor
+                        descriptor = None
+
+            embedded = False
+            if descriptor is not None:
+                desc_obj = descriptor.get_object()
+                embedded = any(key in desc_obj for key in ("/FontFile", "/FontFile2", "/FontFile3"))
+
+            base_name = base_font.split("+", 1)[1] if "+" in base_font and len(base_font.split("+", 1)[0]) == 6 else base_font
+            fonts.append(
+                {
+                    "name": base_font,
+                    "subtype": subtype,
+                    "embedded": embedded,
+                    "is_standard14": base_name in _STANDARD_14_FONTS,
+                }
+            )
+    return fonts
+
+
+def _font_embedding_check(fonts: list[dict[str, Any]], policy: dict[str, Any]) -> Check:
+    """PASS when every non-standard-14 font is embedded; standard-14 fonts
+    are exempt since every conformant PDF viewer guarantees a correct
+    rendering for them without an embedded font program. Missing embedding
+    on anything else is `FAIL` when `policy["forbid_unembedded_fonts"]` is
+    set, `WARN` otherwise — a non-embedded custom font usually still
+    *displays* something (via viewer substitution), just not reliably the
+    intended glyphs, so it's a real but not always fatal problem.
+    """
+    if not fonts:
+        return Check(id="font_embedding", name="Font embedding", status=CheckStatus.PASS, message="No fonts referenced.")
+
+    missing = [f for f in fonts if not f["embedded"] and not f["is_standard14"]]
+    if not missing:
+        return Check(
+            id="font_embedding", name="Font embedding", status=CheckStatus.PASS,
+            message=f"{len(fonts)} font(s) referenced; all embedded or standard-14.",
+        )
+    status = CheckStatus.FAIL if policy.get("forbid_unembedded_fonts") else CheckStatus.WARN
+    names = [f["name"] for f in missing]
+    return Check(
+        id="font_embedding", name="Font embedding", status=status,
+        message=f"{len(missing)} non-standard font(s) not embedded: {names}. Rendering may substitute a "
+        "different font on a viewer without a matching one installed.",
+        evidence={"unembedded_fonts": names},
+    )
 
 
 class PdfAdapter(ArtifactAdapter):
@@ -155,7 +253,6 @@ class PdfAdapter(ArtifactAdapter):
 
     def limitations(self) -> list[str]:
         return [
-            "Font embedding completeness is not checked (reported as UNKNOWN).",
             "Encrypted PDFs are detected but not decrypted automatically.",
             "JavaScript actions are detected but not executed or analyzed further.",
         ]
@@ -222,6 +319,8 @@ class PdfAdapter(ArtifactAdapter):
                 except Exception:  # noqa: BLE001 - a single bad page must not abort inspect
                     pass
 
+        fonts = [] if is_encrypted else _collect_font_info(reader)
+
         details = {
             "page_count": page_count,
             "page_sizes": page_sizes,
@@ -231,6 +330,7 @@ class PdfAdapter(ArtifactAdapter):
             "has_forms": has_forms,
             "text_extractable_pages": text_extractable_pages,
             "pdf_version": getattr(reader, "pdf_header", None),
+            "fonts": fonts,
         }
         return InspectionReport(artifact=ref, details=details, warnings=warnings)
 
@@ -473,14 +573,7 @@ class PdfAdapter(ArtifactAdapter):
                     )
                 )
 
-        checks.append(
-            Check(
-                id="font_embedding",
-                name="Font embedding",
-                status=CheckStatus.UNKNOWN,
-                message="Font embedding completeness is not checked by this adapter (see limitations()).",
-            )
-        )
+        checks.append(_font_embedding_check(details.get("fonts", []), policy))
 
         return VerificationResult(kind="structural", checks=checks)
 

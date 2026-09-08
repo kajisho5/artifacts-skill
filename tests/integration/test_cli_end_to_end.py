@@ -55,7 +55,7 @@ def test_execute_then_verify_pass(good_pdf, tmp_path):
          "--output", "out.pdf", "--json"],
         cwd=tmp_path,
     )
-    assert exec_proc.returncode in (0, 1, 3)  # depends on font_embedding UNKNOWN rollup; must not crash
+    assert exec_proc.returncode == 0  # standard-font PDF: genuinely clean PASS, not UNKNOWN (Issue #7)
     assert (tmp_path / "out.pdf").exists()
 
     verify_proc = run_cli(
@@ -63,10 +63,13 @@ def test_execute_then_verify_pass(good_pdf, tmp_path):
          "--json"],
         cwd=tmp_path,
     )
+    assert verify_proc.returncode == 0
     data = json.loads(verify_proc.stdout)
+    assert data["status"] == "pass"
     check_by_id = {c["id"]: c for c in data["checks"]}
     assert check_by_id["page_count_requirement"]["status"] == "pass"
     assert check_by_id["metadata_title"]["status"] == "pass"
+    assert check_by_id["font_embedding"]["status"] == "pass"
 
 
 def test_verify_fail_gives_nonzero_exit(empty_pdf, tmp_path):
