@@ -172,6 +172,16 @@ def test_verify_unknown_policy_preset_gives_clear_error(good_pdf, tmp_path):
     assert "not-a-real-preset" in proc.stderr
 
 
+def test_verify_misspelled_policy_key_gives_clear_error_not_a_silent_pass(good_pdf, tmp_path):
+    """Issue #24: --policy '{"min_pagess": 1}' (typo'd from min_pages) used
+    to be silently treated by every adapter as "not specified" and produce
+    a false PASS. It must now be rejected with a clear error naming the
+    unrecognized key, the same way an unknown --policy-preset name is."""
+    proc = run_cli(["verify", str(good_pdf), "--policy", '{"min_pagess": 1}'], cwd=tmp_path)
+    assert proc.returncode != 0
+    assert "min_pagess" in proc.stderr
+
+
 def test_input_not_found_gives_input_exit_code(tmp_path):
     proc = run_cli(["inspect", str(tmp_path / "nope.pdf"), "--json"], cwd=tmp_path)
     assert proc.returncode == 2

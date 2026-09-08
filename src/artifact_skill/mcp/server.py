@@ -140,6 +140,14 @@ def call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         return _text_result(result)
     except ArtifactError as exc:
         return _text_result({"error": exc.to_dict()}, is_error=True)
+    except Exception as exc:  # noqa: BLE001 - last-resort boundary: never let a tool call kill the stdio session
+        internal = ArtifactError(
+            code="ARTIFACT_MCP_TOOL_INTERNAL_ERROR",
+            category=ErrorCategory.INTERNAL,
+            message=f"Tool '{name}' raised an unexpected {type(exc).__name__}: {exc}",
+            remediation="This is likely a bug in artifact-skill. Please report it with the input that triggered it.",
+        )
+        return _text_result({"error": internal.to_dict()}, is_error=True)
 
 
 def _h_doctor(_args: dict[str, Any]) -> dict[str, Any]:
@@ -291,6 +299,8 @@ def serve(stdin=None, stdout=None) -> None:
         try:
             msg = json.loads(line)
         except json.JSONDecodeError:
+            stdout.write(json.dumps({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}}) + "\n")
+            stdout.flush()
             continue
         response = _handle_request(msg)
         if response is not None:

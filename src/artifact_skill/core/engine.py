@@ -29,6 +29,7 @@ from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactError, A
 from artifact_skill.core.operation import OperationPlan, OperationRecord
 from artifact_skill.core.schema_validate import validate_against_schema
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
+from artifact_skill.policies import unknown_policy_keys
 from artifact_skill.receipt.model import ProductionReceipt, ReceiptBuilder
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 
@@ -89,6 +90,15 @@ def run_lifecycle(
     limits: Limits = DEFAULT_LIMITS,
 ) -> LifecycleResult:
     policy = policy or {}
+    bad_keys = unknown_policy_keys(policy)
+    if bad_keys:
+        raise ArtifactInputError(
+            code="ARTIFACT_INVALID_ARGS",
+            message=f"Unknown policy key(s): {bad_keys}. No adapter recognizes "
+            f"{'this key' if len(bad_keys) == 1 else 'these keys'} — check for a typo.",
+            remediation="Run `artifact-skill contract --json` or see docs/verification.md for valid policy keys.",
+            evidence={"unknown_keys": bad_keys},
+        )
     # None means "use the real default", not "run the fix loop once and stop" -
     # a bare int default here previously meant every caller that didn't pass
     # max_iterations explicitly silently disabled the fix loop entirely

@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from artifact_skill.adapters.registry import all_adapter_classes
+
 PRESETS: dict[str, dict[str, Any]] = {
     "print-a4": {
         "require_page_size_pt": (595, 842),
@@ -83,6 +85,24 @@ PRESETS: dict[str, dict[str, Any]] = {
 }
 
 
+def known_policy_keys() -> frozenset[str]:
+    """The union of every policy key any registered adapter's
+    `verify_structural()` actually reads (Issue #24). A key outside this set
+    cannot possibly do anything in any adapter — it's not "inert for this
+    format" (the documented, intentional cross-adapter-reuse case above),
+    it's simply not a real policy key anywhere, almost always a typo."""
+    keys: set[str] = set()
+    for adapter_cls in all_adapter_classes():
+        keys.update(adapter_cls().recognized_policy_keys())
+    return frozenset(keys)
+
+
+def unknown_policy_keys(policy: dict[str, Any]) -> list[str]:
+    """Keys in `policy` that no adapter recognizes at all. Returned sorted
+    for a deterministic error message."""
+    return sorted(set(policy) - known_policy_keys())
+
+
 def resolve_policy(preset_name: str | None, explicit_policy: dict[str, Any] | None) -> dict[str, Any]:
     """Merge a named preset (if any) with an explicit policy dict (if any).
 
@@ -90,7 +110,11 @@ def resolve_policy(preset_name: str | None, explicit_policy: dict[str, Any] | No
     still override individual fields rather than being stuck with the
     preset verbatim. Raises `KeyError` naming the valid preset names if
     `preset_name` doesn't match one, rather than silently applying no
-    policy at all for a typo'd name.
+    policy at all for a typo'd name. Also raises `KeyError` if the merged
+    policy contains a key no adapter recognizes at all (Issue #24) — e.g.
+    `min_pagess` instead of `min_pages` — since that would otherwise be
+    silently treated by every adapter as "not specified" and produce a
+    false PASS instead of the error the caller actually wants.
     """
     base: dict[str, Any] = {}
     if preset_name:
@@ -99,4 +123,11 @@ def resolve_policy(preset_name: str | None, explicit_policy: dict[str, Any] | No
         base = dict(PRESETS[preset_name])
     if explicit_policy:
         base.update(explicit_policy)
+    bad = unknown_policy_keys(base)
+    if bad:
+        raise KeyError(
+            f"Unknown policy key(s): {bad}. No adapter recognizes {'this key' if len(bad) == 1 else 'these keys'} "
+            "— check for a typo. Run `artifact-skill contract --json` or see docs/verification.md for valid "
+            "policy keys per format."
+        )
     return base

@@ -244,3 +244,21 @@ def test_run_lifecycle_rejects_invalid_args_before_touching_disk(good_pdf, tmp_p
     assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
     assert not output_path.exists()
     assert not evidence_dir.exists()
+
+
+def test_run_lifecycle_rejects_a_misspelled_policy_key_before_touching_disk(good_pdf, tmp_path):
+    """Issue #24: a policy dict passed directly to run_lifecycle() (bypassing
+    the CLI's/MCP's resolve_policy() call) must still be checked - callers
+    that import run_lifecycle() directly get the same protection against a
+    silently-ignored typo'd key producing a false PASS."""
+    output_path = tmp_path / "out.pdf"
+    evidence_dir = tmp_path / "reports"
+    with pytest.raises(ArtifactInputError) as exc_info:
+        run_lifecycle(
+            good_pdf, "metadata_set", {"title": "x"}, output_path,
+            policy={"min_pagess": 1}, evidence_dir=evidence_dir, dry_run=False,
+        )
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+    assert "min_pagess" in exc_info.value.message
+    assert not output_path.exists()
+    assert not evidence_dir.exists()

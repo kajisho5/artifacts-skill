@@ -157,6 +157,12 @@ class PptxAdapter(ArtifactAdapter):
             "a specific document converts successfully (see this module's docstring).",
         ]
 
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({
+            "require_slide_count", "min_slides", "max_slides", "require_slide_aspect_ratio",
+            "aspect_ratio_tolerance", "forbid_placeholder_text", "max_empty_placeholders", "require_metadata",
+        })
+
     # ---- inspect ---------------------------------------------------
 
     def inspect(self, ref: ArtifactRef) -> InspectionReport:

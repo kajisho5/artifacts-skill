@@ -98,6 +98,9 @@ class SvgAdapter(ArtifactAdapter):
             "image may be cropped to the viewport rather than showing its entire content.",
         ]
 
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({"forbid_external_resources", "forbid_placeholder_text"})
+
     # ---- inspect ---------------------------------------------------
 
     def inspect(self, ref: ArtifactRef) -> InspectionReport:

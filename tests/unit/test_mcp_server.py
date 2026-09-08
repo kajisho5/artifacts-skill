@@ -8,6 +8,7 @@ from artifact_skill.mcp.server import (
     _handle_request,
     _negotiate_protocol_version,
     call_tool,
+    serve,
 )
 
 
@@ -188,3 +189,71 @@ def test_verify_unknown_policy_preset_returns_structured_error(good_pdf):
     payload = json.loads(result["content"][0]["text"])
     assert payload["error"]["code"] == "ARTIFACT_INVALID_ARGS"
     assert "not-a-real-preset" in payload["error"]["message"]
+
+
+def test_verify_misspelled_policy_key_returns_structured_error_not_a_silent_pass(good_pdf):
+    """Issue #24: same guarantee as the CLI - a typo'd policy key over MCP
+    must be rejected, not silently ignored by every adapter's policy.get()."""
+    result = call_tool(f"{CAPABILITY_PREFIX}.verify", {"input": str(good_pdf), "policy": {"min_pagess": 1}})
+    assert result["isError"] is True
+    payload = json.loads(result["content"][0]["text"])
+    assert payload["error"]["code"] == "ARTIFACT_INVALID_ARGS"
+    assert "min_pagess" in payload["error"]["message"]
+
+
+# --- non-ArtifactError exceptions must not crash the session (Issue #23) ---
+
+
+def test_unexpected_non_artifact_exception_is_reported_not_raised(good_pdf, monkeypatch):
+    """Regression guard: call_tool() used to only catch ArtifactError, so any
+    other exception type (e.g. a third-party parsing error) propagated out of
+    call_tool() uncaught - fatal for serve()'s stdio loop, which would crash
+    the whole long-running MCP session over a single bad request."""
+    import artifact_skill.mcp.server as server_module
+
+    def _boom(_args):
+        raise RuntimeError("simulated unexpected failure")
+
+    monkeypatch.setitem(server_module._HANDLERS, "inspect", _boom)
+
+    result = call_tool(f"{CAPABILITY_PREFIX}.inspect", {"input": str(good_pdf)})
+    assert result["isError"] is True
+    payload = json.loads(result["content"][0]["text"])
+    assert payload["error"]["code"] == "ARTIFACT_MCP_TOOL_INTERNAL_ERROR"
+    assert payload["error"]["category"] == "internal"
+    assert "simulated unexpected failure" in payload["error"]["message"]
+
+
+# --- malformed JSON-RPC input gets a real parse-error response (Issue #32) --
+
+
+def test_malformed_json_line_gets_a_parse_error_response_not_silence():
+    import io
+
+    stdin = io.StringIO("not valid json at all\n")
+    stdout = io.StringIO()
+    serve(stdin=stdin, stdout=stdout)
+    lines = [line for line in stdout.getvalue().splitlines() if line.strip()]
+    assert len(lines) == 1
+    response = json.loads(lines[0])
+    assert response == {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}}
+
+
+def test_malformed_json_line_does_not_stop_the_session_from_handling_the_next_line(good_pdf):
+    import io
+
+    valid_request = json.dumps(
+        {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": f"{CAPABILITY_PREFIX}.inspect", "arguments": {"input": str(good_pdf)}},
+        }
+    )
+    stdin = io.StringIO(f"{{broken json\n{valid_request}\n")
+    stdout = io.StringIO()
+    serve(stdin=stdin, stdout=stdout)
+    lines = [line for line in stdout.getvalue().splitlines() if line.strip()]
+    assert len(lines) == 2
+    parse_error, real_response = (json.loads(line) for line in lines)
+    assert parse_error["error"]["code"] == -32700
+    assert real_response["id"] == 1
+    assert real_response["result"]["isError"] is False

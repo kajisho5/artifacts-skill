@@ -137,6 +137,12 @@ class ImageAdapter(ArtifactAdapter):
             "ICC color profiles are preserved on save where Pillow supports it, but not validated.",
         ]
 
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({
+            "require_width", "require_height", "min_width", "max_width", "min_height", "max_height",
+            "require_format",
+        })
+
     # ---- inspect ---------------------------------------------------
 
     def inspect(self, ref: ArtifactRef) -> InspectionReport:

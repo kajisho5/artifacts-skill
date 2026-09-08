@@ -149,6 +149,12 @@ class DocxAdapter(ArtifactAdapter):
             "a specific document converts successfully.",
         ]
 
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({
+            "require_paragraph_count", "min_paragraphs", "max_paragraphs", "forbid_placeholder_text",
+            "require_metadata",
+        })
+
     # ---- inspect ---------------------------------------------------
 
     def inspect(self, ref: ArtifactRef) -> InspectionReport:

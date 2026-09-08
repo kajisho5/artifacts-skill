@@ -77,6 +77,23 @@ class ArtifactAdapter(ABC):
     def limitations(self) -> list[str]:
         return []
 
+    def recognized_policy_keys(self) -> frozenset[str]:
+        """The verification-policy dict keys this adapter's `verify_structural()`
+        actually reads (Issue #24). Used only to build the *global* set of
+        every known policy key across every adapter (see `policies.py`), so a
+        misspelled key (e.g. `min_pagess`) can be rejected instead of being
+        silently treated as "not specified" and producing a false PASS.
+
+        Deliberately NOT used for per-adapter rejection: `policies.py`'s
+        presets are designed to be reused across adapters they weren't
+        written for (e.g. `web-no-external`'s `require_title` is inert for
+        SVG) — a key this adapter doesn't recognize but some other adapter
+        does must stay silently ignored here, exactly as before. Default:
+        no policy keys recognized (matches adapters with no
+        `verify_structural()` policy inputs at all).
+        """
+        return frozenset()
+
     @abstractmethod
     def inspect(self, ref: ArtifactRef) -> InspectionReport:
         """Read-only. Must never write to disk or spawn a mutating process."""

@@ -161,6 +161,9 @@ class HtmlAdapter(ArtifactAdapter):
             "will render with those elements visibly missing/broken, by design.",
         ]
 
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({"require_title", "forbid_external_resources", "forbid_placeholder_text"})
+
     # ---- inspect ---------------------------------------------------
 
     def inspect(self, ref: ArtifactRef) -> InspectionReport:

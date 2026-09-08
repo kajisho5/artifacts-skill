@@ -379,6 +379,13 @@ class PdfAdapter(ArtifactAdapter):
             "genuinely blank page.",
         ]
 
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({
+            "forbid_unembedded_fonts", "require_no_encryption", "require_page_count", "min_pages", "max_pages",
+            "allow_mixed_page_sizes", "require_page_size_pt", "page_size_tolerance_pt", "forbid_javascript",
+            "forbid_blank_pages", "forbid_placeholder_text", "require_metadata",
+        })
+
     # ---- inspect ---------------------------------------------------
 
     def inspect(self, ref: ArtifactRef) -> InspectionReport:

@@ -175,6 +175,12 @@ class XlsxAdapter(ArtifactAdapter):
             "a specific document converts successfully.",
         ]
 
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({
+            "require_sheet_count", "min_sheets", "max_sheets", "require_sheet_names", "forbid_placeholder_text",
+            "forbid_external_links", "require_metadata",
+        })
+
     # ---- inspect ---------------------------------------------------
 
     def inspect(self, ref: ArtifactRef) -> InspectionReport:

@@ -35,6 +35,13 @@ def registered_types() -> list[ArtifactType]:
     return list(_REGISTRY.keys())
 
 
+def all_adapter_classes() -> list[type[ArtifactAdapter]]:
+    """Every distinct registered adapter class, deduplicated (the image
+    adapter is registered under three ArtifactTypes but is one class) and
+    sorted by `id` for deterministic iteration order."""
+    return sorted(set(_REGISTRY.values()), key=lambda cls: cls.id)
+
+
 def get_adapter(artifact_type: ArtifactType) -> ArtifactAdapter:
     adapter_cls = _REGISTRY.get(artifact_type)
     if adapter_cls is not None:
