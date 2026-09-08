@@ -109,7 +109,27 @@ def run_lifecycle(
     # literal 3 in the CLI and MCP callers too.
     if max_iterations is None:
         max_iterations = limits.max_fix_iterations
-    max_iterations = max(1, min(max_iterations, limits.max_fix_iterations))
+    elif not 1 <= max_iterations <= limits.max_fix_iterations:
+        # Self-audit finding: this used to silently clamp
+        # (`max(1, min(max_iterations, limits.max_fix_iterations))`) instead
+        # of rejecting - an explicit --max-iterations/max_iterations outside
+        # [1, limits.max_fix_iterations] was silently overridden with no
+        # indication to the caller, even though the MCP schema advertised
+        # "maximum: 10" as if the full range were honored (confirmed by
+        # direct reproduction: requesting 10 against an always-failing
+        # fixer actually ran exactly 3 iterations, not 10). Same "reject
+        # clearly rather than silently do something different" precedent
+        # as Limits.max_pages (FIX_PROMPT P0-3) - a caller who explicitly
+        # asked for more retries than the deployment allows deserves an
+        # error naming the real ceiling, not a quiet downgrade.
+        raise ArtifactInputError(
+            code="ARTIFACT_INVALID_ARGS",
+            message=f"max_iterations must be between 1 and {limits.max_fix_iterations} "
+            f"(this deployment's Limits.max_fix_iterations), got {max_iterations}.",
+            remediation=f"Pass a value in [1, {limits.max_fix_iterations}], or omit max_iterations "
+            "entirely to use the default.",
+            evidence={"max_iterations": max_iterations, "limit": limits.max_fix_iterations},
+        )
 
     if operation is None:
         # No mutation requested (Issue #18): inspect -> render -> structural

@@ -46,6 +46,7 @@ from typing import Any
 
 from artifact_skill import __version__
 from artifact_skill.core.errors import EXIT_CODE_BY_CATEGORY, EXIT_FAIL, EXIT_OK
+from artifact_skill.security.limits import DEFAULT_LIMITS
 
 CONTRACT_SCHEMA = "artifact-contract/v1"
 
@@ -400,10 +401,22 @@ TOOLS: list[ToolContract] = [
                     "\"web-no-external\"); 'policy' fields override it on conflict. See docs/verification.md.",
                 },
                 "max_iterations": {
-                    "type": "integer", "minimum": 1, "maximum": 10,
-                    "description": "Fix-loop retry cap. Default (when omitted): Limits.max_fix_iterations "
-                    "(currently 3) - omitting this does NOT mean 'don't retry.' Meaningless without "
-                    "'operation' (there is no fix loop for a verify-only receipt).",
+                    # Self-audit finding: this used to hardcode "maximum": 10
+                    # while core/engine.py::run_lifecycle() silently clamped
+                    # anything above Limits.max_fix_iterations (3) down to 3
+                    # — a caller requesting e.g. 10 saw no error and no
+                    # indication their request was overridden (confirmed by
+                    # direct reproduction: requesting 10 against an
+                    # always-failing fixer actually ran exactly 3
+                    # iterations). Derived from DEFAULT_LIMITS here instead
+                    # of a second hardcoded literal, and run_lifecycle() now
+                    # rejects (ARTIFACT_INVALID_ARGS) rather than clamps, so
+                    # this bound is always the truth, not a stale promise.
+                    "type": "integer", "minimum": 1, "maximum": DEFAULT_LIMITS.max_fix_iterations,
+                    "description": f"Fix-loop retry cap, in [1, {DEFAULT_LIMITS.max_fix_iterations}]. Default "
+                    f"(when omitted): {DEFAULT_LIMITS.max_fix_iterations} - omitting this does NOT mean "
+                    "'don't retry.' Meaningless without 'operation' (there is no fix loop for a "
+                    "verify-only receipt).",
                 },
                 "evidence_dir": {
                     "type": "string",

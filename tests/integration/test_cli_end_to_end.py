@@ -355,6 +355,23 @@ def test_password_protected_looking_ooxml_gives_a_specific_actionable_error(tmp_
     assert proc.returncode == 3
 
 
+def test_receipt_max_iterations_above_the_limit_is_rejected_over_the_cli(good_pdf, tmp_path):
+    """Self-audit finding (CLI/MCP parity): the CLI used to silently accept
+    --max-iterations outside [1, Limits.max_fix_iterations] and just run
+    with a silently-clamped value - confirmed by direct reproduction that
+    `--max-iterations 15` on a real run exited 0 with status "pass" and no
+    indication the requested retry cap was overridden. Must now be a
+    structured rejection, same as MCP's schema already enforced."""
+    proc = run_cli(
+        ["receipt", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}',
+         "--max-iterations", "15", "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode != 0
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_INVALID_ARGS"
+
+
 def test_receipt_end_to_end_human_readable_report(good_pdf, tmp_path):
     proc = run_cli(
         ["receipt", str(good_pdf), "--operation", "metadata_set", "--args", '{"author":"CLI"}'],

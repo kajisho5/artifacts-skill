@@ -192,6 +192,75 @@ def test_fix_loop_gives_up_honestly_when_max_iterations_too_low(good_pdf, tmp_pa
     assert result.receipt.status == CheckStatus.FAIL
 
 
+# --- max_iterations out of range is rejected, not silently clamped --------
+#
+# Self-audit finding (CLI/MCP parity audit): run_lifecycle() used to do
+# `max(1, min(max_iterations, limits.max_fix_iterations))`, silently
+# overriding an explicit out-of-range request with no error and no
+# indication to the caller - even though the MCP schema advertised
+# "maximum: 10" as if the full 1-10 range were honored. Confirmed by direct
+# reproduction: requesting max_iterations=10 against an always-failing
+# fixer (forcing the loop to run to its true cap rather than converging
+# early) actually ran exactly 3 iterations (DEFAULT_LIMITS.max_fix_
+# iterations), not 10, with zero error or warning surfaced anywhere.
+
+
+def test_max_iterations_above_the_limit_is_rejected_not_silently_clamped(good_pdf, tmp_path):
+    with pytest.raises(ArtifactInputError) as exc_info:
+        run_lifecycle(
+            good_pdf, "metadata_set", {"title": "x"}, tmp_path / "out.pdf",
+            evidence_dir=tmp_path / "reports", dry_run=False, max_iterations=10,
+        )
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+    assert "max_iterations" in exc_info.value.message
+
+
+def test_max_iterations_zero_is_rejected_not_silently_raised_to_one(good_pdf, tmp_path):
+    with pytest.raises(ArtifactInputError) as exc_info:
+        run_lifecycle(
+            good_pdf, "metadata_set", {"title": "x"}, tmp_path / "out.pdf",
+            evidence_dir=tmp_path / "reports", dry_run=False, max_iterations=0,
+        )
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+
+
+def test_max_iterations_within_range_still_works(good_pdf, tmp_path):
+    result = run_lifecycle(
+        good_pdf, "metadata_set", {"title": "x"}, tmp_path / "out.pdf",
+        evidence_dir=tmp_path / "reports", dry_run=False, max_iterations=2,
+    )
+    assert result.receipt is not None
+    assert result.receipt.status == CheckStatus.PASS
+
+
+def test_a_fixer_that_never_converges_is_still_capped_at_the_real_limit(good_pdf, tmp_path, monkeypatch):
+    """Proves the true ceiling (not just that out-of-range values are now
+    rejected): a fixer that always returns a schema-valid but still-failing
+    fix must stop at exactly Limits.max_fix_iterations, never fewer, never
+    more - the same scenario used to reproduce the original bug."""
+    from artifact_skill.adapters.pdf import adapter as pdf_adapter_module
+    from artifact_skill.core.verification import Check, VerificationResult
+    from artifact_skill.core.verification import CheckStatus as CS
+    from artifact_skill.security.limits import DEFAULT_LIMITS
+
+    def _always_fail(self, ref, policy):
+        return VerificationResult(
+            kind="structural", checks=[Check(id="x", name="x", status=CS.FAIL, message="always fails")]
+        )
+
+    def _always_fix(self, ref, operation, args, structural):
+        return {"title": "retry"}
+
+    monkeypatch.setattr(pdf_adapter_module.PdfAdapter, "verify_structural", _always_fail)
+    monkeypatch.setattr(pdf_adapter_module.PdfAdapter, "fix", _always_fix)
+
+    result = run_lifecycle(
+        good_pdf, "metadata_set", {"title": "x"}, tmp_path / "out.pdf",
+        evidence_dir=tmp_path / "reports", dry_run=False,
+    )
+    assert result.receipt.iterations == DEFAULT_LIMITS.max_fix_iterations
+
+
 def test_build_plan_rejects_args_violating_the_operation_schema(good_pdf, tmp_path):
     """OperationSpec.args_schema is now an enforced contract (Issue: SPEC
     alignment), not just descriptive metadata a caller could ignore —

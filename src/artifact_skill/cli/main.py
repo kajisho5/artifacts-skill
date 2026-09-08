@@ -35,6 +35,7 @@ from artifact_skill.doctor.detect import detect_environment
 from artifact_skill.policies import PRESETS as _PRESET_NAMES
 from artifact_skill.policies import resolve_policy
 from artifact_skill.rendering.contact_sheet import build_before_after, build_contact_sheet
+from artifact_skill.security.limits import DEFAULT_LIMITS
 from artifact_skill.security.subprocess_exec import treat_sigterm_as_interrupt
 
 
@@ -155,7 +156,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_receipt.add_argument(
         "--max-iterations", type=int, default=None,
-        help="Fix-loop retry cap (default: Limits.max_fix_iterations, currently 3).",
+        help=f"Fix-loop retry cap, must be in [1, {DEFAULT_LIMITS.max_fix_iterations}] "
+        f"(default when omitted: {DEFAULT_LIMITS.max_fix_iterations}).",
     )
     p_receipt.add_argument("--evidence-dir", help="Directory for the receipt and evidence (default: ./reports).")
     p_receipt.add_argument("--dry-run", action="store_true")
