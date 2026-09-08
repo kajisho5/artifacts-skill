@@ -116,6 +116,23 @@ run(["sleep", "30"], allowlist={{"sleep"}}, timeout=25)
 """
 
 
+def _pid_alive(pid: int) -> bool:
+    """Portable POSIX liveness check. Deliberately not `/proc/<pid>`
+    (procfs) - that path doesn't exist on macOS/BSD at all, so it always
+    reports "not alive" there regardless of the process's real state, a
+    real bug this test itself first shipped with (caught by CI's macOS
+    job, not by this Linux-only dev environment). `os.kill(pid, 0)` sends
+    no signal, just probes: ProcessLookupError means it's gone,
+    PermissionError means it exists but isn't ours (still alive)."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def _run_child_and_sigterm_it(install_handler: bool, tmp_path) -> bool:
     """Returns True iff the grandchild `sleep` process is still alive a
     moment after the direct child received SIGTERM."""
@@ -135,7 +152,7 @@ def _run_child_and_sigterm_it(install_handler: bool, tmp_path) -> bool:
         os.kill(proc.pid, signal.SIGTERM)
         proc.wait(timeout=5)
         time.sleep(0.3)  # give the OS a moment to reap/report
-        return os.path.exists(f"/proc/{grandchild_pid}")
+        return _pid_alive(grandchild_pid)
     finally:
         if proc.poll() is None:
             proc.kill()
