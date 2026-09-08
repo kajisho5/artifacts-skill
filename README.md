@@ -89,11 +89,22 @@ the Core/Adapter split makes adding a format additive, not a rewrite.
   never decides whether a design "looks good." Visual evidence is produced
   for the agent (or a human) to actually look at and judge.
 - **Contract-first.** `artifact-skill contract --json` is the single
-  source of truth. The CLI and the MCP server (`python -m
-  artifact_skill.mcp.server`) are both generated from it — they cannot
-  drift, and a test asserts they don't.
+  source of truth. The MCP server (`python -m artifact_skill.mcp.server`)
+  builds its `tools/list` (including every `inputSchema`) directly from
+  it at runtime. The CLI is hand-written, not generated from the same
+  contract at runtime — but a mechanical test (not a convention) asserts
+  every schema property has a matching CLI flag and vice versa, so the
+  two can't silently drift out of sync even without shared codegen. See
+  `core/contract.py`'s module docstring for the exact test that enforces
+  this.
 
 ## Install
+
+> **Note:** the GitHub repo is named `artifacts-skill` (plural) but the
+> package/CLI/binary is `artifact-skill` (singular) — a naming mismatch
+> tracked in Issue #22, not yet resolved. Once published (Issue #9),
+> `pip install artifact-skill`/`npx artifact-skill` will use the singular
+> name even though you cloned the plural repo below.
 
 ```bash
 git clone https://github.com/kajisho5/artifacts-skill

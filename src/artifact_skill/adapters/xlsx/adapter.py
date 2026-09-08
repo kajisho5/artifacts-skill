@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import importlib.util
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -45,9 +46,11 @@ from artifact_skill.core.capability import Capability, CapabilityStatus
 from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactInputError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
+from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.office_convert import convert_to_pdf, soffice_binary
 from artifact_skill.rendering.pdf_pages import render_pdf_pages
 from artifact_skill.security.paths import atomic_copy, check_input_size
+from artifact_skill.security.xml_safety import reject_xml_entities_in_zip
 
 _ERROR_TOKENS = {"#REF!", "#VALUE!", "#DIV/0!", "#N/A", "#NAME?", "#NULL!", "#NUM!", "#SPILL!", "#CALC!"}
 
@@ -67,6 +70,23 @@ def _require_openpyxl():
     import openpyxl
 
     return openpyxl
+
+
+def _reject_entities_before_opening(path: Path) -> None:
+    """Scan the zip for a DOCTYPE/ENTITY declaration (Issue #21) before
+    handing the file to openpyxl. Needed because openpyxl only uses its
+    hardened lxml/defusedxml XML parser when one of those packages happens
+    to be importable — this project's own `xlsx` extra pulls in neither,
+    so a `pip install -e ".[xlsx]"`-only install gets zero protection from
+    openpyxl itself; see `security/xml_safety.py`'s module docstring for
+    the full audit this closes. A malformed (non-zip) file is left for the
+    caller's own `openpyxl.load_workbook()` try/except to report as
+    ARTIFACT_XLSX_UNREADABLE, the same as any other corruption.
+    """
+    try:
+        reject_xml_entities_in_zip(path)
+    except zipfile.BadZipFile:
+        pass
 
 
 class XlsxAdapter(ArtifactAdapter):
@@ -160,6 +180,7 @@ class XlsxAdapter(ArtifactAdapter):
     def inspect(self, ref: ArtifactRef) -> InspectionReport:
         check_input_size(ref.path)
         openpyxl = _require_openpyxl()
+        _reject_entities_before_opening(ref.path)
         warnings: list[str] = []
         try:
             wb = openpyxl.load_workbook(str(ref.path), data_only=False)
@@ -180,6 +201,7 @@ class XlsxAdapter(ArtifactAdapter):
         formula_cells = 0
         cached_errors: list[str] = []
         cached_values_seen = False
+        all_text_parts: list[str] = []
 
         for sheet_name in sheet_names:
             ws = wb[sheet_name]
@@ -194,6 +216,8 @@ class XlsxAdapter(ArtifactAdapter):
                                 cached_values_seen = True
                                 if isinstance(cached_value, str) and cached_value.strip() in _ERROR_TOKENS:
                                     cached_errors.append(f"{sheet_name}!{cell.coordinate}: {cached_value}")
+                    elif isinstance(cell.value, str):
+                        all_text_parts.append(cell.value)
 
         external_links = list(getattr(wb, "_external_links", []) or [])
         defined_names = list(wb.defined_names.keys()) if hasattr(wb.defined_names, "keys") else list(wb.defined_names)
@@ -215,6 +239,9 @@ class XlsxAdapter(ArtifactAdapter):
             "external_links": [str(link) for link in external_links],
             "defined_names": defined_names,
             "metadata": metadata,
+            # Same rationale as the other adapters' leftover_markers: the
+            # marker list found, not every cell's text content.
+            "leftover_markers": find_leftover_markers("\n".join(all_text_parts)),
         }
         return InspectionReport(artifact=ref, details=details, warnings=warnings)
 
@@ -264,6 +291,7 @@ class XlsxAdapter(ArtifactAdapter):
                 message=f"XLSX adapter has no operation '{operation}'.",
                 evidence={"operation": operation},
             )
+        _reject_entities_before_opening(ref.path)
         wb = openpyxl.load_workbook(str(ref.path))
         props = wb.properties
         if "title" in args:
@@ -353,6 +381,22 @@ class XlsxAdapter(ArtifactAdapter):
                     status=CheckStatus.PASS if ok else CheckStatus.FAIL,
                     message=f"missing: {sorted(expected_names - actual_names)}" if not ok else "all present.",
                 )
+            )
+
+        leftover_markers = details.get("leftover_markers", [])
+        if leftover_markers:
+            checks.append(
+                Check(
+                    id="leftover_placeholder_text",
+                    name="No leftover generation placeholder text",
+                    status=CheckStatus.FAIL if policy.get("forbid_placeholder_text") else CheckStatus.WARN,
+                    message=f"Found likely-unreviewed placeholder text: {leftover_markers}.",
+                    evidence={"markers": leftover_markers},
+                )
+            )
+        else:
+            checks.append(
+                Check(id="leftover_placeholder_text", name="No leftover generation placeholder text", status=CheckStatus.PASS)
             )
 
         if details["external_links"]:

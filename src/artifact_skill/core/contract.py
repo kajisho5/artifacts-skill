@@ -60,6 +60,12 @@ class ToolContract:
     capabilities: list[str]
     mutates_input: bool
     side_effects: bool
+    # True only when this specific CLI/MCP tool accepts an explicit
+    # dry_run/--dry-run parameter that short-circuits before any I/O
+    # (execute/render/look/receipt). A read-only tool with side_effects=False
+    # (doctor/contract/inspect/plan/verify) reports False here, not True -
+    # there is nothing to preview because it already performs zero I/O, and
+    # none of them expose a --dry-run flag a caller could actually pass.
     dry_run_supported: bool
     verification_policy: dict[str, Any]
     visual_requirement: str
@@ -149,7 +155,7 @@ TOOLS: list[ToolContract] = [
         capabilities=[],
         mutates_input=False,
         side_effects=False,
-        dry_run_supported=True,
+        dry_run_supported=False,
         verification_policy={"structural_required": False, "visual_required": False},
         visual_requirement="not_applicable",
         evidence="capability report (JSON)",
@@ -165,7 +171,7 @@ TOOLS: list[ToolContract] = [
         capabilities=[],
         mutates_input=False,
         side_effects=False,
-        dry_run_supported=True,
+        dry_run_supported=False,
         verification_policy={"structural_required": False, "visual_required": False},
         visual_requirement="not_applicable",
         evidence="contract document (JSON)",
@@ -186,7 +192,7 @@ TOOLS: list[ToolContract] = [
         capabilities=_capability_ids("structural"),
         mutates_input=False,
         side_effects=False,
-        dry_run_supported=True,
+        dry_run_supported=False,
         verification_policy={"structural_required": False, "visual_required": False},
         visual_requirement="not_applicable",
         evidence="inspection report (JSON)",
@@ -213,7 +219,7 @@ TOOLS: list[ToolContract] = [
         capabilities=_capability_ids("structural"),
         mutates_input=False,
         side_effects=False,
-        dry_run_supported=True,
+        dry_run_supported=False,
         verification_policy={"structural_required": False, "visual_required": False},
         visual_requirement="not_applicable",
         evidence="operation plan (JSON)",
@@ -223,7 +229,10 @@ TOOLS: list[ToolContract] = [
         name="execute",
         description="Perform a planned mutating operation, writing only to an explicit output path. "
         "The input file is never overwritten (Original Protection, spec #28). `--dry-run` runs the "
-        "identical plan/validation path but performs no I/O and spawns no subprocess.",
+        "identical plan/validation path but performs no I/O and spawns no subprocess. Also runs "
+        "structural verification against 'policy'/'policy_preset' (default: empty policy, which barely "
+        "gates anything) and writes the result into its own reports/receipt.json - use `receipt` "
+        "instead when you need max_iterations-driven auto-fixing on top of that verification.",
         input_schema={
             "type": "object",
             "properties": {
@@ -231,6 +240,12 @@ TOOLS: list[ToolContract] = [
                 "operation": {"type": "string"},
                 "args": {"type": "object"},
                 "output": {"type": "string"},
+                "policy": {"type": "object"},
+                "policy_preset": {
+                    "type": "string",
+                    "description": "Named starting policy from policies.py (e.g. \"print-a4\", "
+                    "\"web-no-external\"); 'policy' fields override it on conflict. See docs/verification.md.",
+                },
             },
             "required": ["input", "operation"],
             "additionalProperties": False,
@@ -276,10 +291,15 @@ TOOLS: list[ToolContract] = [
     ToolContract(
         name="verify",
         description="Run structural verification against an artifact and an optional policy (e.g. "
-        "required page count/size, forbidden JavaScript, required metadata). Read-only. Visual "
-        "verification evidence (if requested) is produced by `render`/`look` for the caller to judge; "
-        "this command reports PASS/WARN/FAIL/UNKNOWN/NOT_CHECKED/SKIPPED per check, never inventing a "
-        "verdict for something it could not check.",
+        "required page count/size, forbidden JavaScript, required metadata). Read-only, and never "
+        "renders anything itself, so a fact that can only be measured by rendering (e.g. DOCX "
+        "page_count, which has no fixed pagination in the XML) stays honestly UNKNOWN here even when "
+        "`execute`/`receipt` would report it as a real, measured PASS (their lifecycle already renders "
+        "for visual evidence, and reuses that render for exactly this) - use `receipt` (or `render` "
+        "then `verify`) instead of bare `verify` if you need that fact measured. Visual verification "
+        "evidence (if requested) is produced by `render`/`look` for the caller to judge; this command "
+        "reports PASS/WARN/FAIL/UNKNOWN/NOT_CHECKED/SKIPPED per check, never inventing a verdict for "
+        "something it could not check.",
         input_schema={
             "type": "object",
             "properties": {
@@ -299,7 +319,7 @@ TOOLS: list[ToolContract] = [
         capabilities=_capability_ids("structural"),
         mutates_input=False,
         side_effects=False,
-        dry_run_supported=True,
+        dry_run_supported=False,
         verification_policy={"structural_required": True, "visual_required": False},
         visual_requirement="not_included_use_render_and_look",
         evidence="verification result (JSON)",
@@ -335,8 +355,11 @@ TOOLS: list[ToolContract] = [
     ToolContract(
         name="receipt",
         description="Run the full lifecycle (inspect -> plan -> execute -> render -> structural verify "
-        "-> [fix loop] -> receipt) for one operation, or assemble a receipt from an already-produced "
-        "evidence directory, and emit a Production Receipt (schema artifact-receipt/v1).",
+        "-> [fix loop] -> receipt) for one mutating operation and emit a Production Receipt (schema "
+        "artifact-receipt/v1). 'operation' is optional: omit it for a verify-only receipt (inspect -> "
+        "render -> structural verify -> receipt, no mutation, no fix loop) - the only way to get a "
+        "Production Receipt for a format with zero mutating operations (HTML, SVG). 'output' is invalid "
+        "without 'operation' (nothing is written without a mutation).",
         input_schema={
             "type": "object",
             "properties": {
@@ -350,9 +373,14 @@ TOOLS: list[ToolContract] = [
                     "description": "Named starting policy from policies.py (e.g. \"print-a4\", "
                     "\"web-no-external\"); 'policy' fields override it on conflict. See docs/verification.md.",
                 },
-                "max_iterations": {"type": "integer", "minimum": 1, "maximum": 10},
+                "max_iterations": {
+                    "type": "integer", "minimum": 1, "maximum": 10,
+                    "description": "Fix-loop retry cap. Default (when omitted): Limits.max_fix_iterations "
+                    "(currently 3) - omitting this does NOT mean 'don't retry.' Meaningless without "
+                    "'operation' (there is no fix loop for a verify-only receipt).",
+                },
             },
-            "required": ["input", "operation"],
+            "required": ["input"],
             "additionalProperties": False,
         },
         output_schema={"type": "object", "properties": {"schema": {"type": "string"}, "status": {"type": "string"}}},

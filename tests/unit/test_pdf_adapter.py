@@ -75,6 +75,30 @@ def test_verify_blank_page_pdf_fails_under_strict_policy(blank_page_pdf, adapter
     assert check.status == CheckStatus.FAIL
 
 
+def test_verify_good_pdf_has_no_leftover_placeholder_text(good_pdf, adapter):
+    ref = ArtifactRef.from_path(good_pdf)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.PASS
+
+
+def test_verify_leftover_placeholder_pdf_warns_by_default(leftover_placeholder_pdf, adapter):
+    ref = ArtifactRef.from_path(leftover_placeholder_pdf)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.WARN
+    assert "click to add" in check.evidence["markers"]
+    assert "lorem ipsum" in check.evidence["markers"]
+    assert "todo" in check.evidence["markers"]
+
+
+def test_verify_leftover_placeholder_pdf_fails_under_strict_policy(leftover_placeholder_pdf, adapter):
+    ref = ArtifactRef.from_path(leftover_placeholder_pdf)
+    result = adapter.verify_structural(ref, {"forbid_placeholder_text": True})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.FAIL
+
+
 def test_verify_encrypted_pdf_warns_by_default(encrypted_pdf, adapter):
     ref = ArtifactRef.from_path(encrypted_pdf)
     result = adapter.verify_structural(ref, {})

@@ -52,20 +52,36 @@ PROTOCOL_VERSION = "2024-11-05"
 
 _VERSION_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
+# The last handshake-based ("legacy") revision per the spec's own versioning
+# page (modelcontextprotocol.io/specification/versioning, checked directly):
+# "handshake-based protocol revisions (2025-11-25 and earlier)". 2026-07-28
+# replaced the initialize handshake with per-request version metadata and
+# server/discover, a protocol shape this server does not implement (see the
+# module docstring). YYYY-MM-DD sorts lexicographically, so a plain string
+# comparison against this cutoff is a correct chronological check.
+_LAST_LEGACY_VERSION = "2025-11-25"
+
 
 def _negotiate_protocol_version(requested: Any) -> str:
-    """Echo back the client's requested legacy protocol version if it looks
-    like a real one, rather than always claiming this server's own default
-    regardless of what was asked (the bug this closes: initialize() used to
-    ignore `params` entirely). This server's implemented method surface
+    """Echo back the client's requested protocol version only if it is a
+    legacy (handshake-era) version this server could honestly claim to
+    speak, rather than always claiming this server's own default regardless
+    of what was asked (the bug Issue #12 closed: initialize() used to
+    ignore `params` entirely) - or, just as wrong, echoing back ANY
+    date-shaped string including 2026-07-28+, which replaced the
+    initialize handshake with server/discover and per-request version
+    metadata this server does not implement (a bug in the first fix for
+    Issue #12: matching only the date *shape* let a modern client be told
+    "yes, let's talk 2026-07-28" by a server that cannot actually do
+    server/discover). This server's implemented method surface
     (`initialize`/`tools/list`/`tools/call`/`ping`) hasn't changed shape
     across the legacy protocol era, so it can honestly speak whatever
-    legacy `YYYY-MM-DD` version the client names — there's nothing
-    version-gated here to actually be incompatible about. Falls back to
-    `PROTOCOL_VERSION` when the client didn't send one, or sent something
-    that isn't a plausible date-string version identifier.
+    legacy `YYYY-MM-DD` version the client names, up to and including
+    `_LAST_LEGACY_VERSION`. Falls back to `PROTOCOL_VERSION` when the
+    client didn't send one, sent something that isn't a plausible
+    date-string version identifier, or asked for a post-legacy version.
     """
-    if isinstance(requested, str) and _VERSION_RE.match(requested):
+    if isinstance(requested, str) and _VERSION_RE.match(requested) and requested <= _LAST_LEGACY_VERSION:
         return requested
     return PROTOCOL_VERSION
 
@@ -154,7 +170,10 @@ def _h_execute(args: dict[str, Any]) -> dict[str, Any]:
     operation = args["operation"]
     output_path = Path(args["output"]) if args.get("output") else default_output_path(input_path, operation)
     evidence_dir = output_path.parent / "reports"
-    result = run_lifecycle(input_path, operation, args.get("args", {}), output_path, evidence_dir=evidence_dir)
+    policy = _resolve_policy_arg(args)
+    result = run_lifecycle(
+        input_path, operation, args.get("args", {}), output_path, policy=policy, evidence_dir=evidence_dir
+    )
     return {
         "output": result.output.to_dict() if result.output else None,
         "receipt": result.receipt.to_dict() if result.receipt else None,
@@ -192,14 +211,22 @@ def _h_look(args: dict[str, Any]) -> dict[str, Any]:
 
 def _h_receipt(args: dict[str, Any]) -> dict[str, Any]:
     input_path = Path(args["input"])
-    operation = args["operation"]
-    output_path = Path(args["output"]) if args.get("output") else default_output_path(input_path, operation)
+    operation = args.get("operation")
+    if operation is None:
+        if args.get("output"):
+            raise ArtifactInputError(
+                code="ARTIFACT_INVALID_ARGS",
+                message="'output' requires 'operation' (nothing is written without a mutation).",
+            )
+        output_path = None
+    else:
+        output_path = Path(args["output"]) if args.get("output") else default_output_path(input_path, operation)
     evidence_dir = Path(args.get("evidence_dir", "reports"))
     policy = _resolve_policy_arg(args)
     result = run_lifecycle(
         input_path, operation, args.get("args", {}), output_path,
         policy=policy, evidence_dir=evidence_dir,
-        max_iterations=args.get("max_iterations", 1),
+        max_iterations=args.get("max_iterations"),
     )
     return result.receipt.to_dict() if result.receipt else {"status": "fail", "error": "execution did not complete"}
 

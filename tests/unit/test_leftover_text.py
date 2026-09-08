@@ -26,9 +26,52 @@ def test_empty_string_finds_nothing():
     assert find_leftover_markers("") == []
 
 
-def test_every_marker_is_lowercase_already():
-    # find_leftover_markers relies on comparing against a lowercased haystack;
-    # a marker that isn't already lowercase would never match case-sensitively
-    # written source text using the marker's own casing.
-    for m in MARKERS:
-        assert m == m.lower()
+def test_every_marker_label_is_lowercase_already():
+    # find_leftover_markers matches case-insensitively regardless, but a
+    # marker that isn't already lowercase in its own definition would be
+    # confusing to read as "the" canonical spelling.
+    for marker, _word_boundary in MARKERS:
+        assert marker == marker.lower()
+
+
+def test_short_token_does_not_false_positive_inside_a_longer_word():
+    """Regression guard: an earlier version used a raw substring check
+    (`m in lower`), so "todo" matched inside "Todolist"/"todos"/a variable
+    named TodoItem. Bare short tokens are now matched at word boundaries."""
+    assert find_leftover_markers("Add this to the Todolist app before Friday.") == []
+    assert find_leftover_markers("All todos are tracked in the issue queue.") == []
+    assert find_leftover_markers("class TodoItemFixture: pass") == []
+
+
+def test_short_token_still_matches_as_its_own_word():
+    assert find_leftover_markers("TODO: fill this in.") == ["todo"]
+    assert find_leftover_markers("# FIXME - broken on Windows") == ["fixme"]
+
+
+def test_xxxx_marker_matches_three_or_more_x_variants():
+    """Regression guard: the previous marker was the literal string
+    "xxxx" (exactly 4 x's), so a document filled with "xxx" (3, at least
+    as common a filler convention) or "xxxxx" (5) was missed entirely."""
+    assert find_leftover_markers("Client: XXX") == ["xxxx"]
+    assert find_leftover_markers("Client: xxxxx") == ["xxxx"]
+    assert find_leftover_markers("Client: xxxx") == ["xxxx"]
+
+
+def test_finds_loremipsum_with_no_space():
+    assert find_leftover_markers("loremipsum.io generated this block") == ["loremipsum"]
+
+
+def test_finds_bracketed_placeholder():
+    assert find_leftover_markers("Name: [placeholder]") == ["[placeholder]"]
+
+
+def test_finds_japanese_placeholder_phrases():
+    assert find_leftover_markers("ここに入力してください") == ["ここに入力"]
+    assert find_leftover_markers("タイトルを入力してください。") == ["タイトルを入力してください"]
+    assert find_leftover_markers("これはダミーテキストです。") == ["ダミーテキスト"]
+    assert find_leftover_markers("サンプルテキストを挿入") == ["サンプルテキスト"]
+    assert find_leftover_markers("仮のテキストです") == ["仮のテキスト"]
+
+
+def test_clean_japanese_text_finds_nothing():
+    assert find_leftover_markers("第3四半期の売上は前年比12%増加しました。") == []

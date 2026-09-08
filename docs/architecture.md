@@ -72,9 +72,14 @@ match.
 | `engine.py` | `run_lifecycle()` — the inspect→plan→execute→render→verify→fix loop |
 
 Core never imports a format-specific library (no `import pypdf` outside
-`adapters/pdf/`). This is enforced by convention today; a lint rule that
-greps for it is a natural Phase-2 addition once there is a second adapter
-to check the rule against.
+`adapters/pdf/`). This is still enforced by convention only, not by a
+lint rule — CI runs `ruff`/`mypy` (Issue #13) but neither has a
+project-specific rule for this particular invariant configured. Seven
+adapters now exist to check the rule against, so "once there is a second
+adapter" (this sentence's original framing) is long past; a static check
+(`ruff`'s `TID251` banned-api rule, or a small custom AST grep in CI)
+remains a real, not-yet-done addition, not something the current ruff/
+mypy step already covers for free.
 
 ## Adapters (`src/artifact_skill/adapters/`)
 
@@ -126,6 +131,17 @@ serves local-first better than shelling out to Poppler.
 
 `run_lifecycle()` implements: inspect → plan → execute → render →
 structural verify → visual evidence → fix (bounded retries) → receipt.
+
+`operation` is optional (Issue #18): passing `None` takes a separate,
+shorter branch — inspect → render → structural verify → receipt, with no
+`execute()` call and no fix loop (there is no operation to retry). This is
+the only route to a real Production Receipt for a format with zero
+mutating operations (HTML, SVG currently) — before this, the flagship
+`receipt` command was unusable for those two formats entirely, and an
+agent had to hand-assemble evidence from separate `inspect`/`render`/
+`verify` calls. `_run_verify_only_lifecycle()` is a small, separate
+function rather than a branch threaded through the main loop, so the
+mutating path's structure (and its tests) are untouched by this addition.
 
 Two things are deliberately *not* automated:
 

@@ -21,11 +21,13 @@ from urllib.parse import urlparse
 from artifact_skill.adapters.base import ArtifactAdapter, OperationSpec, RenderResult
 from artifact_skill.core.artifact import ArtifactRef, ArtifactType, InspectionReport
 from artifact_skill.core.capability import Capability, CapabilityStatus
-from artifact_skill.core.errors import ArtifactInputError, ArtifactSecurityError
+from artifact_skill.core.errors import ArtifactInputError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
+from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.chromium_render import render_local_file
 from artifact_skill.security.paths import check_input_size
+from artifact_skill.security.xml_safety import reject_xml_entities_in_file
 
 _XLINK_NS = "{http://www.w3.org/1999/xlink}href"
 _REFERENCING_TAGS = {"image", "use", "script"}
@@ -33,27 +35,6 @@ _REFERENCING_TAGS = {"image", "use", "script"}
 
 def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1] if "}" in tag else tag
-
-
-def _reject_xml_entities(path: Path) -> None:
-    """SVG is XML, and `xml.etree.ElementTree` (like most `expat`-based
-    parsers) is not hardened against entity-expansion DoS ("billion
-    laughs") — a tiny file can decompress to gigabytes in memory before
-    parsing ever completes, which `security/limits.py`'s file-size cap
-    alone doesn't prevent. Legitimate SVGs essentially never declare
-    custom DTD entities, so this project's mitigation is the same shape
-    as its zip-bomb defense in `security/paths.py`: refuse outright rather
-    than attempt to parse and hope expat's own limits save it.
-    """
-    head = path.read_bytes()[:65536]
-    if b"<!ENTITY" in head or (b"<!DOCTYPE" in head and b"[" in head.split(b"<!DOCTYPE", 1)[1][:2048]):
-        raise ArtifactSecurityError(
-            code="ARTIFACT_XML_ENTITY_DECLARATION_REJECTED",
-            message=f"'{path}' declares a DOCTYPE/ENTITY, which this adapter refuses to parse "
-            "(entity-expansion DoS risk).",
-            remediation="Remove the DOCTYPE/ENTITY declaration. Legitimate SVG files do not need one.",
-            evidence={"path": str(path)},
-        )
 
 
 def _classify_resource(url: str) -> str:
@@ -121,10 +102,10 @@ class SvgAdapter(ArtifactAdapter):
 
     def inspect(self, ref: ArtifactRef) -> InspectionReport:
         check_input_size(ref.path)
-        _reject_xml_entities(ref.path)
+        reject_xml_entities_in_file(ref.path)
         warnings: list[str] = []
         try:
-            tree = ET.parse(ref.path)  # noqa: S314 - _reject_xml_entities() above already rejects DOCTYPE/entity payloads
+            tree = ET.parse(ref.path)  # noqa: S314 - reject_xml_entities_in_file() above already rejects DOCTYPE/entity payloads
         except ET.ParseError as exc:
             raise ArtifactInputError(
                 code="ARTIFACT_SVG_UNREADABLE",
@@ -170,6 +151,8 @@ class SvgAdapter(ArtifactAdapter):
                 else:
                     local_missing.append(url)
 
+        text_parts = [elem.text for elem in root.iter() if _local_name(elem.tag) in ("text", "tspan") and elem.text]
+
         details = {
             "width": width,
             "height": height,
@@ -179,6 +162,9 @@ class SvgAdapter(ArtifactAdapter):
             "local_resources_present": local_present,
             "local_resources_missing": local_missing,
             "size_bytes": ref.size_bytes,
+            # Same rationale as the other adapters' leftover_markers: the
+            # marker list found, not every <text>/<tspan>'s full content.
+            "leftover_markers": find_leftover_markers("\n".join(text_parts)),
         }
         return InspectionReport(artifact=ref, details=details, warnings=warnings)
 
@@ -204,7 +190,7 @@ class SvgAdapter(ArtifactAdapter):
 
     def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
         check_input_size(ref.path)
-        _reject_xml_entities(ref.path)
+        reject_xml_entities_in_file(ref.path)
         # full_page=False: see rendering/chromium_render.py's docstring —
         # a standalone SVG document hangs Playwright's full-page screenshot.
         out_path = render_local_file(
@@ -264,5 +250,21 @@ class SvgAdapter(ArtifactAdapter):
             )
         else:
             checks.append(Check(id="external_resources", name="No external resource references", status=CheckStatus.PASS))
+
+        leftover_markers = details.get("leftover_markers", [])
+        if leftover_markers:
+            checks.append(
+                Check(
+                    id="leftover_placeholder_text",
+                    name="No leftover generation placeholder text",
+                    status=CheckStatus.FAIL if policy.get("forbid_placeholder_text") else CheckStatus.WARN,
+                    message=f"Found likely-unreviewed placeholder text: {leftover_markers}.",
+                    evidence={"markers": leftover_markers},
+                )
+            )
+        else:
+            checks.append(
+                Check(id="leftover_placeholder_text", name="No leftover generation placeholder text", status=CheckStatus.PASS)
+            )
 
         return VerificationResult(kind="structural", checks=checks)

@@ -16,11 +16,12 @@ python -m pytest tests/benchmark/ -q       # the same cases, as CI runs them
 Whatever those commands print *right now* is the real number — this
 document deliberately doesn't restate a specific percentage as a
 permanent claim, since the corpus and adapters both keep changing. As of
-the commit that added the leftover-placeholder-text detection cases
-(Issue #14): 26/26 known-broken fixtures correctly flagged, 11/11
-known-good fixtures verify cleanly with no false positive, and 7/7
-mislabeled-extension fixtures correctly type-detected by content. Re-run
-the commands above rather than trusting that this sentence has kept up.
+the commit that added `xlsx/entity_bomb.xlsx` (Issue #21's XML
+entity-expansion audit and fix for openpyxl): 31/31 known-broken fixtures
+correctly flagged, 11/11 known-good fixtures verify cleanly with no false
+positive, and 7/7 mislabeled-extension fixtures correctly type-detected by
+content. Re-run the commands above rather than trusting that this
+sentence has kept up.
 
 ## What it covers, and why the case table has five categories, not two
 

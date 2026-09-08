@@ -70,6 +70,69 @@ def test_execute_then_verify_pass(good_pdf, tmp_path):
     assert check_by_id["font_embedding"]["status"] == "pass"
 
 
+def test_execute_gates_its_own_receipt_with_an_explicit_policy(good_pdf, tmp_path):
+    """Regression guard: execute() used to always verify against an empty
+    policy regardless of what the caller wanted, silently ignoring the
+    fact that a bad execute could be reported as a clean receipt.json.
+    A policy this input can't satisfy must now show up as a FAIL in
+    execute's own reports/receipt.json, not just a subsequent `verify`
+    call the caller has to remember to make."""
+    proc = run_cli(
+        ["execute", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}',
+         "--output", "out.pdf", "--policy", '{"require_page_count": 999}', "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 1
+    data = json.loads(proc.stdout)
+    check_by_id = {c["id"]: c for c in data["receipt"]["verification"]["structural"]["checks"]}
+    assert check_by_id["page_count_requirement"]["status"] == "fail"
+    assert data["receipt"]["status"] == "fail"
+
+
+def test_execute_accepts_policy_preset(good_pdf, tmp_path):
+    proc = run_cli(
+        ["execute", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}',
+         "--output", "out.pdf", "--policy-preset", "print-a4", "--json"],
+        cwd=tmp_path,
+    )
+    data = json.loads(proc.stdout)
+    check_by_id = {c["id"]: c for c in data["receipt"]["verification"]["structural"]["checks"]}
+    # good_2page.pdf is US Letter, not A4 - print-a4's page-size requirement must fail.
+    assert check_by_id["page_size_requirement"]["status"] == "fail"
+
+
+def test_print_a4_preset_fails_leftover_placeholder_text_not_just_warns(leftover_placeholder_pdf, tmp_path):
+    """Regression guard for an external review's specific claim: none of
+    the original policy presets set forbid_placeholder_text, so a Lorem-
+    ipsum-filled PDF verified against `print-a4` would only ever WARN
+    (exit 0) on its leftover text, never actually block on it. The preset
+    must FAIL the leftover_placeholder_text check specifically, not just
+    fail overall for an unrelated reason like page size."""
+    proc = run_cli(["verify", str(leftover_placeholder_pdf), "--policy-preset", "print-a4", "--json"], cwd=tmp_path)
+    data = json.loads(proc.stdout)
+    check_by_id = {c["id"]: c for c in data["checks"]}
+    assert check_by_id["leftover_placeholder_text"]["status"] == "fail"
+    assert proc.returncode == 1
+
+
+def test_spreadsheet_preset_shows_unknown_not_pass_on_a_clean_workbook_with_a_formula(good_xlsx, tmp_path):
+    """Issue #19: the honest, documented behavior this preset was renamed
+    over (spreadsheet-no-errors -> spreadsheet-no-cached-errors) - a
+    workbook with zero cached errors, zero external links, zero leftover
+    text still reports overall UNKNOWN (not PASS) the moment it contains
+    any formula, since formula_recalculation is UNKNOWN-by-design and
+    UNKNOWN outranks PASS in aggregation. Confirms this is really what
+    the CLI returns end to end, not just at the adapter level."""
+    proc = run_cli(
+        ["verify", str(good_xlsx), "--policy-preset", "spreadsheet-no-cached-errors", "--json"], cwd=tmp_path
+    )
+    data = json.loads(proc.stdout)
+    check_by_id = {c["id"]: c for c in data["checks"]}
+    assert check_by_id["formula_cached_errors"]["status"] == "pass"
+    assert check_by_id["formula_recalculation"]["status"] == "unknown"
+    assert data["status"] == "unknown"
+
+
 def test_verify_fail_gives_nonzero_exit(empty_pdf, tmp_path):
     proc = run_cli(["verify", str(empty_pdf), "--json"], cwd=tmp_path)
     assert proc.returncode == 1
@@ -326,6 +389,37 @@ def test_html_has_no_mutating_operations(good_html, tmp_path):
     assert proc.returncode == 2  # ArtifactInputError -> input category
     data = json.loads(proc.stdout)
     assert data["error"]["code"] == "ARTIFACT_OPERATION_UNKNOWN"
+
+
+def test_html_receipt_without_operation_gives_a_real_verify_only_receipt(good_html, tmp_path):
+    """Issue #18: HTML has zero mutating operations, so before this feature
+    `artifact-skill receipt page.html` had no way to succeed at all - an
+    agent had to hand-assemble inspect/render/verify calls instead of using
+    this project's own flagship 'get a Production Receipt' command."""
+    proc = run_cli(["receipt", str(good_html), "--json"], cwd=tmp_path)
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["status"] == "pass"
+    assert data["operations"] == []
+    assert (tmp_path / "reports" / "receipt.json").exists()
+
+
+def test_receipt_without_operation_rejects_output(good_html, tmp_path):
+    proc = run_cli(["receipt", str(good_html), "--output", "out.html", "--json"], cwd=tmp_path)
+    assert proc.returncode != 0
+    assert "requires --operation" in proc.stderr
+
+
+def test_pdf_receipt_without_operation_still_gates_on_policy(leftover_placeholder_pdf, tmp_path):
+    """A verify-only receipt goes through the same structural verify -
+    including policy - as the mutating path, not a weaker check."""
+    proc = run_cli(
+        ["receipt", str(leftover_placeholder_pdf), "--policy-preset", "print-a4", "--json"], cwd=tmp_path
+    )
+    data = json.loads(proc.stdout)
+    check_by_id = {c["id"]: c for c in data["verification"]["structural"]["checks"]}
+    assert check_by_id["leftover_placeholder_text"]["status"] == "fail"
+    assert proc.returncode == 1
 
 
 def test_svg_doctor_reports_structural_always_available(tmp_path):

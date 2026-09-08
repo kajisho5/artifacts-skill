@@ -100,21 +100,73 @@ policy below in an actively-enforced way, not just a documented one.
 - **`check_input_size`** — rejects an input file above
   `Limits.max_input_bytes` (default 500 MB) before any adapter opens it.
 
-## XML entity expansion — SVG adapter
+## XML entity expansion — `security/xml_safety.py` (Issue #21)
 
-SVG is XML, and `xml.etree.ElementTree` (like most `expat`-based parsers)
-is not hardened against entity-expansion DoS ("billion laughs"): a few
-bytes of nested `<!ENTITY>` definitions can expand to gigabytes in memory
-*during parsing*, before the existing `check_input_size` file-size cap
-gets a chance to matter. `adapters/svg/adapter.py`'s
-`_reject_xml_entities()` reads the first 64 KB of the file and refuses to
-parse anything that declares a `<!ENTITY` or a `<!DOCTYPE` with an
-internal subset (`[...]`), raising `ARTIFACT_XML_ENTITY_DECLARATION_REJECTED`
-before the file ever reaches `ElementTree` or Chromium. This runs at the
-start of both `inspect()` and `render()` — a rendered SVG goes through
-Chromium's own XML parser, so the same file must be rejected before either
-path. Legitimate SVG files have no legitimate use for a DOCTYPE/ENTITY
-declaration, so this is a hard rejection, not a size-limited allowance.
+XML is XML regardless of what format wraps it, and `xml.etree.ElementTree`
+(like most `expat`-based parsers) is not hardened against entity-expansion
+DoS ("billion laughs") by default: a few bytes of nested `<!ENTITY>`
+definitions can expand to gigabytes in memory *during parsing*, before the
+existing `check_input_size` file-size cap gets a chance to matter.
+
+`security/xml_safety.py::reject_xml_entity_declaration()` reads the first
+64 KB of a document and refuses to parse anything that declares a
+`<!ENTITY` or a `<!DOCTYPE` with an internal subset (`[...]`), raising
+`ARTIFACT_XML_ENTITY_DECLARATION_REJECTED` before the file ever reaches
+`ElementTree`, lxml, or Chromium. Legitimate documents have no legitimate
+use for a DOCTYPE/ENTITY declaration, so this is a hard rejection, not a
+size-limited allowance. Two callers:
+
+- **`reject_xml_entities_in_file()`** — a single on-disk XML file. Used by
+  the SVG adapter (originally the only caller, before this module was
+  generalized out of `adapters/svg/adapter.py`) at the start of both
+  `inspect()` and `render()` — a rendered SVG goes through Chromium's own
+  XML parser too, so the same file must be rejected before either path.
+- **`reject_xml_entities_in_zip()`** — every `.xml` member of an OOXML zip
+  (`.pptx`/`.docx`/`.xlsx`), scanned before the format-specific library
+  opens the file at all.
+
+**Why the zip variant exists — an actual audit, not a hypothetical.**
+Tracker issue #2 had left open, since the first external review pass,
+whether PPTX/DOCX/XLSX's internal XML parsing (python-pptx/python-docx/
+openpyxl) shares this exposure. Checked directly, not assumed:
+
+- **python-pptx and python-docx: not exposed.** Both explicitly construct
+  their `lxml.etree.XMLParser` with `resolve_entities=False` at every XML
+  entry point (`pptx/oxml/__init__.py`, `docx/oxml/parser.py`,
+  `docx/opc/oxml.py`) — confirmed by reading their installed source *and*
+  by round-tripping a crafted `.pptx`/`.docx` with a DOCTYPE-declared
+  entity through `Presentation()`/`Document()`: the entity was dropped
+  from the extracted text entirely, neither resolved nor left as literal
+  text. `reject_xml_entities_in_zip()` is still wired into
+  `XlsxAdapter.inspect()`/`execute()` alone, not PPTX/DOCX's — adding it
+  there too would be a guard against a risk direct testing didn't find,
+  which this project's own "don't validate for scenarios that can't
+  happen" stance argues against.
+- **openpyxl: exposed, confirmed by direct testing.** `openpyxl.xml.
+  functions` only swaps in a hardened parser (`lxml` with
+  `resolve_entities=False`, or `defusedxml`) when one of those packages
+  happens to be importable — and this project's own `xlsx` extra
+  (`pyproject.toml`) pulls in neither. A `pip install -e ".[xlsx]"`-only
+  install — a real, documented, minimal install path — gets *zero*
+  entity-expansion protection from openpyxl by default. Verified
+  exploitable: a crafted `xl/worksheets/sheet1.xml` with a DOCTYPE-declared
+  entity had its value substituted directly into a cell
+  (`ws["A1"].value == "PWNED_VALUE"`), and a small nested-entity chain
+  amplified exactly as the classic "billion laughs" pattern predicts. A
+  `SYSTEM "file://..."` external entity was *not* resolved (expat's
+  default posture doesn't fetch external entities), so this is a DoS/
+  data-integrity risk, not full XXE file disclosure. Fixed:
+  `XlsxAdapter.inspect()`/`execute()` both call
+  `reject_xml_entities_in_zip()` before `openpyxl.load_workbook()` —
+  `tests/fixtures/xlsx/entity_bomb.xlsx` and
+  `tests/security/test_xml_safety.py` cover it, along with a direct
+  adapter-level regression test.
+
+The fix operates below the format-specific library entirely (a zip-level
+pre-scan) rather than trying to reconfigure or monkeypatch openpyxl's
+internal parser choice — that would be a fragile dependency on its exact
+import structure, liable to silently stop protecting anything on a future
+openpyxl version bump.
 
 ## Resource limits — `security/limits.py`
 

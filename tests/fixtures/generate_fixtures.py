@@ -72,6 +72,20 @@ def make_blank_page_pdf() -> None:
     c.save()
 
 
+def make_leftover_placeholder_pdf() -> None:
+    """A generated-looking PDF that still has unreviewed placeholder text -
+    leftover_placeholder_text must WARN (or FAIL under
+    forbid_placeholder_text), the PDF equivalent of the same fixture
+    already built for DOCX/PPTX/HTML."""
+    path = PDF_OUT_DIR / "leftover_placeholder.pdf"
+    c = canvas.Canvas(str(path), pagesize=letter)
+    c.drawString(100, 700, "Click to add title")
+    c.drawString(100, 680, "Lorem ipsum dolor sit amet, consectetur adipiscing elit.")
+    c.drawString(100, 660, "TODO: write the real conclusion here.")
+    c.showPage()
+    c.save()
+
+
 def make_empty_0page() -> None:
     path = PDF_OUT_DIR / "empty_0page.pdf"
     writer = pypdf.PdfWriter()
@@ -315,6 +329,47 @@ def make_no_formula_xlsx() -> None:
     wb.save(str(path))
 
 
+def make_entity_bomb_xlsx() -> None:
+    """A DOCTYPE declaring a custom entity, injected into the worksheet
+    XML part — not an actual expansion bomb (a real one would be
+    unpleasant to keep in a test fixture directory), just enough to prove
+    security/xml_safety.py's reject_xml_entities_in_zip() catches the
+    pattern before openpyxl ever opens the file (Issue #21: confirmed by
+    direct testing that openpyxl's worksheet reader resolves and amplifies
+    exactly this shape when nothing intercepts it first)."""
+    path = XLSX_OUT_DIR / "entity_bomb.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws["A1"] = "hello"
+    wb.save(str(path))
+    with zipfile.ZipFile(path, "r") as zf:
+        items = {name: zf.read(name) for name in zf.namelist()}
+    sheet_xml = items["xl/worksheets/sheet1.xml"].decode("utf-8")
+    injected = sheet_xml.replace(
+        "<worksheet ",
+        '<!DOCTYPE worksheet [<!ENTITY xxe "PWNED">]>\n<worksheet ',
+        1,
+    )
+    items["xl/worksheets/sheet1.xml"] = injected.encode("utf-8")
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, data in items.items():
+            zf.writestr(name, data)
+
+
+def make_leftover_placeholder_xlsx() -> None:
+    """A cell still holds unreviewed placeholder text - leftover_placeholder_text
+    must WARN (or FAIL under forbid_placeholder_text), the XLSX equivalent
+    of the same fixture already built for DOCX/PPTX/HTML/PDF."""
+    path = XLSX_OUT_DIR / "leftover_placeholder.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws["A1"] = "Click to add title"
+    ws["A2"] = "TODO: fill in real Q3 numbers"
+    ws["A3"] = "Lorem ipsum dolor sit amet"
+    wb.save(str(path))
+
+
 def make_external_link_xlsx() -> None:
     """A workbook with a real `<externalReferences>` part pointing at
     another workbook file — must produce a non-empty `external_links` in
@@ -502,6 +557,21 @@ def make_good_svg() -> None:
     )
 
 
+def make_leftover_placeholder_svg() -> None:
+    """A <text> element still holds unreviewed placeholder text -
+    leftover_placeholder_text must WARN (or FAIL under
+    forbid_placeholder_text), the SVG equivalent of the same fixture
+    already built for DOCX/PPTX/HTML/PDF/XLSX."""
+    path = SVG_OUT_DIR / "leftover_placeholder.svg"
+    path.write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">'
+        '<text x="10" y="20">Click to add title</text>'
+        '<text x="10" y="40">Lorem ipsum dolor sit amet</text>'
+        '<text x="10" y="60">TODO: replace with real copy</text>'
+        "</svg>\n"
+    )
+
+
 def make_missing_local_resource_svg() -> None:
     path = SVG_OUT_DIR / "missing_local_resource.svg"
     path.write_text(
@@ -556,6 +626,7 @@ if __name__ == "__main__":
 
     make_good_2page()
     make_blank_page_pdf()
+    make_leftover_placeholder_pdf()
     make_empty_0page()
     make_encrypted()
     make_corrupt_pdf()
@@ -582,7 +653,9 @@ if __name__ == "__main__":
     make_good_xlsx()
     make_formula_error_xlsx()
     make_no_formula_xlsx()
+    make_leftover_placeholder_xlsx()
     make_external_link_xlsx()
+    make_entity_bomb_xlsx()
     make_corrupt_xlsx()
     make_mislabeled_pdf_as_xlsx()
 
@@ -603,6 +676,7 @@ if __name__ == "__main__":
     make_good_svg()
     make_missing_local_resource_svg()
     make_external_resource_svg()
+    make_leftover_placeholder_svg()
     make_no_size_svg()
     make_malformed_svg()
     make_entity_bomb_svg()

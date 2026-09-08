@@ -126,6 +126,16 @@ agent reading the error can tell "we haven't built this yet" apart from
   heuristic that can false-positive on intentionally blank section-header
   slides; embedded font completeness not checked; rendering depends on an
   external, sometimes-unreliable LibreOffice install.
+- **If `strip_placeholders` starts silently doing nothing (or breaking) on
+  a future python-pptx upgrade**: `shape._element.getparent().remove(shape._element)`
+  reaches into python-pptx's internal `lxml` element tree because there is
+  no public shape-removal API to call instead. This is a private-API risk
+  by construction, not an oversight — if a python-pptx release changes how
+  placeholder shapes are represented internally, the fix is to re-derive
+  the removal call against that version's actual `_element`/`getparent()`
+  shape (start from `tests/unit/test_pptx_adapter.py`'s
+  `test_execute_strip_placeholders_removes_empty_ones` — a failure there
+  is the signal), not to silently pin an old python-pptx version.
 
 ## Implemented: DOCX (`adapters/docx/adapter.py`)
 
@@ -174,8 +184,18 @@ agent reading the error can tell "we haven't built this yet" apart from
 - **Structural checks**: XLSX readability, sheet count (+ optional exact/
   range requirement, optional required-sheet-names check), external
   workbook links (`WARN` by default — not fetched, per `docs/security.md`'s
-  network-off-by-default policy), `formula_cached_errors`, and
+  network-off-by-default policy), leftover generation-artifact text across
+  every cell's string value (`leftover_placeholder_text`, `WARN` by
+  default, `FAIL` under `forbid_placeholder_text` — shared
+  `leftover_text.py` marker list), `formula_cached_errors`, and
   `formula_recalculation`.
+- **XML entity-expansion guard (Issue #21)**: unlike python-pptx/
+  python-docx, `openpyxl` only hardens its XML parsing when `lxml` or
+  `defusedxml` happens to be importable — neither of which this project's
+  own `xlsx` extra installs. `inspect()`/`execute()` both call
+  `security/xml_safety.py::reject_xml_entities_in_zip()` before
+  `openpyxl.load_workbook()` ever runs; see `docs/security.md` for the
+  full audit (including why PPTX/DOCX did *not* need the same guard).
 - **The recalculation decision (Issue #5)**: `openpyxl` cannot evaluate
   formulas — it can only read whatever cached result (if any) the last
   application to save the file computed. This adapter deliberately does
@@ -256,7 +276,9 @@ agent reading the error can tell "we haven't built this yet" apart from
   property-set operation this Skill should own. `operations()` returns
   `{}`, and `plan()`/`execute()` both raise a clear `ARTIFACT_OPERATION_
   UNKNOWN` for any operation name — `inspect`/`render`/`verify`/`look`
-  still work normally.
+  still work normally, and so does `receipt` with no `--operation`
+  (Issue #18's verify-only lifecycle path) — this is the one adapter type
+  that path was specifically built for.
 - **Structural checks**: readability (valid UTF-8 + parses), `<title>`
   presence (only checked when `policy.require_title` is set — a missing
   title isn't inherently wrong), local resource references that don't
@@ -295,7 +317,8 @@ agent reading the error can tell "we haven't built this yet" apart from
   second adapter needed it, the same pattern as `office_convert.py` for
   PPTX/DOCX/XLSX.
 - **No mutating operations** — same reasoning as HTML: SVG's natural edit
-  is markup.
+  is markup. `receipt` with no `--operation` works here too, for the same
+  reason (Issue #18).
 - **A real security control HTML doesn't need**: SVG is XML, and
   `xml.etree.ElementTree` (an `expat`-based parser) is not hardened
   against entity-expansion ("billion laughs") DoS — a tiny file can

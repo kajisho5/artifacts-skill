@@ -20,6 +20,7 @@ from artifact_skill.core.capability import Capability, CapabilityStatus
 from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactExecutionError, ArtifactInputError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
+from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.pdf_pages import render_pdf_pages
 from artifact_skill.security.paths import atomic_write_bytes, check_input_size
 
@@ -433,15 +434,18 @@ class PdfAdapter(ArtifactAdapter):
 
         text_extractable_pages = 0
         blank_pages: list[int] = []
+        all_text_parts: list[str] = []
         if not is_encrypted:
             for i, page in enumerate(reader.pages):
-                has_text = False
+                page_text = ""
                 try:
-                    has_text = bool(page.extract_text().strip())
+                    page_text = page.extract_text()
                 except Exception:  # noqa: BLE001, S110 - a single bad page must not abort inspect
                     pass
+                has_text = bool(page_text.strip())
                 if has_text:
                     text_extractable_pages += 1
+                    all_text_parts.append(page_text)
                 has_images = False
                 try:
                     has_images = len(page.images) > 0
@@ -463,6 +467,9 @@ class PdfAdapter(ArtifactAdapter):
             "blank_pages": blank_pages,
             "pdf_version": getattr(reader, "pdf_header", None),
             "fonts": fonts,
+            # Same rationale as the other adapters' leftover_markers: the
+            # marker list found, not the full extracted text of every page.
+            "leftover_markers": find_leftover_markers("\n".join(all_text_parts)),
         }
         return InspectionReport(artifact=ref, details=details, warnings=warnings)
 
@@ -799,6 +806,22 @@ class PdfAdapter(ArtifactAdapter):
                 )
             else:
                 checks.append(Check(id="blank_pages", name="No structurally blank pages", status=CheckStatus.PASS))
+
+            leftover_markers = details.get("leftover_markers", [])
+            if leftover_markers:
+                checks.append(
+                    Check(
+                        id="leftover_placeholder_text",
+                        name="No leftover generation placeholder text",
+                        status=CheckStatus.FAIL if policy.get("forbid_placeholder_text") else CheckStatus.WARN,
+                        message=f"Found likely-unreviewed placeholder text: {leftover_markers}.",
+                        evidence={"markers": leftover_markers},
+                    )
+                )
+            else:
+                checks.append(
+                    Check(id="leftover_placeholder_text", name="No leftover generation placeholder text", status=CheckStatus.PASS)
+                )
 
         if "require_metadata" in policy:
             for key, expected_value in policy["require_metadata"].items():

@@ -28,28 +28,57 @@ PRESETS: dict[str, dict[str, Any]] = {
         "require_page_size_pt": (595, 842),
         "page_size_tolerance_pt": 2.0,
         "forbid_unembedded_fonts": True,
+        "require_no_encryption": True,
+        "forbid_blank_pages": True,
+        "min_pages": 1,
+        "forbid_placeholder_text": True,
     },
     "print-letter": {
         "require_page_size_pt": (612, 792),
         "page_size_tolerance_pt": 2.0,
         "forbid_unembedded_fonts": True,
+        "require_no_encryption": True,
+        "forbid_blank_pages": True,
+        "min_pages": 1,
+        "forbid_placeholder_text": True,
     },
     "slides-16x9": {
         "require_slide_aspect_ratio": 16 / 9,
         "aspect_ratio_tolerance": 0.02,
+        "min_slides": 1,
+        "forbid_placeholder_text": True,
         # max_empty_placeholders isn't set here: PPTX's own default (0) is
         # already the strict behavior this preset wants.
     },
-    "spreadsheet-no-errors": {
+    "spreadsheet-no-cached-errors": {
         "forbid_external_links": True,
+        "forbid_placeholder_text": True,
         # formula_cached_errors already FAILs on a cached error under the
         # default policy ({}) too - nothing to strengthen there. This
         # preset exists so an agent has a named thing to reach for, not
         # because {} was silently permissive for this specific check.
+        #
+        # Named "no-cached-errors," not "no-errors" (Issue #19): this
+        # preset gates what's actually checkable - no cached #REF!/#DIV/0!/
+        # etc. token in any formula's stored result. It cannot promise
+        # "every formula is correct," because that would require actually
+        # recalculating (openpyxl never does - see adapters/xlsx/adapter.py's
+        # module docstring for why this project doesn't shell out to a
+        # LibreOffice macro to do it either). A workbook containing any
+        # formula at all reports formula_recalculation: UNKNOWN
+        # unconditionally, by design - and UNKNOWN outranks WARN/PASS in
+        # aggregation (spec's "Unknown is first-class" — see
+        # docs/verification.md), so the *overall* receipt status on an
+        # otherwise-clean workbook with formulas will very often be
+        # UNKNOWN, not PASS, under this preset. That is the honest answer,
+        # not a bug in the preset: check `formula_cached_errors` and
+        # `formula_recalculation` by id if you need to distinguish "found
+        # a real error" from "couldn't verify, but didn't find one either."
     },
     "web-no-external": {
         "forbid_external_resources": True,
         "require_title": True,  # HTML only; inert (harmlessly ignored) for SVG
+        "forbid_placeholder_text": True,
     },
 }
 

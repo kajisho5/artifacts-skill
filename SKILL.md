@@ -43,6 +43,11 @@ property-set operation this skill owns).
   python-docx/openpyxl, LibreOffice, Playwright+Chromium, Pillow). No file
   is ever uploaded anywhere, and no functionality depends on a cloud
   account or API key.
+- **Not decryption.** An encrypted PDF is detected and reported (`is_encrypted`
+  in `inspect`, an `encryption` structural check) but there is no operation
+  or argument anywhere in this skill to supply a password and decrypt —
+  every command on an encrypted PDF stops there. If the task is "check
+  this password-protected PDF," decrypt it with another tool first.
 
 ### Division of labor with Anthropic's own document skills
 
@@ -75,43 +80,91 @@ inspected, and do not report success without having verified.
    can actually look at it, not just trust that bytes exist.
 5. **`verify`** — run structural checks (page count, page size, encryption,
    JavaScript, extractable text, and anything else you pass as `--policy`).
+   Never renders anything itself — a fact only measurable by rendering
+   (e.g. DOCX `page_count`) stays honestly `UNKNOWN` under bare `verify`
+   even though `execute`/`receipt` would report it as a real, measured
+   `PASS` (their lifecycle already renders for visual evidence and reuses
+   that). Use `receipt` (or `render` then `verify`) instead if you need
+   that specific fact measured, not just checked for.
    Reports one of six states per check — **PASS, WARN, FAIL, UNKNOWN,
    NOT_CHECKED, SKIPPED** — never collapses "we didn't check this" into
-   "it's fine."
+   "it's fine." **Read `checks[].status` by `id` for the specific things
+   you care about, not just the top-level aggregate `status`.** The
+   aggregate is worst-status-wins across every check the adapter ran
+   (`docs/verification.md`) — a document that's genuinely fine on the
+   dimension you actually care about can still show an aggregate
+   `UNKNOWN` because an unrelated check (e.g. XLSX's
+   `formula_recalculation`, always `UNKNOWN` whenever any formula is
+   present, by design) couldn't be answered. That's `UNKNOWN` doing its
+   job, not the preset being broken.
 6. **Look at the rendered images yourself.** Rendering produces evidence;
    *you* are the one who judges whether the layout is actually right. This
    skill will never claim it visually verified something for you — that
    would be a fabricated judgment (see `docs/architecture.md` "Brain vs
    Hands").
-7. **`receipt`** — or skip straight to this: it runs the whole
-   inspect→execute→render→verify lifecycle for one operation and writes
-   `reports/receipt.json` (schema `artifact-receipt/v1`), which is what you
-   should point to as evidence when you tell the user the job is done.
+7. **`receipt`** — or skip straight to this: with `--operation`, it runs
+   the whole inspect→execute→render→verify→[fix loop]→receipt lifecycle
+   for that operation; without it, inspect→render→verify→receipt with no
+   mutation and no fix loop (the only way to get a receipt for a format
+   with zero mutating operations, like HTML/SVG). Either way it writes
+   `reports/receipt.json` (schema `artifact-receipt/v1`), which is what
+   you should point to as evidence when you tell the user the job is
+   done. The fix loop (operation-only) retries up to
+   `Limits.max_fix_iterations` (3) by default — pass `--max-iterations 1`
+   if you specifically want to disable it, not the other way around.
 
 If a structural check FAILs, do not report success. Either fix the input
 and re-run, or tell the user exactly what failed and why (the receipt's
 `warnings`/`limitations` and each check's `message` field say this in
 plain language already — surface them, don't paraphrase around them).
 
+**Always pass `--policy` or `--policy-preset` when it matters.** The
+default policy (`{}`) barely gates anything — a document with leftover
+"Lorem ipsum"/"Click to add title" text, for example, only ever `WARN`s
+(exit 0) under an empty policy, not `FAIL`s. Reach for a named preset
+(`print-a4`, `print-letter`, `slides-16x9`, `spreadsheet-no-cached-errors`,
+`web-no-external` — see `policies.py`) before writing a policy dict by
+hand; every preset already sets `forbid_placeholder_text: true`, so
+leftover generation artifacts are a hard `FAIL` under any of them, not a
+silent `WARN`. `execute`, `verify`, and `receipt` all accept
+`--policy-preset`/`--policy` (explicit fields override the preset).
+
 ## Quick reference
 
+The most common task is verifying a document you (or another tool) already
+generated — most formats need no mutation at all, just a real policy.
+`receipt` with no `--operation` is the one-shot version: inspect → render →
+structural verify → receipt, no mutation, no fix loop — and it's the only
+way to get a Production Receipt at all for a format with zero mutating
+operations (HTML, SVG):
+
 ```bash
-artifact-skill doctor --json                    # what's available on this machine
+artifact-skill doctor --json                                    # what's available on this machine
+artifact-skill receipt report.pdf --policy-preset print-a4       # a real submission gate, not the empty default
+artifact-skill receipt deck.pptx --policy-preset slides-16x9
+artifact-skill receipt page.html --policy-preset web-no-external # HTML has no operations — this still works
+artifact-skill look report.pdf --out-dir reports/rendered        # then actually look at the rendered evidence
+```
+
+`--output` is invalid without `--operation` (nothing is written without a
+mutation) — plain `verify`/`look` still work standalone too, if you want
+just one piece of evidence rather than the full receipt.
+
+If the document also needs a mutation first (metadata, page selection,
+etc.), pass `--operation` — `receipt` still runs the whole lifecycle
+(including the fix loop) in one call and still accepts `--policy-preset`:
+
+```bash
 artifact-skill inspect report.pdf --json
 artifact-skill plan report.pdf --operation metadata_set --args '{"title":"Q3 Report"}'
-artifact-skill execute report.pdf --operation metadata_set --args '{"title":"Q3 Report"}'
+artifact-skill receipt report.pdf --operation metadata_set --args '{"title":"Q3 Report"}' \
+  --policy-preset print-a4
 artifact-skill render report_artifact_metadata_set.pdf --out-dir reports/rendered
-artifact-skill verify report_artifact_metadata_set.pdf --policy '{"min_pages":1,"require_no_encryption":true}'
 artifact-skill look report.pdf --compare-to report_artifact_metadata_set.pdf   # before/after contact sheet
-artifact-skill receipt report.pdf --operation metadata_set --args '{"title":"Q3 Report"}'
 
 # Same lifecycle works on PPTX — same commands, same verbs:
 artifact-skill receipt deck.pptx --operation metadata_set --args '{"title":"Q3 Deck"}' \
-  --policy '{"require_slide_count":10,"max_empty_placeholders":0}'
-
-# HTML has no operations (inspect/render/verify only) — go straight to render+verify:
-artifact-skill render page.html --out-dir reports/rendered
-artifact-skill verify page.html --policy '{"require_title":true,"forbid_external_resources":false}'
+  --policy-preset slides-16x9 --policy '{"require_slide_count":10}'
 ```
 
 Supported PDF operations today: `metadata_set` (title/author/subject/keywords),
@@ -134,17 +187,18 @@ if they ever disagree.
   reports `UNKNOWN`/`MISSING`, never a silent pass.
 - **No network access** by default. This skill does not fetch external
   URLs, fonts, or images referenced inside a document.
-- **No shell injection surface**: every subprocess call (used by future
-  LibreOffice/Chromium-backed adapters) is an argv array against an
-  explicit allowlist — never a shell string.
+- **No shell injection surface**: every subprocess call (the LibreOffice-
+  backed PPTX/DOCX/XLSX renders, Playwright/Chromium for HTML/SVG) is an
+  argv array against an explicit allowlist — never a shell string.
 
 ## When capabilities are missing
 
 Run `artifact-skill doctor --json` first if a command fails with
 `ARTIFACT_CAPABILITY_MISSING`. It tells you exactly what's
 AVAILABLE/MISSING/UNKNOWN/NOT_REQUIRED/NOT_IMPLEMENTED and how to fix it
-(usually `pip install -e ".[pdf]"` from the package root). Do not guess at
-a workaround — the remediation field in the error is authoritative.
+(usually `pip install -e ".[all]"` from the package root — a per-format
+extra like `.[pdf]` only covers that one format's backends). Do not guess
+at a workaround — the remediation field in the error is authoritative.
 
 ## MCP
 

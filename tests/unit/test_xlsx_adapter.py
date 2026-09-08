@@ -6,7 +6,7 @@ import pytest
 
 from artifact_skill.adapters.xlsx.adapter import XlsxAdapter
 from artifact_skill.core.artifact import ArtifactRef, ArtifactType
-from artifact_skill.core.errors import ArtifactExecutionError, ArtifactInputError
+from artifact_skill.core.errors import ArtifactExecutionError, ArtifactInputError, ArtifactSecurityError
 from artifact_skill.core.verification import CheckStatus
 
 
@@ -42,6 +42,25 @@ def test_inspect_corrupt_xlsx_raises_structured_error(corrupt_xlsx, adapter):
     with pytest.raises(ArtifactInputError) as exc_info:
         adapter.inspect(ref)
     assert exc_info.value.code == "ARTIFACT_XLSX_UNREADABLE"
+
+
+def test_inspect_rejects_entity_declaration_before_opening(entity_bomb_xlsx, adapter):
+    """Issue #21: openpyxl's worksheet reader resolves and amplifies a
+    DOCTYPE-declared entity when nothing intercepts it first (confirmed by
+    direct testing against this project's own dependency set, where the
+    `xlsx` extra alone pulls in neither lxml nor defusedxml) - the guard
+    must reject the file before openpyxl.load_workbook() is ever called."""
+    ref = ArtifactRef.from_path(entity_bomb_xlsx)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.inspect(ref)
+    assert exc_info.value.code == "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED"
+
+
+def test_execute_rejects_entity_declaration_before_opening(entity_bomb_xlsx, adapter, tmp_path):
+    ref = ArtifactRef.from_path(entity_bomb_xlsx)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.execute(ref, "metadata_set", {"title": "x"}, tmp_path / "out.xlsx")
+    assert exc_info.value.code == "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED"
 
 
 def test_verify_no_formula_workbook_skips_formula_checks(no_formula_xlsx, adapter):
@@ -95,6 +114,30 @@ def test_verify_external_link_workbook_fails_under_strict_policy(external_link_x
     ref = ArtifactRef.from_path(external_link_xlsx)
     result = adapter.verify_structural(ref, {"forbid_external_links": True})
     check = next(c for c in result.checks if c.id == "external_links")
+    assert check.status == CheckStatus.FAIL
+
+
+def test_verify_good_workbook_has_no_leftover_placeholder_text(good_xlsx, adapter):
+    ref = ArtifactRef.from_path(good_xlsx)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.PASS
+
+
+def test_verify_leftover_placeholder_workbook_warns_by_default(leftover_placeholder_xlsx, adapter):
+    ref = ArtifactRef.from_path(leftover_placeholder_xlsx)
+    result = adapter.verify_structural(ref, {})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
+    assert check.status == CheckStatus.WARN
+    assert "click to add" in check.evidence["markers"]
+    assert "todo" in check.evidence["markers"]
+    assert "lorem ipsum" in check.evidence["markers"]
+
+
+def test_verify_leftover_placeholder_workbook_fails_under_strict_policy(leftover_placeholder_xlsx, adapter):
+    ref = ArtifactRef.from_path(leftover_placeholder_xlsx)
+    result = adapter.verify_structural(ref, {"forbid_placeholder_text": True})
+    check = next(c for c in result.checks if c.id == "leftover_placeholder_text")
     assert check.status == CheckStatus.FAIL
 
 

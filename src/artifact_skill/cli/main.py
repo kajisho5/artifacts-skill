@@ -95,6 +95,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_execute.add_argument("--operation", required=True)
     p_execute.add_argument("--args", default="{}")
     p_execute.add_argument("--output", help="Output path (default: derived, never the input path).")
+    p_execute.add_argument(
+        "--policy", default="{}",
+        help="JSON object to gate execute's own reports/receipt.json structural verification. "
+        "Without this, execute always verifies against an empty policy (barely gates anything) - "
+        "use `receipt` instead of `execute` when you need a real submission gate.",
+    )
+    p_execute.add_argument(
+        "--policy-preset",
+        help=f"Named starting policy (see policies.py); explicit --policy fields override it. "
+        f"Choices: {sorted(_PRESET_NAMES)}.",
+    )
     p_execute.add_argument("--dry-run", action="store_true")
     common(p_execute)
 
@@ -123,7 +134,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_receipt = sub.add_parser("receipt", help="Run the full lifecycle and emit a Production Receipt.")
     p_receipt.add_argument("input")
-    p_receipt.add_argument("--operation", required=True)
+    p_receipt.add_argument(
+        "--operation",
+        help="Omit for a verify-only receipt (inspect -> render -> structural verify -> receipt, no "
+        "mutation, no fix loop) — the only way to get a Production Receipt for a format with zero "
+        "mutating operations (HTML, SVG). --output is invalid without --operation.",
+    )
     p_receipt.add_argument("--args", default="{}")
     p_receipt.add_argument("--output")
     p_receipt.add_argument("--policy", default="{}")
@@ -132,7 +148,10 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Named starting policy (see policies.py); explicit --policy fields override it. "
         f"Choices: {sorted(_PRESET_NAMES)}.",
     )
-    p_receipt.add_argument("--max-iterations", type=int, default=1)
+    p_receipt.add_argument(
+        "--max-iterations", type=int, default=None,
+        help="Fix-loop retry cap (default: Limits.max_fix_iterations, currently 3).",
+    )
     p_receipt.add_argument("--evidence-dir", help="Directory for the receipt and evidence (default: ./reports).")
     p_receipt.add_argument("--dry-run", action="store_true")
     common(p_receipt)
@@ -236,13 +255,14 @@ def _cmd_plan(args: argparse.Namespace) -> int:
 
 def _cmd_execute(args: argparse.Namespace) -> int:
     op_args = _load_json_arg(args.args, "--args")
+    policy = _resolve_policy_arg(args)
     input_path = Path(args.input)
     output_path = Path(args.output) if args.output else default_output_path(input_path, args.operation)
     evidence_dir = output_path.parent / "reports"
 
     result = run_lifecycle(
         input_path, args.operation, op_args, output_path,
-        evidence_dir=evidence_dir, dry_run=args.dry_run,
+        policy=policy, evidence_dir=evidence_dir, dry_run=args.dry_run,
     )
     if args.dry_run:
         payload = {"dry_run": True, "plan": result.plan.to_dict()}
@@ -311,7 +331,12 @@ def _cmd_receipt(args: argparse.Namespace) -> int:
     op_args = _load_json_arg(args.args, "--args")
     policy = _resolve_policy_arg(args)
     input_path = Path(args.input)
-    output_path = Path(args.output) if args.output else default_output_path(input_path, args.operation)
+    if args.operation is None:
+        if args.output:
+            raise SystemExit("error: --output requires --operation (nothing is written without a mutation).")
+        output_path = None
+    else:
+        output_path = Path(args.output) if args.output else default_output_path(input_path, args.operation)
     evidence_dir = Path(args.evidence_dir) if args.evidence_dir else Path("reports")
 
     result = run_lifecycle(
