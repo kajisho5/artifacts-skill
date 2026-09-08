@@ -45,6 +45,7 @@ from artifact_skill.core.schema_validate import validate_against_schema
 from artifact_skill.doctor.detect import detect_environment
 from artifact_skill.policies import resolve_policy
 from artifact_skill.rendering.contact_sheet import build_before_after, build_contact_sheet
+from artifact_skill.security.subprocess_exec import treat_sigterm_as_interrupt
 
 SERVER_NAME = "artifact-skill"
 CAPABILITY_PREFIX = "artifact-skill"
@@ -290,6 +291,7 @@ def _handle_request(msg: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def serve(stdin=None, stdout=None) -> None:
+    treat_sigterm_as_interrupt()
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     for line in stdin:

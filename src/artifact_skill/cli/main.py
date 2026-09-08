@@ -35,6 +35,7 @@ from artifact_skill.doctor.detect import detect_environment
 from artifact_skill.policies import PRESETS as _PRESET_NAMES
 from artifact_skill.policies import resolve_policy
 from artifact_skill.rendering.contact_sheet import build_before_after, build_contact_sheet
+from artifact_skill.security.subprocess_exec import treat_sigterm_as_interrupt
 
 
 def _eprint(*a: Any, **kw: Any) -> None:
@@ -178,6 +179,7 @@ def _resolve_policy_arg(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    treat_sigterm_as_interrupt()
     parser = build_parser()
     args = parser.parse_args(argv)
 

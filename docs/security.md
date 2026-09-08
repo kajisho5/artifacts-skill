@@ -31,6 +31,33 @@ This module is the *only* place in the codebase allowed to call
   `LANG`, `LC_ALL`, `SYSTEMROOT` are forwarded — not the caller's full
   environment (proxies, tokens, unrelated config).
 
+**No orphaned children on interrupt (Issue #25).** A `soffice`/Chromium
+child killed mid-render must not outlive the parent CLI/MCP process.
+Verified directly against CPython's own `subprocess.py`, not assumed:
+`subprocess.run()` already kills its child on *any* Python-level exception
+escaping `communicate()` — including `KeyboardInterrupt`, which is exactly
+what SIGINT (a real Ctrl-C) raises by default, so that case was never
+actually broken. SIGTERM is different: its default disposition terminates
+the process immediately with no Python exception raised at all, so nothing
+downstream — no `finally`, no `except` clause anywhere in this codebase —
+ever gets a chance to run, silently orphaning the child. `cli/main.py`'s
+`main()` and `mcp/server.py`'s `serve()` — the two real process entry
+points — both call
+`security/subprocess_exec.py::treat_sigterm_as_interrupt()` on startup,
+which installs `signal.default_int_handler` for SIGTERM too, so it now
+raises the exact same `KeyboardInterrupt` SIGINT already did and gets the
+same, already-correct cleanup. `tests/security/test_subprocess_exec.py`
+proves both halves empirically (spawning a real child process and sending
+it a real SIGTERM), not just by reading the code: the bug is demonstrated
+first, then the fix is shown to prevent it.
+
+A `receipt.json` is the only evidence that verification actually ran to
+completion — an output *file* existing on disk after an interrupted
+`execute`/`receipt` call is not proof of anything: `execute`'s own atomic
+write (see "Filesystem" below) guarantees that file is never partially
+written, but says nothing about whether verification ever happened
+afterward. Treat a missing receipt exactly like a missing output: rerun.
+
 The PDF and Image adapters never need this module — `pypdf`, `pypdfium2`,
 and Pillow are pure-Python-callable. `rendering/office_convert.py` (used
 by PPTX/DOCX/XLSX for LibreOffice-backed rendering) is the module's actual
