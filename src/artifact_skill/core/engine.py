@@ -369,11 +369,22 @@ def _visual_evidence_result(
     try:
         rendered = adapter.render(ref, evidence_dir / "rendered", limits=limits)
     except ArtifactError as exc:
+        # Self-audit finding (a real end-to-end walkthrough, not a curated
+        # unit fixture): str(exc) is only f"[{code}] {message}" -
+        # ArtifactError.remediation and .evidence (for a render backend
+        # failure, evidence.stdout/stderr carry the actual LibreOffice/
+        # Chromium diagnostic output) were silently dropped, right when a
+        # caller most needs them - reproduced directly by triggering a
+        # real ARTIFACT_RENDER_BACKEND_FAILED and finding stdout/stderr
+        # nowhere in the resulting receipt.json.
         return (
             VerificationResult(
                 kind="visual",
                 checks=[
-                    Check(id="visual_evidence", name="Visual evidence produced", status=CheckStatus.UNKNOWN, message=str(exc))
+                    Check(
+                        id="visual_evidence", name="Visual evidence produced", status=CheckStatus.UNKNOWN,
+                        message=str(exc), evidence={"remediation": exc.remediation, **exc.evidence},
+                    )
                 ],
             ),
             None,

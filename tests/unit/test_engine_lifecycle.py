@@ -331,3 +331,37 @@ def test_run_lifecycle_rejects_a_misspelled_policy_key_before_touching_disk(good
     assert "min_pagess" in exc_info.value.message
     assert not output_path.exists()
     assert not evidence_dir.exists()
+
+
+def test_visual_evidence_check_preserves_remediation_and_evidence_on_render_failure(good_pdf, tmp_path, monkeypatch):
+    """Self-audit finding (a real end-to-end walkthrough triggering a real
+    LibreOffice render failure, not a curated unit fixture): the visual_
+    evidence check used to set message=str(exc), and ArtifactError.__str__
+    is only f"[{code}] {message}" - .remediation and .evidence (for
+    ARTIFACT_RENDER_BACKEND_FAILED, evidence.stdout/stderr carry the
+    actual LibreOffice/Chromium diagnostic output) were silently dropped
+    from the receipt right when a caller most needs them to diagnose the
+    failure."""
+    import artifact_skill.adapters.pdf.adapter as pdf_adapter_module
+    from artifact_skill.core.errors import ArtifactExecutionError
+
+    def _fail_to_render(self, ref, out_dir, *, limits=None):
+        raise ArtifactExecutionError(
+            code="ARTIFACT_RENDER_BACKEND_FAILED",
+            message="fake backend failure for this test",
+            remediation="See evidence.stdout/stderr for the backend's own diagnostic.",
+            evidence={"returncode": 1, "stdout": "", "stderr": "fake stderr diagnostic"},
+        )
+
+    monkeypatch.setattr(pdf_adapter_module.PdfAdapter, "render", _fail_to_render)
+
+    result = run_lifecycle(
+        good_pdf, "metadata_set", {"title": "x"}, tmp_path / "out.pdf",
+        evidence_dir=tmp_path / "reports", dry_run=False,
+    )
+
+    visual_checks = result.receipt.verification["visual"]["checks"]
+    check = next(c for c in visual_checks if c["id"] == "visual_evidence")
+    assert check["status"] == "unknown"
+    assert check["evidence"]["remediation"] == "See evidence.stdout/stderr for the backend's own diagnostic."
+    assert check["evidence"]["stderr"] == "fake stderr diagnostic"
