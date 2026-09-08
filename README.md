@@ -51,8 +51,8 @@ just a claim. Once published, the same commands work as
 
 | Format | Inspect | Structural verify | Render (visual evidence) | Mutating operations |
 |---|---|---|---|---|
-| PDF | ✅ | ✅ | ✅ (`pypdfium2`) | `metadata_set`, `merge` |
-| PPTX | ✅ | ✅ | ✅ (LibreOffice + `pypdfium2`) | `metadata_set` |
+| PDF | ✅ | ✅ | ✅ (`pypdfium2`) | `metadata_set`, `merge`, `fit_page_size`, `extract_pages`, `delete_pages`, `rotate_pages` |
+| PPTX | ✅ | ✅ | ✅ (LibreOffice + `pypdfium2`) | `metadata_set`, `strip_placeholders` |
 | DOCX | ✅ | ✅ | ✅ (LibreOffice + `pypdfium2`) | `metadata_set` |
 | XLSX | ✅ | ✅ | ✅ (LibreOffice + `pypdfium2`) | `metadata_set` |
 | Image (PNG/JPEG/WebP) | ✅ | ✅ | ✅ (Pillow) | `resize`, `convert_format` |

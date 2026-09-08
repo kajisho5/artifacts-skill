@@ -84,6 +84,21 @@ class PptxAdapter(ArtifactAdapter):
                 render_required=False,
                 postconditions=["output slide count == input slide count", "requested metadata fields match"],
             ),
+            "strip_placeholders": OperationSpec(
+                name="strip_placeholders",
+                description="Remove every placeholder shape left empty (no text ever entered) — the fixer "
+                "counterpart to the empty_placeholders structural check.",
+                args_schema={"type": "object", "properties": {}, "additionalProperties": False},
+                structural_verification_required=True,
+                visual_verification_required=False,
+                render_required=False,
+                postconditions=["output slide count == input slide count", "empty_placeholders == 0"],
+                known_limitations=[
+                    "Removes the placeholder shape entirely (not just its prompt text) — a layout that "
+                    "relies on that placeholder's position/formatting for a later fill-in will lose it. "
+                    "This is a one-way structural edit, not a hide/show toggle."
+                ],
+            ),
         }
 
     def capabilities(self) -> list[Capability]:
@@ -253,22 +268,29 @@ class PptxAdapter(ArtifactAdapter):
 
     def execute(self, ref: ArtifactRef, operation: str, args: dict[str, Any], output_path: Path) -> ArtifactRef:
         pptx = _require_pptx()
-        if operation != "metadata_set":
+        if operation not in ("metadata_set", "strip_placeholders"):
             raise ArtifactInputError(
                 code="ARTIFACT_OPERATION_UNKNOWN",
                 message=f"PPTX adapter has no operation '{operation}'.",
                 evidence={"operation": operation},
             )
         prs = pptx.Presentation(str(ref.path))
-        meta = prs.core_properties
-        if "title" in args:
-            meta.title = args["title"]
-        if "author" in args:
-            meta.author = args["author"]
-        if "subject" in args:
-            meta.subject = args["subject"]
-        if "keywords" in args:
-            meta.keywords = args["keywords"]
+
+        if operation == "metadata_set":
+            meta = prs.core_properties
+            if "title" in args:
+                meta.title = args["title"]
+            if "author" in args:
+                meta.author = args["author"]
+            if "subject" in args:
+                meta.subject = args["subject"]
+            if "keywords" in args:
+                meta.keywords = args["keywords"]
+        else:  # strip_placeholders
+            for slide in prs.slides:
+                for shape in list(slide.placeholders):
+                    if shape.has_text_frame and not shape.text_frame.text.strip():
+                        shape._element.getparent().remove(shape._element)
 
         # python-pptx only writes to a real filesystem path, not a byte
         # buffer we control atomically like the PDF adapter does — so save

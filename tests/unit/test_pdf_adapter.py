@@ -221,6 +221,124 @@ def test_execute_fit_page_size_on_encrypted_pdf_raises(encrypted_pdf, adapter, t
     assert exc_info.value.code == "ARTIFACT_PDF_ENCRYPTED"
 
 
+def test_execute_extract_pages_keeps_only_the_requested_page(good_pdf, adapter, tmp_path):
+    """good_2page.pdf's real content: page 1 = "Page one content",
+    page 2 = "Page two content" (tests/fixtures/generate_fixtures.py) -
+    checking extracted text, not just page count, proves the *right*
+    page was kept, not just *a* page."""
+    ref = ArtifactRef.from_path(good_pdf)
+    result_ref = adapter.execute(ref, "extract_pages", {"pages": [2]}, tmp_path / "out.pdf")
+    report = adapter.inspect(result_ref)
+    assert report.details["page_count"] == 1
+
+    import pypdf
+
+    reader = pypdf.PdfReader(str(result_ref.path))
+    assert "Page two content" in reader.pages[0].extract_text()
+
+
+def test_execute_extract_pages_can_reorder(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    result_ref = adapter.execute(ref, "extract_pages", {"pages": [2, 1]}, tmp_path / "out.pdf")
+    import pypdf
+
+    reader = pypdf.PdfReader(str(result_ref.path))
+    assert len(reader.pages) == 2
+    assert "Page two content" in reader.pages[0].extract_text()
+    assert "Page one content" in reader.pages[1].extract_text()
+
+
+def test_execute_extract_pages_rejects_out_of_range_page(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    with pytest.raises(ArtifactInputError) as exc_info:
+        adapter.execute(ref, "extract_pages", {"pages": [5]}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+    assert exc_info.value.evidence["page_count"] == 2
+
+
+def test_execute_extract_pages_on_encrypted_pdf_raises(encrypted_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(encrypted_pdf)
+    with pytest.raises(ArtifactExecutionError) as exc_info:
+        adapter.execute(ref, "extract_pages", {"pages": [1]}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_PDF_ENCRYPTED"
+
+
+def test_execute_delete_pages_removes_the_requested_page(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    result_ref = adapter.execute(ref, "delete_pages", {"pages": [1]}, tmp_path / "out.pdf")
+    report = adapter.inspect(result_ref)
+    assert report.details["page_count"] == 1
+
+    import pypdf
+
+    reader = pypdf.PdfReader(str(result_ref.path))
+    assert "Page two content" in reader.pages[0].extract_text()
+
+
+def test_execute_delete_pages_rejects_removing_every_page(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    with pytest.raises(ArtifactInputError) as exc_info:
+        adapter.execute(ref, "delete_pages", {"pages": [1, 2]}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+    assert "every page" in exc_info.value.message
+
+
+def test_execute_delete_pages_rejects_out_of_range_page(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    with pytest.raises(ArtifactInputError) as exc_info:
+        adapter.execute(ref, "delete_pages", {"pages": [99]}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+
+
+def test_execute_delete_pages_on_encrypted_pdf_raises(encrypted_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(encrypted_pdf)
+    with pytest.raises(ArtifactExecutionError) as exc_info:
+        adapter.execute(ref, "delete_pages", {"pages": [1]}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_PDF_ENCRYPTED"
+
+
+def test_execute_rotate_pages_rotates_all_pages_by_default(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    result_ref = adapter.execute(ref, "rotate_pages", {"degrees": 90}, tmp_path / "out.pdf")
+    import pypdf
+
+    reader = pypdf.PdfReader(str(result_ref.path))
+    assert [p.rotation for p in reader.pages] == [90, 90]
+
+
+def test_execute_rotate_pages_rotates_only_specified_pages(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    result_ref = adapter.execute(ref, "rotate_pages", {"pages": [1], "degrees": 180}, tmp_path / "out.pdf")
+    import pypdf
+
+    reader = pypdf.PdfReader(str(result_ref.path))
+    assert reader.pages[0].rotation == 180
+    assert reader.pages[1].rotation == 0
+
+
+def test_execute_rotate_pages_rejects_invalid_degrees(good_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pdf)
+    with pytest.raises(ArtifactInputError) as exc_info:
+        adapter.execute(ref, "rotate_pages", {"degrees": 45}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+
+
+def test_execute_rotate_pages_on_encrypted_pdf_raises(encrypted_pdf, adapter, tmp_path):
+    ref = ArtifactRef.from_path(encrypted_pdf)
+    with pytest.raises(ArtifactExecutionError) as exc_info:
+        adapter.execute(ref, "rotate_pages", {"degrees": 90}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_PDF_ENCRYPTED"
+
+
+def test_plan_extract_pages_validates_page_range_before_executing(good_pdf, adapter, tmp_path):
+    """plan() must catch a bad page number itself (spec: plan is pure but
+    still validates), not just execute()."""
+    ref = ArtifactRef.from_path(good_pdf)
+    with pytest.raises(ArtifactInputError) as exc_info:
+        adapter.plan(ref, "extract_pages", {"pages": [7]}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+
+
 def test_verify_page_size_requirement_carries_fixer_evidence(good_pdf, adapter, tmp_path):
     """The fit_page_size fixer (see test_fix_* below) reads
     expected_width_pt/expected_height_pt straight off this check's

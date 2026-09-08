@@ -31,11 +31,19 @@ agent reading the error can tell "we haven't built this yet" apart from
 - **Operations**: `metadata_set` (title/author/subject/keywords),
   `merge` (append one or more additional PDFs, in order), `fit_page_size`
   (scale every page's content and media box to an exact `width_pt`/
-  `height_pt`, non-uniformly — see "Fix loop" below for why this exists).
+  `height_pt`, non-uniformly — see "Fix loop" below for why this exists),
+  `extract_pages`/`delete_pages` (1-indexed page lists; `extract_pages`
+  preserves the caller's order, so it can reorder or repeat pages too —
+  both validate every page number against the real page count in `plan()`
+  *and* `execute()`, not just execute(), via the shared
+  `_resolve_page_indices()` helper), `rotate_pages` (a multiple of 90
+  degrees, all pages by default or a specific 1-indexed subset).
 - **Structural checks**: PDF readability, page count (+ optional exact/
   range requirement), page size consistency (+ optional exact requirement
   with tolerance), encryption, embedded JavaScript actions, extractable
-  text ratio, arbitrary metadata field matching, and font embedding.
+  text ratio, blank pages (Issue #14 — neither extractable text nor an
+  embedded image; known false positive: pure vector graphics), arbitrary
+  metadata field matching, and font embedding.
 - **Font embedding (Issue #7)**: walks each page's `/Resources/Font`
   (following `Type0` composite fonts to their descendant's
   `/FontDescriptor`) and checks for a `/FontFile`, `/FontFile2`, or
@@ -77,14 +85,22 @@ agent reading the error can tell "we haven't built this yet" apart from
   the PDF adapter's `pypdfium2` page rasterizer via the shared
   `rendering/pdf_pages.py` helper rather than a second PNG-export
   implementation.
-- **Operations**: `metadata_set` (title/author/subject/keywords).
+- **Operations**: `metadata_set` (title/author/subject/keywords),
+  `strip_placeholders` (removes every placeholder shape left empty — the
+  fixer counterpart to the `empty_placeholders` detection check below;
+  python-pptx has no public shape-removal API, so this drops to
+  `shape._element.getparent().remove(shape._element)` directly).
 - **Structural checks**: PPTX readability, slide count (+ optional exact/
   range requirement), broken media references (unreadable image blobs),
   leftover empty placeholders (heuristic, `WARN` by default — see
-  limitations), text presence, arbitrary metadata field matching, and
-  `chart_validity: UNKNOWN` when the deck contains a chart (`SKIPPED` when
-  it doesn't) — chart *presence* is detected, internal chart data
-  correctness is not.
+  limitations), leftover generation-artifact text such as "lorem ipsum" or
+  "click to add text" (`leftover_placeholder_text`, `WARN` by default,
+  `FAIL` under `forbid_placeholder_text` — shared `leftover_text.py`
+  marker list), optional slide aspect-ratio requirement
+  (`require_slide_aspect_ratio` + `aspect_ratio_tolerance`), text presence,
+  arbitrary metadata field matching, and `chart_validity: UNKNOWN` when the
+  deck contains a chart (`SKIPPED` when it doesn't) — chart *presence* is
+  detected, internal chart data correctness is not.
 - **Render**: converts to PDF via LibreOffice headless through the shared
   `rendering/office_convert.py::convert_to_pdf()` (argv-only subprocess via
   `security/subprocess_exec.py`, allowlisted `{soffice, libreoffice}`,

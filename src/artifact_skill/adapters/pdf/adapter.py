@@ -173,6 +173,31 @@ def _require_positive_page_size(args: dict[str, Any]) -> tuple[float, float]:
     return width_pt, height_pt
 
 
+def _resolve_page_indices(pages_1indexed: Any, page_count: int, operation: str) -> list[int]:
+    """Validate a 1-indexed 'pages' arg against the document's real page
+    count and convert it to 0-indexed positions, preserving the caller's
+    order (so extract_pages can reorder/repeat pages, not just subset
+    them). Raises a structured error naming the exact bad value rather
+    than letting pypdf raise a raw IndexError deep inside execute()."""
+    if not isinstance(pages_1indexed, list) or not pages_1indexed:
+        raise ArtifactInputError(
+            code="ARTIFACT_INVALID_ARGS",
+            message=f"{operation} requires a non-empty 'pages' list of 1-indexed page numbers.",
+            evidence={"pages": pages_1indexed},
+        )
+    zero_indexed: list[int] = []
+    for p in pages_1indexed:
+        if not isinstance(p, int) or isinstance(p, bool) or p < 1 or p > page_count:
+            raise ArtifactInputError(
+                code="ARTIFACT_INVALID_ARGS",
+                message=f"{operation}: page {p!r} is out of range — this document has {page_count} "
+                "page(s), 1-indexed.",
+                evidence={"pages": pages_1indexed, "page_count": page_count, "invalid_page": p},
+            )
+        zero_indexed.append(p - 1)
+    return zero_indexed
+
+
 class PdfAdapter(ArtifactAdapter):
     id = "pdf"
     artifact_type = ArtifactType.PDF
@@ -239,6 +264,58 @@ class PdfAdapter(ArtifactAdapter):
                     "target size exactly); it does not preserve aspect ratio on its own. Pass a "
                     "target that already matches the input's aspect ratio to avoid distortion."
                 ],
+            ),
+            "extract_pages": OperationSpec(
+                name="extract_pages",
+                description="Produce a new PDF containing only the given 1-indexed pages, in the given order "
+                "(so this can also reorder or repeat pages).",
+                args_schema={
+                    "type": "object",
+                    "properties": {
+                        "pages": {"type": "array", "items": {"type": "integer", "minimum": 1}, "minItems": 1},
+                    },
+                    "required": ["pages"],
+                    "additionalProperties": False,
+                },
+                structural_verification_required=True,
+                visual_verification_required=False,
+                render_required=False,
+                postconditions=["output page count == len(pages)"],
+            ),
+            "delete_pages": OperationSpec(
+                name="delete_pages",
+                description="Produce a new PDF with the given 1-indexed pages removed; every other page is "
+                "kept in its original order.",
+                args_schema={
+                    "type": "object",
+                    "properties": {
+                        "pages": {"type": "array", "items": {"type": "integer", "minimum": 1}, "minItems": 1},
+                    },
+                    "required": ["pages"],
+                    "additionalProperties": False,
+                },
+                structural_verification_required=True,
+                visual_verification_required=False,
+                render_required=False,
+                postconditions=["output page count == input page count - len(set(pages))"],
+            ),
+            "rotate_pages": OperationSpec(
+                name="rotate_pages",
+                description="Rotate the given 1-indexed pages (all pages if 'pages' is omitted) by a multiple "
+                "of 90 degrees, clockwise for a positive value.",
+                args_schema={
+                    "type": "object",
+                    "properties": {
+                        "pages": {"type": "array", "items": {"type": "integer", "minimum": 1}, "minItems": 1},
+                        "degrees": {"type": "integer", "enum": [90, 180, 270, -90, -180, -270]},
+                    },
+                    "required": ["degrees"],
+                    "additionalProperties": False,
+                },
+                structural_verification_required=True,
+                visual_verification_required=False,
+                render_required=False,
+                postconditions=["output page count == input page count"],
             ),
         }
 
@@ -421,6 +498,11 @@ class PdfAdapter(ArtifactAdapter):
                 files_touched.append(str(extra_path))
         elif operation == "fit_page_size":
             _require_positive_page_size(args)
+        elif operation in ("extract_pages", "delete_pages"):
+            _resolve_page_indices(args.get("pages"), report.details["page_count"], operation)
+        elif operation == "rotate_pages":
+            if args.get("pages") is not None:
+                _resolve_page_indices(args["pages"], report.details["page_count"], operation)
 
         return OperationPlan(
             operation=f"pdf.{operation}",
@@ -492,6 +574,63 @@ class PdfAdapter(ArtifactAdapter):
             writer.append(reader)
             for page in writer.pages:
                 page.scale_to(width_pt, height_pt)
+            _write_pdf(writer, output_path)
+        elif operation == "extract_pages":
+            reader = pypdf.PdfReader(str(ref.path))
+            if reader.is_encrypted:
+                raise ArtifactExecutionError(
+                    code="ARTIFACT_PDF_ENCRYPTED",
+                    message="Cannot extract pages from an encrypted PDF without decrypting it first.",
+                    evidence={"path": str(ref.path)},
+                )
+            indices = _resolve_page_indices(args.get("pages"), len(reader.pages), operation)
+            writer = pypdf.PdfWriter()
+            for i in indices:
+                writer.add_page(reader.pages[i])
+            _write_pdf(writer, output_path)
+        elif operation == "delete_pages":
+            reader = pypdf.PdfReader(str(ref.path))
+            if reader.is_encrypted:
+                raise ArtifactExecutionError(
+                    code="ARTIFACT_PDF_ENCRYPTED",
+                    message="Cannot delete pages from an encrypted PDF without decrypting it first.",
+                    evidence={"path": str(ref.path)},
+                )
+            page_count = len(reader.pages)
+            to_remove = set(_resolve_page_indices(args.get("pages"), page_count, operation))
+            if len(to_remove) == page_count:
+                raise ArtifactInputError(
+                    code="ARTIFACT_INVALID_ARGS",
+                    message="delete_pages would remove every page, leaving a 0-page PDF.",
+                    evidence={"pages": args.get("pages"), "page_count": page_count},
+                )
+            writer = pypdf.PdfWriter()
+            for i in range(page_count):
+                if i not in to_remove:
+                    writer.add_page(reader.pages[i])
+            _write_pdf(writer, output_path)
+        elif operation == "rotate_pages":
+            degrees = args.get("degrees")
+            if degrees not in (90, 180, 270, -90, -180, -270):
+                raise ArtifactInputError(
+                    code="ARTIFACT_INVALID_ARGS",
+                    message=f"rotate_pages requires 'degrees' to be one of 90/180/270/-90/-180/-270, got {degrees!r}.",
+                    evidence={"degrees": degrees},
+                )
+            reader = pypdf.PdfReader(str(ref.path))
+            if reader.is_encrypted:
+                raise ArtifactExecutionError(
+                    code="ARTIFACT_PDF_ENCRYPTED",
+                    message="Cannot rotate pages in an encrypted PDF without decrypting it first.",
+                    evidence={"path": str(ref.path)},
+                )
+            page_count = len(reader.pages)
+            pages_arg = args.get("pages")
+            indices = set(_resolve_page_indices(pages_arg, page_count, operation)) if pages_arg is not None else set(range(page_count))
+            writer = pypdf.PdfWriter()
+            writer.append(reader)
+            for i in indices:
+                writer.pages[i].rotate(degrees)
             _write_pdf(writer, output_path)
         else:
             raise ArtifactInputError(

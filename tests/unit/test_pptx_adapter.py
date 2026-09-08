@@ -77,6 +77,36 @@ def test_verify_empty_placeholder_passes_when_policy_allows_it(empty_placeholder
     assert check.status == CheckStatus.PASS
 
 
+def test_execute_strip_placeholders_removes_empty_ones(empty_placeholder_pptx, adapter, tmp_path):
+    ref = ArtifactRef.from_path(empty_placeholder_pptx)
+    before = adapter.inspect(ref)
+    assert before.details["empty_placeholders"] == 1
+
+    result_ref = adapter.execute(ref, "strip_placeholders", {}, tmp_path / "out.pptx")
+    after = adapter.inspect(result_ref)
+    assert after.details["empty_placeholders"] == 0
+    # slide count itself is unaffected - only the empty shape is removed
+    assert after.details["slide_count"] == before.details["slide_count"]
+
+
+def test_execute_strip_placeholders_leaves_filled_placeholders_alone(good_pptx, adapter, tmp_path):
+    ref = ArtifactRef.from_path(good_pptx)
+    before = adapter.inspect(ref)
+    result_ref = adapter.execute(ref, "strip_placeholders", {}, tmp_path / "out.pptx")
+    after = adapter.inspect(result_ref)
+    assert after.details["empty_placeholders"] == before.details["empty_placeholders"] == 0
+    assert after.details["text_bearing_slides"] == before.details["text_bearing_slides"]
+
+
+def test_strip_placeholders_fixes_the_empty_placeholders_structural_check(empty_placeholder_pptx, adapter, tmp_path):
+    """The fixer counterpart to the detection check actually resolves it,
+    not just changes the raw count in isolation."""
+    ref = ArtifactRef.from_path(empty_placeholder_pptx)
+    result_ref = adapter.execute(ref, "strip_placeholders", {}, tmp_path / "out.pptx")
+    result = adapter.verify_structural(result_ref, {})
+    assert result.status == CheckStatus.PASS
+
+
 def test_verify_good_deck_has_no_leftover_placeholder_text(good_pptx, adapter):
     ref = ArtifactRef.from_path(good_pptx)
     result = adapter.verify_structural(ref, {})
