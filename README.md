@@ -1,5 +1,9 @@
 # artifacts-skill
 
+[![tests](https://github.com/kajisho5/artifacts-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/kajisho5/artifacts-skill/actions/workflows/ci.yml)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
+[![MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 **A local-first verification and evidence-generation engine for
 AI-generated documents.**
 
@@ -16,6 +20,16 @@ below) is intentionally small and still growing — this is not a
 document-generation or full-editing tool, and isn't trying to be one. See
 [**"What this is not"**](SKILL.md#what-this-is-not) in `SKILL.md` for what
 this project deliberately doesn't do.
+
+> **SPEC** (Self-Producing Execution Contract), coined by this project's
+> author [kajisho5](https://github.com/kajisho5) for
+> [`ffmpeg-skill`](https://github.com/kajisho5/ffmpeg-skill): derive a
+> tool's schema from the one thing that actually has to be correct — its
+> own parser — instead of hand-authoring a second copy beside the code.
+> `artifacts-skill` doesn't fully reach that (its CLI subcommands take
+> generic `--args`/`--policy` JSON blobs, not a per-operation parser SPEC
+> could introspect) — it gets SPEC's actual goal, no schema drift, a
+> different way. → [full explanation](#what-is-spec)
 
 ```
 Input                     artifacts-skill                    Output
@@ -94,9 +108,55 @@ the Core/Adapter split makes adding a format additive, not a rewrite.
   it at runtime. The CLI is hand-written, not generated from the same
   contract at runtime — but a mechanical test (not a convention) asserts
   every schema property has a matching CLI flag and vice versa, so the
-  two can't silently drift out of sync even without shared codegen. See
-  `core/contract.py`'s module docstring for the exact test that enforces
-  this.
+  two can't silently drift out of sync even without shared codegen. This
+  is this project's own answer to **SPEC** — see below.
+
+### What is SPEC?
+
+**SPEC** (Self-Producing Execution Contract) is a pattern coined by this
+project's author, [kajisho5](https://github.com/kajisho5), for
+[`ffmpeg-skill`](https://github.com/kajisho5/ffmpeg-skill) — a prior,
+video-processing project by the same author, and the structural reference
+this project's own contract/CLI/MCP design was built against (see
+`docs/research.md` §4): a tool's `input_schema` — the part of its contract
+that has to track its CLI flag-for-flag — is never hand-authored beside
+the code. It's derived, at run time, from the one thing that actually has
+to be correct for the CLI to work at all: the tool's own parser.
+`ffmpeg-skill`'s 28 tools are each a standalone script with its own
+`argparse` parser, so its `_capture_parser()` can import each script,
+intercept its `parse_args()` call, and build `input_schema` straight from
+the live parser object — no second, hand-kept-in-sync copy, structurally.
+
+`artifacts-skill` doesn't reach the same place the same way, and says so
+rather than claiming it does:
+
+- **The MCP side is real SPEC.** `core/contract.py`'s `TOOLS` list is the
+  one place every tool's schema is declared. `mcp/server.py` builds its
+  `tools/list` — including every `inputSchema` — directly from `TOOLS` at
+  runtime; there's no second copy anywhere, and
+  `mcp/server.py::call_tool()` validates every incoming call against that
+  same schema before dispatching.
+- **The CLI side isn't, structurally, and can't cleanly be.** Where
+  `ffmpeg-skill`'s tools are standalone scripts with typed, per-tool
+  flags, `artifacts-skill`'s `execute`/`plan`/`verify` subcommands take a
+  generic `--args`/`--policy` JSON blob whose actual shape depends on
+  which operation you're running (`metadata_set` wants `{"title": ...}`,
+  `fit_page_size` wants `{"width_pt": ..., "height_pt": ...}`) — there's
+  no single `argparse` parser to introspect the way each of
+  `ffmpeg-skill`'s scripts has. `cli/main.py`'s subcommands are
+  hand-declared.
+- **The goal — no silent drift — still holds, enforced a different way.**
+  A mechanical test,
+  `tests/contract/test_cli_mcp_consistency.py::test_cli_flags_match_input_schema_properties_in_both_directions`,
+  asserts every `input_schema` property has a matching CLI flag and every
+  CLI flag is either a schema property or on an explicit, small CLI-only
+  allowlist (`--json`, `--dry-run`, ...). It runs on every CI run. This
+  doesn't make drift *impossible* the way `ffmpeg-skill`'s runtime
+  derivation does — it makes drift *caught*, immediately, by CI, rather
+  than merely possible to catch by someone noticing.
+
+See `core/contract.py`'s module docstring for the exact mechanism and the
+same honest comparison this section summarizes.
 
 ## Install
 
@@ -154,8 +214,10 @@ negotiates the client's requested version rather than ignoring it (see
   verification model and how aggregation works.
 - [`docs/security.md`](docs/security.md) — path/zip/subprocess safety
   model, resource limits, network policy.
-- [`docs/research.md`](docs/research.md) — prior art and why this doesn't
-  duplicate Anthropic's own document skills.
+- [`docs/research.md`](docs/research.md) — prior art, why this doesn't
+  duplicate Anthropic's own document skills, and this project's own
+  structural reference, [`ffmpeg-skill`](https://github.com/kajisho5/ffmpeg-skill)
+  (§4, same author — see [What is SPEC?](#what-is-spec)).
 - [`docs/roadmap.md`](docs/roadmap.md) — phase plan and what shipped in
   each phase.
 - [`docs/benchmark.md`](docs/benchmark.md) — the scored fixture benchmark:
@@ -166,4 +228,4 @@ negotiates the client's requested version rather than ignoring it (see
 
 ## License
 
-MIT
+[MIT](LICENSE)
