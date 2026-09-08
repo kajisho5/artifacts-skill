@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from artifact_skill.core.engine import run_lifecycle
+import pytest
+
+from artifact_skill.core.engine import build_plan, run_lifecycle
+from artifact_skill.core.errors import ArtifactInputError
 from artifact_skill.core.verification import CheckStatus
 
 
@@ -108,3 +111,39 @@ def test_fix_loop_gives_up_honestly_when_max_iterations_too_low(good_pdf, tmp_pa
 
     assert result.receipt.iterations == 1
     assert result.receipt.status == CheckStatus.FAIL
+
+
+def test_build_plan_rejects_args_violating_the_operation_schema(good_pdf, tmp_path):
+    """OperationSpec.args_schema is now an enforced contract (Issue: SPEC
+    alignment), not just descriptive metadata a caller could ignore —
+    build_plan() validates args before ever calling adapter.plan()."""
+    output_path = tmp_path / "out.pdf"
+    with pytest.raises(ArtifactInputError) as exc_info:
+        build_plan(good_pdf, "fit_page_size", {"width_pt": "not a number", "height_pt": 100}, output_path)
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+
+
+def test_build_plan_rejects_missing_required_arg(good_pdf, tmp_path):
+    output_path = tmp_path / "out.pdf"
+    with pytest.raises(ArtifactInputError) as exc_info:
+        build_plan(good_pdf, "fit_page_size", {"width_pt": 100}, output_path)  # missing height_pt
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+
+
+def test_build_plan_allows_valid_args_through(good_pdf, tmp_path):
+    output_path = tmp_path / "out.pdf"
+    _ref, _adapter, plan = build_plan(good_pdf, "fit_page_size", {"width_pt": 100, "height_pt": 100}, output_path)
+    assert plan.operation == "pdf.fit_page_size"
+
+
+def test_run_lifecycle_rejects_invalid_args_before_touching_disk(good_pdf, tmp_path):
+    output_path = tmp_path / "out.pdf"
+    evidence_dir = tmp_path / "reports"
+    with pytest.raises(ArtifactInputError) as exc_info:
+        run_lifecycle(
+            good_pdf, "fit_page_size", {"width_pt": -5, "height_pt": 100}, output_path,
+            evidence_dir=evidence_dir, dry_run=False,
+        )
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+    assert not output_path.exists()
+    assert not evidence_dir.exists()

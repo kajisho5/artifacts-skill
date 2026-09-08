@@ -113,3 +113,40 @@ to `v2` and both schemas are supported side-by-side for one deprecation
 window; additive changes (a new optional field, a new tool, a new
 capability id) do not bump the schema version. No breaking change has
 happened yet — this project is at `0.1.0`.
+
+## Relationship to SPEC (kajisho5/ffmpeg-skill)
+
+This project's author also authored `kajisho5/ffmpeg-skill`, which coined
+**SPEC** (Self-Producing Execution Contract): each tool's `input_schema` is
+derived at runtime from the one thing that has to be correct for the CLI
+to work at all — the script's own `argparse` parser — rather than
+hand-authored beside the code. Asked directly whether this project follows
+that pattern, the honest answer, checked against the code rather than
+assumed:
+
+- **MCP is SPEC-shaped.** `mcp/server.py::build_tools_list()` derives every
+  `inputSchema` from `TOOLS` at runtime, and `call_tool()` validates
+  incoming arguments against that same schema (`core/schema_validate.py`)
+  before dispatch — there is no second, driftable copy, and the schema is
+  enforced, not just advertised.
+- **The CLI is not, and structurally can't fully be**, because
+  `cli/main.py`'s tools take a generic `--operation`/`--args {json}` shape
+  rather than ffmpeg-skill's one-`argparse`-parser-per-tool design — there
+  is no live per-operation parser to capture a schema *from* the way SPEC
+  does. What this project has instead: `input_schema` and `OperationSpec.args_schema`
+  are both hand-authored (as they always were), but now both are
+  **enforced** — `core/engine.py::build_plan()` validates operation `args`
+  against `OperationSpec.args_schema` before any adapter runs (including a
+  fixer's proposed retry args), and a mechanical test
+  (`tests/contract/test_cli_mcp_consistency.py::test_cli_flags_match_input_schema_properties_in_both_directions`)
+  asserts every CLI flag and every `input_schema` property still agree,
+  in both directions, so a drift now fails CI instead of only being
+  possible.
+- **What's still open**: `cli/main.py`'s flags remain hand-declared rather
+  than generated, so keeping them in sync with `TOOLS` is still a human
+  responsibility the test merely checks after the fact, not a class of bug
+  SPEC eliminates outright. Closing that gap fully would mean generating
+  `build_parser()` from `TOOLS` — not done, since the generic `--args`
+  JSON blob shape means most of what would be generated is boilerplate
+  (`--operation`, `--args`, `--output`) rather than the rich, tool-specific
+  flag sets SPEC was designed for.

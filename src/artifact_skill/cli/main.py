@@ -1,14 +1,18 @@
 """`artifact-skill` CLI — a thin, honest layer over core/engine.py.
 
 Every subcommand here corresponds 1:1 to a `ToolContract` in
-`core/contract.py`; `tests/contract/test_cli_mcp_consistency.py`'s
-`test_cli_subcommands_match_contract_tools` enforces that this file never
-adds/removes/renames a subcommand without updating the contract (and vice
-versa) — but only at the subcommand-name level. Each subcommand's actual
-flags below are hand-declared, not generated from `TOOLS[*].input_schema`,
-and nothing currently asserts the two stay in sync flag-for-flag (see
-`core/contract.py`'s module docstring). Keep them matching by hand when
-you touch either side.
+`core/contract.py`. Two mechanical checks in
+`tests/contract/test_cli_mcp_consistency.py` keep this file from silently
+drifting from the contract:
+`test_cli_subcommands_match_contract_tools` (subcommand names) and
+`test_cli_flags_match_input_schema_properties_in_both_directions` (each
+subcommand's actual flags against `TOOLS[*].input_schema`'s properties,
+both directions, modulo an explicit CLI-only allowlist for flags like
+`--json`/`--dry-run` that have no MCP equivalent). The flags below are
+still hand-declared, not generated from `TOOLS` at runtime (see
+`core/contract.py`'s module docstring for why, and for the SPEC
+comparison) — but an edit that breaks the correspondence now fails CI
+instead of only failing silently at runtime.
 """
 
 from __future__ import annotations

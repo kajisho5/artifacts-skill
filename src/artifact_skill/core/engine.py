@@ -27,6 +27,7 @@ from artifact_skill.core.artifact import ArtifactRef
 from artifact_skill.core.capability import CapabilityReport, CapabilityStatus
 from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactError, ArtifactInputError
 from artifact_skill.core.operation import OperationPlan, OperationRecord
+from artifact_skill.core.schema_validate import validate_against_schema
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
 from artifact_skill.receipt.model import ProductionReceipt, ReceiptBuilder
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
@@ -47,8 +48,31 @@ class LifecycleResult:
 def build_plan(input_path: Path, operation: str, args: dict[str, Any], output_path: Path) -> tuple[ArtifactRef, ArtifactAdapter, OperationPlan]:
     ref = ArtifactRef.from_path(input_path)
     adapter = adapter_for(ref)
+    _validate_operation_args(adapter, operation, args)
     plan = adapter.plan(ref, operation, args, output_path)
     return ref, adapter, plan
+
+
+def _validate_operation_args(adapter: ArtifactAdapter, operation: str, args: dict[str, Any]) -> None:
+    """Enforce `OperationSpec.args_schema` as a real, checked contract
+    rather than descriptive-only metadata (see `core/schema_validate.py`'s
+    module docstring for why this matters). An unknown operation is left
+    to the adapter's own `plan()`/`execute()` to reject with
+    `ARTIFACT_OPERATION_UNKNOWN` — this only validates args for an
+    operation the adapter actually declares.
+    """
+    spec = adapter.operations().get(operation)
+    if spec is None:
+        return
+    errors = validate_against_schema(args, spec.args_schema)
+    if errors:
+        raise ArtifactInputError(
+            code="ARTIFACT_INVALID_ARGS",
+            message=f"Arguments for '{adapter.id}.{operation}' do not match its declared schema: "
+            f"{'; '.join(errors)}",
+            remediation="Check `artifact-skill contract --json` for the expected shape of --args.",
+            evidence={"operation": f"{adapter.id}.{operation}", "errors": errors, "args": args},
+        )
 
 
 def run_lifecycle(
@@ -144,6 +168,19 @@ def run_lifecycle(
         should_retry = structural.status == CheckStatus.FAIL and iteration < max_iterations
         if should_retry:
             fix_args = adapter.fix(ref, operation, args, structural)
+            if fix_args is not None and spec is not None:
+                fix_errors = validate_against_schema(fix_args, spec.args_schema)
+                if fix_errors:
+                    # A fixer that hands back args violating its own operation's
+                    # declared schema is a bug, not a fix — never retry with
+                    # something the schema itself would reject. Same honest
+                    # "no fixer for this" exit as fix_args is None.
+                    builder.add_limitation(
+                        f"Adapter '{adapter.id}' fixer for operation '{operation}' returned args "
+                        f"that violate its own args_schema ({'; '.join(fix_errors)}); stopping rather "
+                        "than retrying with them."
+                    )
+                    fix_args = None
             if fix_args is None:
                 builder.add_limitation(
                     f"Structural verification failed on iteration {iteration} but adapter "

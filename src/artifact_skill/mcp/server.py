@@ -21,10 +21,11 @@ from typing import Any
 from artifact_skill import __version__
 from artifact_skill.adapters.registry import adapter_for
 from artifact_skill.core.artifact import ArtifactRef
-from artifact_skill.core.contract import TOOLS, build_contract
+from artifact_skill.core.contract import TOOLS, build_contract, get_tool
 from artifact_skill.core.engine import build_plan, run_lifecycle
-from artifact_skill.core.errors import ArtifactError, ErrorCategory
+from artifact_skill.core.errors import ArtifactError, ArtifactInputError, ErrorCategory
 from artifact_skill.core.operation import default_output_path
+from artifact_skill.core.schema_validate import validate_against_schema
 from artifact_skill.doctor.detect import detect_environment
 from artifact_skill.rendering.contact_sheet import build_before_after, build_contact_sheet
 
@@ -65,6 +66,24 @@ def call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
                 category=ErrorCategory.INPUT,
                 message=f"Unknown tool '{name}'.",
             )
+        # Unlike the CLI (where argparse enforces required flags/types before a
+        # handler ever runs), MCP `arguments` arrives as a raw, untyped JSON
+        # object from an external caller — nothing upstream of this call
+        # guaranteed e.g. "input" is even present. Validating against the same
+        # `input_schema` MCP itself advertises via `tools/list` turns that
+        # schema into an enforced contract instead of descriptive-only
+        # metadata, and replaces what would otherwise be an unhandled KeyError
+        # (crashing request handling) with a structured error response.
+        tool = get_tool(short_name)
+        if tool is not None:
+            errors = validate_against_schema(arguments, tool.input_schema)
+            if errors:
+                raise ArtifactInputError(
+                    code="ARTIFACT_INVALID_ARGS",
+                    message=f"Arguments for tool '{name}' do not match its input_schema: {'; '.join(errors)}",
+                    remediation="Check this server's tools/list response for the tool's inputSchema.",
+                    evidence={"tool": name, "errors": errors},
+                )
         result = handler(arguments)
         return _text_result(result)
     except ArtifactError as exc:

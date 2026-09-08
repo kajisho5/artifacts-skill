@@ -5,25 +5,38 @@
 reading `TOOLS` directly at runtime; there is no second copy of an MCP
 tool's schema anywhere (`tests/contract/test_cli_mcp_consistency.py`'s
 `test_mcp_tools_have_input_schema_matching_contract` asserts this by
-comparing the live objects, not by convention).
+comparing the live objects, not by convention). `mcp/server.py::call_tool()`
+also *validates* every incoming call's arguments against this same
+`input_schema` (via `core/schema_validate.py`) before dispatching — the
+schema is an enforced contract, not just advertised metadata a caller
+could ignore.
 
 `cli/main.py`'s argparse subcommands are NOT generated from `TOOLS` at
-runtime — this docstring used to claim they were, which was inaccurate.
-`build_parser()` hand-declares each subcommand's flags, and
-`tests/contract/test_cli_mcp_consistency.py::test_cli_subcommands_match_contract_tools`
-only checks that the *set of subcommand names* matches `TOOLS`, not that
-each subcommand's individual flags track `input_schema`'s properties —
-so, unlike the MCP side, a hand-edited CLI flag can drift from
-`input_schema` without CI catching it. This is a real gap relative to the
-"generate the schema from the one thing that has to be correct" pattern
-(SPEC, see kajisho5/ffmpeg-skill's README) and is tracked as follow-up
-work, not yet closed.
+runtime (a previous version of this docstring claimed they were, which
+was inaccurate) — `build_parser()` hand-declares each subcommand's flags.
+What keeps this from silently drifting is
+`tests/contract/test_cli_mcp_consistency.py::test_cli_flags_match_input_schema_properties_in_both_directions`,
+a mechanical check (not a convention) asserting every `input_schema`
+property has a matching CLI flag and every CLI flag is either a schema
+property or on an explicit CLI-only allowlist (`--json`, `--dry-run`,
+etc. — invocation/output-format flags with no MCP equivalent). This is
+still generation-by-hand rather than the "derive the schema from the one
+thing that has to be correct" pattern SPEC uses (kajisho5/ffmpeg-skill's
+README) — CLI-side generic `--args`/`--policy` JSON blobs have no
+per-operation `argparse` parser to derive a schema *from* the way
+ffmpeg-skill's per-tool scripts do — but drift is now caught by CI, not
+merely possible to catch.
 
-Similarly, each adapter's `OperationSpec.args_schema` (`adapters/base.py`)
-is a hand-authored JSON Schema dict declared in `operations()`, kept in
-sync by hand with what `execute()`/`plan()` actually read out of `args`
-— there is no `jsonschema` validation step and no test asserting the two
-never diverge. Same caveat as the CLI flags above.
+Each adapter's `OperationSpec.args_schema` (`adapters/base.py`) is still a
+hand-authored JSON Schema dict declared in `operations()`, describing what
+`execute()`/`plan()` expect out of `args` — but `core/engine.py`'s
+`build_plan()` now validates every call's `args` against it
+(`ARTIFACT_INVALID_ARGS` on a mismatch) before an adapter's `plan()` or
+`execute()` ever runs, and a fixer's (`ArtifactAdapter.fix()`) proposed
+retry args are validated the same way before being retried. The schema is
+enforced, even though it is still hand-kept-in-sync with the code that
+consumes it (no `jsonschema` dependency — see `core/schema_validate.py`'s
+module docstring for why not).
 """
 
 from __future__ import annotations

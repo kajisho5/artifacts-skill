@@ -56,3 +56,51 @@ def test_contract_schema_and_exit_codes_present():
     assert contract["exit_codes"]["fail"] == 1
     assert contract["network_policy"] == "off_by_default"
     assert contract["input_mutation_policy"] == "never"
+
+
+# CLI flags that are deliberately outside input_schema: they control
+# invocation/output format (which JSON-RPC has no equivalent of) or local
+# execution mechanics, not the tool's structural contract, and none of
+# them are exposed as MCP arguments either. Anything NOT in this set must
+# be a schema property, in both directions — see core/contract.py's module
+# docstring for why this test exists (unlike MCP's inputSchema, generated
+# straight from TOOLS, cli/main.py's flags are hand-declared).
+_CLI_ONLY_FLAGS = {"json", "verbose", "progress", "dry_run", "evidence_dir", "help"}
+
+
+def test_cli_flags_match_input_schema_properties_in_both_directions():
+    parser = build_parser()
+    subparsers_action = next(a for a in parser._subparsers._group_actions if a.dest == "command")
+
+    for tool in TOOLS:
+        subparser = subparsers_action.choices[tool.name]
+        actions_by_dest = {a.dest: a for a in subparser._actions}
+        schema_props = tool.input_schema.get("properties", {})
+        required = set(tool.input_schema.get("required", []))
+
+        # every schema property must be reachable from the CLI
+        for prop_name in schema_props:
+            if prop_name == "input":
+                assert "input" in actions_by_dest, f"{tool.name}: schema declares 'input' but CLI has no positional"
+                continue
+            assert prop_name in actions_by_dest, (
+                f"{tool.name}: schema property '{prop_name}' has no matching CLI flag "
+                f"(expected --{prop_name.replace('_', '-')})"
+            )
+            if prop_name in required:
+                assert actions_by_dest[prop_name].required, (
+                    f"{tool.name}: schema requires '{prop_name}' but its CLI flag is not --required"
+                )
+
+        # every CLI flag must be a schema property or explicitly CLI-only
+        for dest, action in actions_by_dest.items():
+            if dest == "input":
+                assert "input" in schema_props, f"{tool.name}: CLI has positional 'input' but schema doesn't declare it"
+                continue
+            if dest in _CLI_ONLY_FLAGS:
+                continue
+            assert dest in schema_props, (
+                f"{tool.name}: CLI flag '--{dest.replace('_', '-')}' has no matching schema property and "
+                f"isn't in the CLI-only allowlist ({sorted(_CLI_ONLY_FLAGS)}) — either add it to "
+                "input_schema or add it to that allowlist if it's genuinely CLI-only."
+            )
