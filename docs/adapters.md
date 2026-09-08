@@ -112,6 +112,43 @@ agent reading the error can tell "we haven't built this yet" apart from
   PPTX's render — this project's own dev sandbox reproduces it for DOCX
   too, confirming it's a backend/environment issue, not PPTX-specific).
 
+## Implemented: XLSX (`adapters/xlsx/adapter.py`)
+
+- **Backends**: `openpyxl` (structural read/write, MIT, pure Python) +
+  the same `rendering/office_convert.py` LibreOffice-conversion helper.
+- **Operations**: `metadata_set` (title/author/subject/keywords).
+- **Structural checks**: XLSX readability, sheet count (+ optional exact/
+  range requirement, optional required-sheet-names check), external
+  workbook links (`WARN` by default — not fetched, per `docs/security.md`'s
+  network-off-by-default policy), `formula_cached_errors`, and
+  `formula_recalculation`.
+- **The recalculation decision (Issue #5)**: `openpyxl` cannot evaluate
+  formulas — it can only read whatever cached result (if any) the last
+  application to save the file computed. This adapter deliberately does
+  **not** attempt LibreOffice-macro-based recalculation to work around
+  that: a macro-scripting interface is a materially larger attack surface
+  and failure-mode space than the plain `--convert-to pdf` conversion the
+  render path already needs, for a benefit ("are formulas fresh") that's
+  speculative pending an actual user request. Instead, two checks say
+  plainly what is and isn't known:
+  - `formula_cached_errors` — `SKIPPED` if there are no formulas at all;
+    `PASS`/`FAIL` if cached results exist and are/aren't literal error
+    tokens (`#REF!`, `#VALUE!`, ...); `UNKNOWN` if formulas exist but no
+    cached values do (the common case for a workbook `openpyxl` itself
+    wrote, confirmed against this adapter's own `good.xlsx` fixture).
+  - `formula_recalculation` — `SKIPPED` if no formulas, otherwise
+    `UNKNOWN` unconditionally, because no cached value (even a
+    non-error one) proves the formula is *currently* correct relative to
+    its inputs. This is why a workbook with real, non-error cached results
+    still rolls up to overall `UNKNOWN`, not `PASS` — see
+    `tests/unit/test_xlsx_adapter.py`'s test for this exact case.
+- **Render**: same `office -> PDF -> pypdfium2 page images` path as
+  PPTX/DOCX.
+- **Known limitations**: formulas never recalculated (see above); chart
+  and embedded-drawing validity not checked; conditional formatting and
+  data validation rules not checked; rendering depends on an external,
+  sometimes-unreliable LibreOffice install.
+
 ## Planned, not implemented
 
 Registered in `_PLANNED` with the phase each is targeted for (see
@@ -119,7 +156,6 @@ Registered in `_PLANNED` with the phase each is targeted for (see
 
 | Type | Phase | Primary backend candidate |
 |---|---|---|
-| XLSX | 3 | `openpyxl` (structural) + LibreOffice headless (render) |
 | HTML | 6 | Playwright/Chromium (already vendored in this dev environment) |
 | SVG | 6 | Playwright/Chromium rasterization, or a pure-Python SVG rasterizer |
 | Image (PNG/JPEG/WebP) | 6 | Pillow (already a PDF-adapter dependency) |

@@ -8,6 +8,7 @@ import pytest
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "pdf"
 PPTX_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "pptx"
 DOCX_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "docx"
+XLSX_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "xlsx"
 
 
 @pytest.fixture()
@@ -105,4 +106,39 @@ def corrupt_docx(tmp_path: Path) -> Path:
 def mislabeled_pdf_as_docx(tmp_path: Path) -> Path:
     dst = tmp_path / "mislabeled_pdf.docx"
     shutil.copy(DOCX_FIXTURES_DIR / "mislabeled_pdf.docx", dst)
+    return dst
+
+
+@pytest.fixture()
+def good_xlsx(tmp_path: Path) -> Path:
+    dst = tmp_path / "good.xlsx"
+    shutil.copy(XLSX_FIXTURES_DIR / "good.xlsx", dst)
+    return dst
+
+
+@pytest.fixture()
+def formula_error_xlsx(tmp_path: Path) -> Path:
+    dst = tmp_path / "formula_error.xlsx"
+    shutil.copy(XLSX_FIXTURES_DIR / "formula_error.xlsx", dst)
+    return dst
+
+
+@pytest.fixture()
+def no_formula_xlsx(tmp_path: Path) -> Path:
+    dst = tmp_path / "no_formula.xlsx"
+    shutil.copy(XLSX_FIXTURES_DIR / "no_formula.xlsx", dst)
+    return dst
+
+
+@pytest.fixture()
+def corrupt_xlsx(tmp_path: Path) -> Path:
+    dst = tmp_path / "corrupt.xlsx"
+    shutil.copy(XLSX_FIXTURES_DIR / "corrupt.xlsx", dst)
+    return dst
+
+
+@pytest.fixture()
+def mislabeled_pdf_as_xlsx(tmp_path: Path) -> Path:
+    dst = tmp_path / "mislabeled_pdf.xlsx"
+    shutil.copy(XLSX_FIXTURES_DIR / "mislabeled_pdf.xlsx", dst)
     return dst

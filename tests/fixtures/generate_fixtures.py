@@ -12,8 +12,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import zipfile
+
 import pypdf
 from docx import Document
+from openpyxl import Workbook
 from pptx import Presentation
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -21,6 +24,7 @@ from reportlab.pdfgen import canvas
 PDF_OUT_DIR = Path(__file__).parent / "pdf"
 PPTX_OUT_DIR = Path(__file__).parent / "pptx"
 DOCX_OUT_DIR = Path(__file__).parent / "docx"
+XLSX_OUT_DIR = Path(__file__).parent / "xlsx"
 
 
 # ---------------------------------------------------------------- PDF ----
@@ -139,10 +143,86 @@ def make_mislabeled_pdf_as_docx() -> None:
     path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
 
 
+# --------------------------------------------------------------- XLSX ----
+
+def _rewrite_zip_member(path: Path, member: str, old: str, new: str) -> None:
+    """openpyxl can't write a cached formula result directly (it only ever
+    writes the formula text) — so build a normal workbook, then patch the
+    one cell's raw XML to add the `<v>` a real spreadsheet app would have
+    written. This is the only way to get a deterministic "cached value
+    present" or "cached error present" fixture without depending on
+    LibreOffice (whose reliability in this exact dev environment is
+    exactly what adapters/pptx/adapter.py's docstring documents as flaky)."""
+    with zipfile.ZipFile(path, "r") as zf:
+        items = {name: zf.read(name) for name in zf.namelist()}
+    xml = items[member].decode("utf-8")
+    assert old in xml, f"expected substring not found in {member}: {old!r}"
+    items[member] = xml.replace(old, new, 1).encode("utf-8")
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name, data in items.items():
+            zf.writestr(name, data)
+
+
+def _make_formula_workbook(path: Path) -> None:
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws["A1"] = "Label"
+    ws["B1"] = 10
+    ws["B2"] = 20
+    ws["B3"] = "=B1+B2"
+    wb.create_sheet("Sheet2")
+    wb.save(str(path))
+
+
+def make_good_xlsx() -> None:
+    """Two sheets, one formula, a real (non-error) cached result — the
+    PASS branch of formula_cached_errors, and the ordinary UNKNOWN branch
+    of formula_recalculation (openpyxl never recalculates, regardless of
+    what's cached)."""
+    path = XLSX_OUT_DIR / "good.xlsx"
+    _make_formula_workbook(path)
+    _rewrite_zip_member(path, "xl/worksheets/sheet1.xml", '<c r="B3"><f>B1+B2</f><v></v></c>', '<c r="B3"><f>B1+B2</f><v>30</v></c>')
+
+
+def make_formula_error_xlsx() -> None:
+    """A formula cell with a cached #REF! result — must FAIL formula_cached_errors."""
+    path = XLSX_OUT_DIR / "formula_error.xlsx"
+    _make_formula_workbook(path)
+    _rewrite_zip_member(
+        path, "xl/worksheets/sheet1.xml",
+        '<c r="B3"><f>B1+B2</f><v></v></c>', '<c r="B3" t="e"><f>B1+B2</f><v>#REF!</v></c>',
+    )
+
+
+def make_no_formula_xlsx() -> None:
+    """No formulas at all — formula_cached_errors/formula_recalculation
+    should both be SKIPPED, not UNKNOWN (a genuinely not-applicable case
+    is a different, more benign signal than "we couldn't check")."""
+    path = XLSX_OUT_DIR / "no_formula.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Data"
+    ws["A1"] = "Label"
+    ws["B1"] = 10
+    wb.save(str(path))
+
+
+def make_corrupt_xlsx() -> None:
+    path = XLSX_OUT_DIR / "corrupt.xlsx"
+    path.write_bytes(b"PK\x03\x04this is not a real zip/ooxml body, just garbage bytes")
+
+
+def make_mislabeled_pdf_as_xlsx() -> None:
+    path = XLSX_OUT_DIR / "mislabeled_pdf.xlsx"
+    path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
+
+
 if __name__ == "__main__":
     PDF_OUT_DIR.mkdir(parents=True, exist_ok=True)
     PPTX_OUT_DIR.mkdir(parents=True, exist_ok=True)
     DOCX_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    XLSX_OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     make_good_2page()
     make_empty_0page()
@@ -161,6 +241,13 @@ if __name__ == "__main__":
     make_corrupt_docx()
     make_mislabeled_pdf_as_docx()
 
+    make_good_xlsx()
+    make_formula_error_xlsx()
+    make_no_formula_xlsx()
+    make_corrupt_xlsx()
+    make_mislabeled_pdf_as_xlsx()
+
     print(f"Wrote PDF fixtures to {PDF_OUT_DIR}")
     print(f"Wrote PPTX fixtures to {PPTX_OUT_DIR}")
     print(f"Wrote DOCX fixtures to {DOCX_OUT_DIR}")
+    print(f"Wrote XLSX fixtures to {XLSX_OUT_DIR}")

@@ -1,10 +1,11 @@
 # Roadmap
 
 Phases per the original design brief. **Phase 0-1, Phase 2 (PDF + PPTX),
-Phase 3 (DOCX; XLSX still open), and a working slice of Phase 4/5 are done
-as of this writing** — everything below "Now" is planned, not implemented,
-and nothing in this codebase claims otherwise (`doctor`/`registry.py`
-report unimplemented formats explicitly).
+Phase 3 (DOCX + XLSX), and a working slice of Phase 4/5 are done as of
+this writing** — everything below "Now" is planned, not implemented, and
+nothing in this codebase claims otherwise (`doctor`/`registry.py` report
+unimplemented formats explicitly). All four Tier 1 formats from the
+original design brief (PDF/PPTX/DOCX/XLSX) are now implemented.
 
 ## Done
 
@@ -40,17 +41,26 @@ report unimplemented formats explicitly).
   determined structurally at all (no rendering-independent pagination
   exists in the XML), so `verify_structural()` reports it as `UNKNOWN`
   unconditionally rather than faking a number from paragraph count.
+- **Phase 3 (XLSX).** `adapters/xlsx/adapter.py`: inspect, plan, execute
+  (`metadata_set`), LibreOffice-backed render, structural verify. Resolved
+  the recalculation decision flagged in Issue #5: **not** attempting
+  LibreOffice-macro-based recalculation (a materially larger attack
+  surface for a speculative benefit), and instead reporting two separate
+  honest facts — `formula_cached_errors` (checkable from whatever's
+  already cached) and `formula_recalculation` (`UNKNOWN` whenever any
+  formula exists, unconditionally, since no cached value proves current
+  correctness). Verified against fixtures built by patching cached `<v>`
+  values directly into the OOXML (since `openpyxl` itself can't write
+  them and this dev sandbox's LibreOffice can't be relied on to produce
+  them either) — see `docs/adapters.md` for the full design writeup and
+  `tests/fixtures/generate_fixtures.py` for how those fixtures are made.
 
 ## Now / Next
 
-- **Phase 3 — XLSX.** `openpyxl` for structural inspect; LibreOffice
-  headless for rendering. XLSX structural checks specifically need
-  formula-error detection and recalculation-required flagging (spec §14)
-  — `openpyxl` does not recalculate formulas itself, so this needs either
-  a documented "not verified without LibreOffice recalculation" `UNKNOWN`
-  state (the same pattern DOCX just used for page count) or a
-  LibreOffice-macro-based recalculation path; decide before implementing
-  rather than shipping a silent gap. See Issue #5 for the fuller writeup.
+All four Tier 1 formats (PDF, PPTX, DOCX, XLSX) are implemented. Nothing
+is currently in progress — see "Later" below for what's next, and
+`docs/adapters.md`'s "Writing a new adapter" checklist for how to start
+one of them.
 
 ## Later
 

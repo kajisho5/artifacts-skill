@@ -84,12 +84,12 @@ def test_input_not_found_gives_input_exit_code(tmp_path):
 
 
 def test_unimplemented_format_gives_clear_capability_error(tmp_path):
-    """XLSX is still on the `_PLANNED` list (registry.py) as of this test —
-    PDF/PPTX/DOCX moved off it as their adapters landed, so this
+    """HTML is still on the `_PLANNED` list (registry.py) as of this test —
+    PDF/PPTX/DOCX/XLSX moved off it as their adapters landed, so this
     specifically needs a format that's genuinely not implemented yet."""
-    xlsx_like = tmp_path / "sheet.xlsx"
-    xlsx_like.write_bytes(b"not a real xlsx, just bytes")
-    proc = run_cli(["inspect", str(xlsx_like), "--json"], cwd=tmp_path)
+    html_like = tmp_path / "page.html"
+    html_like.write_bytes(b"<!doctype html><html><body>hi</body></html>")
+    proc = run_cli(["inspect", str(html_like), "--json"], cwd=tmp_path)
     data = json.loads(proc.stdout)
     assert data["error"]["code"] in ("ARTIFACT_ADAPTER_NOT_IMPLEMENTED", "ARTIFACT_TYPE_UNSUPPORTED")
     assert proc.returncode == 3
@@ -178,3 +178,49 @@ def test_docx_input_unchanged_after_execute(good_docx, tmp_path):
         cwd=tmp_path,
     )
     assert sha256_of(good_docx) == before
+
+
+def test_xlsx_doctor_reports_structural_capability(tmp_path):
+    proc = run_cli(["doctor", "--json"], cwd=tmp_path)
+    data = json.loads(proc.stdout)
+    assert "xlsx.structural" in data["capabilities"]
+    assert "xlsx.render" in data["capabilities"]
+
+
+def test_xlsx_execute_then_verify(good_xlsx, tmp_path):
+    exec_proc = run_cli(
+        ["execute", str(good_xlsx), "--operation", "metadata_set", "--args", '{"title":"CLI XLSX Test"}',
+         "--output", "out.xlsx", "--json"],
+        cwd=tmp_path,
+    )
+    assert (tmp_path / "out.xlsx").exists()
+
+    verify_proc = run_cli(
+        ["verify", "out.xlsx", "--policy", '{"require_sheet_count": 2, "require_metadata": {"title": "CLI XLSX Test"}}',
+         "--json"],
+        cwd=tmp_path,
+    )
+    data = json.loads(verify_proc.stdout)
+    check_by_id = {c["id"]: c for c in data["checks"]}
+    assert check_by_id["sheet_count_requirement"]["status"] == "pass"
+    assert check_by_id["metadata_title"]["status"] == "pass"
+    assert check_by_id["formula_recalculation"]["status"] == "unknown"
+
+
+def test_xlsx_formula_error_gives_fail_exit(formula_error_xlsx, tmp_path):
+    proc = run_cli(["verify", str(formula_error_xlsx), "--json"], cwd=tmp_path)
+    assert proc.returncode == 1
+    data = json.loads(proc.stdout)
+    assert data["status"] == "fail"
+
+
+def test_xlsx_input_unchanged_after_execute(good_xlsx, tmp_path):
+    from artifact_skill.core.artifact import sha256_of
+
+    before = sha256_of(good_xlsx)
+    run_cli(
+        ["execute", str(good_xlsx), "--operation", "metadata_set", "--args", '{"title":"x"}',
+         "--output", "out.xlsx", "--json"],
+        cwd=tmp_path,
+    )
+    assert sha256_of(good_xlsx) == before
