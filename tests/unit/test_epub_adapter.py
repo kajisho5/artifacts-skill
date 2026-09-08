@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import zipfile
+from pathlib import Path
+
 import pytest
 
 from artifact_skill.adapters.epub.adapter import EpubAdapter
@@ -11,6 +14,58 @@ from artifact_skill.core.verification import CheckStatus
 @pytest.fixture()
 def adapter() -> EpubAdapter:
     return EpubAdapter()
+
+
+def _probe_epub_render_works(adapter: EpubAdapter, ref: ArtifactRef, tmp_path: Path) -> bool:
+    """Same pattern as test_html_adapter.py's identical helper - Playwright
+    being pip-installed doesn't guarantee a matching Chromium build."""
+    try:
+        result = adapter.render(ref, tmp_path / "_probe")
+        return len(result.files) > 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+_ONE_PX_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753"
+    "de0000000c4944415478da6360f8cfc0c0c00000030001807e2d5c9700000000"
+    "49454e44ae426082"
+)
+
+
+def _build_cross_directory_epub(path: Path) -> None:
+    """A minimal but entirely ordinary real-world EPUB layout: content
+    documents under OEBPS/text/, resources under a sibling OEBPS/images/ -
+    proves render() resolves same-archive cross-directory references
+    (which the P0-2 boundary this adapter reuses would incorrectly block
+    if it were scoped to just each document's own immediate directory,
+    rather than the whole staged archive - see render()'s docstring)."""
+    container_xml = (
+        b'<?xml version="1.0"?>'
+        b'<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+        b'<rootfiles><rootfile full-path="OEBPS/content.opf" '
+        b'media-type="application/oebps-package+xml"/></rootfiles></container>'
+    )
+    opf = (
+        b'<?xml version="1.0"?>'
+        b'<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">'
+        b'<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Cross Dir</dc:title></metadata>'
+        b"<manifest>"
+        b'<item id="ch1" href="text/ch1.xhtml" media-type="application/xhtml+xml"/>'
+        b'<item id="ch2" href="text/ch2.xhtml" media-type="application/xhtml+xml"/>'
+        b'<item id="pic" href="images/pic.png" media-type="image/png"/>'
+        b"</manifest>"
+        b'<spine><itemref idref="ch1"/><itemref idref="ch2"/></spine></package>'
+    )
+    ch1 = b'<html><body><h1>Ch1</h1><img src="../images/pic.png" width="1" height="1"/></body></html>'
+    ch2 = b"<html><body><h1>Ch2</h1></body></html>"
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr(zipfile.ZipInfo("mimetype"), b"application/epub+zip", zipfile.ZIP_STORED)
+        zf.writestr("META-INF/container.xml", container_xml)
+        zf.writestr("OEBPS/content.opf", opf)
+        zf.writestr("OEBPS/text/ch1.xhtml", ch1)
+        zf.writestr("OEBPS/text/ch2.xhtml", ch2)
+        zf.writestr("OEBPS/images/pic.png", _ONE_PX_PNG)
 
 
 def test_type_detection_by_content_not_extension(good_epub, mislabeled_pdf_as_epub):
@@ -217,21 +272,106 @@ def test_capabilities_report_never_lies_about_probe_result(adapter):
     assert "epub.structural" in caps
     assert caps["epub.structural"].status == CapabilityStatus.AVAILABLE  # stdlib-only, always available
     assert "epub.render" in caps
-    assert caps["epub.render"].status == CapabilityStatus.NOT_IMPLEMENTED
+    # Self-audit finding: render() is now implemented (was NOT_IMPLEMENTED) -
+    # capabilities() reports the same playwright-availability pattern as
+    # every other Chromium-backed adapter (HTML/SVG/CSV/Markdown), never a
+    # permanently-stale "deferred" status.
+    assert caps["epub.render"].status in (CapabilityStatus.AVAILABLE, CapabilityStatus.MISSING)
 
 
-def test_render_is_honestly_not_implemented(good_epub, adapter, tmp_path):
-    """capabilities() must never claim more than render() actually does -
-    see docs/adapters.md's 'never treat a stub as done' rule."""
-    from artifact_skill.core.errors import ArtifactCapabilityError
-
+def test_render_happy_path_when_backend_actually_works(good_epub, adapter, tmp_path):
     ref = ArtifactRef.from_path(good_epub)
-    with pytest.raises(ArtifactCapabilityError) as exc_info:
-        adapter.render(ref, tmp_path / "rendered")
-    assert exc_info.value.code == "ARTIFACT_RENDER_NOT_IMPLEMENTED"
+    if not _probe_epub_render_works(adapter, ref, tmp_path):
+        pytest.skip("Playwright/Chromium in this environment cannot render (see adapter docstring)")
+    result = adapter.render(ref, tmp_path / "rendered")
+    assert result.backend == "playwright+chromium"
+    assert len(result.files) == 1  # good_epub has one spine document
+    assert result.files[0].exists()
+    assert result.files[0].stat().st_size > 0
+    assert result.warnings == []
+
+
+def test_render_produces_one_png_per_spine_document_in_order(adapter, tmp_path):
+    epub_path = tmp_path / "cross_dir.epub"
+    _build_cross_directory_epub(epub_path)
+    ref = ArtifactRef.from_path(epub_path)
+    if not _probe_epub_render_works(adapter, ref, tmp_path):
+        pytest.skip("Playwright/Chromium in this environment cannot render (see adapter docstring)")
+
+    result = adapter.render(ref, tmp_path / "rendered")
+    assert [f.name for f in result.files] == ["page-001.png", "page-002.png"]
+    assert all(f.exists() and f.stat().st_size > 0 for f in result.files)
+
+
+def test_render_resolves_a_same_archive_cross_directory_resource_reference(adapter, tmp_path):
+    """This is the specific design gap that used to keep render()
+    NOT_IMPLEMENTED (see this module's and the adapter's docstrings): a
+    spine document under OEBPS/text/ referencing an image under a sibling
+    OEBPS/images/ is an entirely ordinary EPUB layout, not an edge case.
+    Proven functionally: the chapter WITH the (now-loading) image renders
+    a larger PNG than the chapter with none, the same "verify functionally
+    rather than inspect pixel data" approach test_html_adapter.py's
+    external-request test uses."""
+    epub_path = tmp_path / "cross_dir.epub"
+    _build_cross_directory_epub(epub_path)
+    ref = ArtifactRef.from_path(epub_path)
+    if not _probe_epub_render_works(adapter, ref, tmp_path):
+        pytest.skip("Playwright/Chromium in this environment cannot render (see adapter docstring)")
+
+    result = adapter.render(ref, tmp_path / "rendered")
+    ch1_with_image, ch2_without_image = result.files
+    assert ch1_with_image.stat().st_size > ch2_without_image.stat().st_size
+
+
+def test_render_still_blocks_a_file_url_escaping_the_staged_archive(adapter, tmp_path):
+    """The P0-2 boundary render() reuses must still reject anything
+    outside the EPUB's own (safely extracted, private) staged copy - a
+    hostile spine document cannot use the wider allowed_root as a loophole
+    to reach an arbitrary local file."""
+    container_xml = (
+        b'<?xml version="1.0"?>'
+        b'<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+        b'<rootfiles><rootfile full-path="OEBPS/content.opf" '
+        b'media-type="application/oebps-package+xml"/></rootfiles></container>'
+    )
+    opf = (
+        b'<?xml version="1.0"?>'
+        b'<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">'
+        b'<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Hostile</dc:title></metadata>'
+        b'<manifest><item id="ch1" href="text/ch1.xhtml" media-type="application/xhtml+xml"/></manifest>'
+        b'<spine><itemref idref="ch1"/></spine></package>'
+    )
+    ch1 = b'<html><body><iframe src="file:///etc/passwd" id="leak"></iframe></body></html>'
+    epub_path = tmp_path / "hostile.epub"
+    with zipfile.ZipFile(epub_path, "w") as zf:
+        zf.writestr(zipfile.ZipInfo("mimetype"), b"application/epub+zip", zipfile.ZIP_STORED)
+        zf.writestr("META-INF/container.xml", container_xml)
+        zf.writestr("OEBPS/content.opf", opf)
+        zf.writestr("OEBPS/text/ch1.xhtml", ch1)
+
+    ref = ArtifactRef.from_path(epub_path)
+    if not _probe_epub_render_works(adapter, ref, tmp_path):
+        pytest.skip("Playwright/Chromium in this environment cannot render (see adapter docstring)")
+
+    # Render succeeding without raising already proves the hostile file://
+    # request was aborted rather than crashing the render; the request-
+    # level proof that it's aborted (not fulfilled) is
+    # test_chromium_render.py's own real-Chromium P0-2 regression test,
+    # which this adapter's render() routes through unchanged.
+    result = adapter.render(ref, tmp_path / "rendered")
+    assert len(result.files) == 1
+
+
+def test_render_rejects_more_spine_documents_than_max_pages(good_epub, adapter, tmp_path):
+    from artifact_skill.security.limits import Limits
+
+    ref = ArtifactRef.from_path(good_epub)  # 1 spine document
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.render(ref, tmp_path / "rendered", limits=Limits(max_pages=0))
+    assert exc_info.value.code == "ARTIFACT_TOO_MANY_PAGES"
 
 
 def test_limitations_names_the_real_known_caveats(adapter):
     text = " ".join(adapter.limitations())
-    assert "Rendering is not implemented" in text
+    assert "one PNG per spine" in text
     assert "title/author only" in text

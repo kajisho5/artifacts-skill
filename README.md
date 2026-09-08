@@ -82,7 +82,7 @@ just a claim. Once published, the same commands work as
 | SVG | ✅ | ✅ | ✅ (Playwright + Chromium) | — (inspect/render/verify only, by design) |
 | CSV | ✅ | ✅ | ✅ (Playwright + Chromium) | — (inspect/render/verify only, by design) |
 | Markdown | ✅ | ✅ | ✅ (`markdown-it-py` + Playwright + Chromium) | — (inspect/render/verify only, by design) |
-| EPUB | ✅ | ✅ | not yet (honestly `NOT_IMPLEMENTED`, see `docs/adapters.md`) | `metadata_set` |
+| EPUB | ✅ | ✅ | ✅ (Playwright + Chromium) | `metadata_set` |
 
 All formats from the original design brief's Tier 1 and Tier 2, plus CSV/
 Markdown/EPUB added beyond it, are now implemented. A genuinely

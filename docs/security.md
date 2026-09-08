@@ -127,20 +127,23 @@ comparing it.
   file, `fsync`, then `os.replace`. No partial file is ever left at the
   target path, including on a crash mid-write.
 - **`safe_extract_zip`** — a real, tested utility for extracting a zip
-  archive to disk with path-escape and zip-bomb protection. **Not
-  currently called from any production code path** (self-audit finding,
-  FIX_PROMPT P1-1 — a prior version of this doc claimed it was "used
-  today by the OOXML content-type sniff," which was never true:
+  archive to disk with path-escape and zip-bomb protection. Originally
+  declared but not called from any production code path (self-audit
+  finding, FIX_PROMPT P1-1 — a prior version of this doc claimed it was
+  "used today by the OOXML content-type sniff," which was never true:
   `core/artifact.py`'s `_sniff_zip_container()` reads directly via
   `zipfile.ZipFile`/`zf.read()`, and PPTX/DOCX/XLSX's structural
   read/write goes through python-pptx/python-docx/openpyxl's own
-  internal zip handling, neither of which calls this function). The
-  EPUB adapter (`adapters/epub/adapter.py`) reimplements the
-  decompression-bomb subset of these same checks directly rather than
-  calling this function, specifically because `inspect()` must never
-  write to disk (the adapter interface's own contract) and this
-  function's whole job is writing extracted members to disk — see that
-  adapter's module docstring for the full reasoning. Rejects, before
+  internal zip handling, neither of which calls this function). **Now
+  wired into one production path**: the EPUB adapter's `render()`
+  (`adapters/epub/adapter.py`, added in a later self-audit round) calls
+  it to safely extract the whole archive into a private staging
+  directory before rendering each spine document — the one adapter
+  operation that genuinely needs real files on disk (Chromium navigates
+  via `file://`), unlike `inspect()`, which still reimplements just the
+  decompression-bomb subset in memory (see that adapter's module
+  docstring for why `inspect()` specifically can't call this function:
+  its own contract says it must never write to disk). Rejects, before
   extracting anything:
   - more members than `Limits.max_zip_members` (default 20,000),
   - any member with an absolute path or a `..` segment,

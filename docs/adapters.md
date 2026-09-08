@@ -488,18 +488,26 @@ deserves a more specific answer than "unrecognized file."
   `tests/benchmark/cases.py`'s module docstring): a structural defect
   that is itself a security control propagates as an exception, not a
   mere `FAIL` `Check` a caller could route around.
-- **Render is honestly not implemented** (`epub.render` reports
-  `NOT_IMPLEMENTED`, not `MISSING` — a deliberate scope decision, not a
-  missing dependency): a faithful preview needs to resolve a spine
-  document's own relative references (images/CSS, often in sibling
-  directories under the OPF root) without reopening the `file://`
-  containment hole the Chromium renderer's `allowed_root` boundary was
-  built to close (see `docs/security.md`'s P0-2 entry). That needs a real
-  design pass — extending the renderer's allowed root to the whole
-  extracted archive (safe, since every file came from the same
-  already-vetted zip) via a same-directory wrapper page is one plausible
-  approach — not a quick hack shipped unverified against real Chromium
-  behavior for nested `file://` navigation.
+- **Render: one PNG per spine (reading-order) document** (self-audit
+  finding — this used to report `NOT_IMPLEMENTED`; closed by extending
+  `rendering/chromium_render.py` rather than shipping a quick hack). The
+  archive is safely extracted in full (`safe_extract_zip()` — the same
+  path-escape/symlink/zip-bomb-guarded utility FIX_PROMPT P1-1 found
+  declared but never actually wired into a production code path; this is
+  that wiring) into a private temp directory, and every spine document is
+  rendered from its staged copy with the *entire staged tree* as the
+  Chromium `file://` allowed root, not just each document's own immediate
+  directory — a chapter under `OEBPS/text/` pulling an image from a
+  sibling `OEBPS/images/` is an entirely ordinary EPUB layout, and the
+  narrower per-file boundary every other adapter uses would have
+  incorrectly blocked it. The staged tree is nothing but this one EPUB's
+  own content, so widening the boundary to all of it doesn't reopen the
+  P0-2 hole (arbitrary local files) it exists to close — proven both ways
+  directly against a real Chromium launch: a same-archive cross-directory
+  image reference renders correctly, and a hostile `file:///etc/passwd`
+  reference is still aborted. A document with more spine items than
+  `Limits.max_pages` is rejected (`ARTIFACT_TOO_MANY_PAGES`), not silently
+  truncated, the same as the PDF adapter.
 - **Known limitations**: manifest/spine integrity is checked by presence,
   not by validating each content document's internal well-formedness
   beyond XML parsing; `metadata_set` supports title/author only; it also

@@ -289,13 +289,13 @@ planned" below for the formats considered and rejected in the same pass.
   (`.opf`, `.xhtml`) don't share OOXML's bare `.xml` extension. One
   operation, `metadata_set` (title/author only — EPUB's Dublin Core
   metadata has no single-field analogue for `subject`/`keywords`).
-  **Rendering is honestly not implemented** (`epub.render` reports
-  `NOT_IMPLEMENTED`, not `MISSING`): a faithful preview needs to resolve a
-  spine document's own relative references (images/CSS, often in sibling
-  directories under the OPF root) without reopening the `file://`
-  containment hole the Chromium renderer's `allowed_root` boundary was
-  built to close (see `docs/security.md`'s P0-2 entry) — that needs a real
-  design pass, not a quick hack shipped half-verified.
+  **Rendering** (self-audit finding, closed after this phase's initial
+  ship — see `docs/adapters.md`'s EPUB section for the full design):
+  one PNG per spine document, staged into a safely-extracted private copy
+  of the whole archive so same-archive cross-directory resource
+  references (a chapter under `text/` pulling an image from a sibling
+  `images/`) resolve correctly without reopening the P0-2 `file://`
+  containment hole.
 
 ## Explicitly not planned (see spec §62)
 

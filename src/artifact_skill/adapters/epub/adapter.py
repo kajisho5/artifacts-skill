@@ -46,23 +46,26 @@ still fully real.
 
 from __future__ import annotations
 
+import importlib.util
 import io
 import posixpath
 import re
+import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 from typing import Any
 
-from artifact_skill.adapters.base import ArtifactAdapter, OperationSpec
+from artifact_skill.adapters.base import ArtifactAdapter, OperationSpec, RenderResult
 from artifact_skill.core.artifact import ArtifactRef, ArtifactType, InspectionReport
 from artifact_skill.core.capability import Capability, CapabilityStatus
 from artifact_skill.core.errors import ArtifactInputError, ArtifactSecurityError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
 from artifact_skill.leftover_text import find_leftover_markers
+from artifact_skill.rendering.chromium_render import render_local_files
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
-from artifact_skill.security.paths import atomic_write_bytes, check_input_size
+from artifact_skill.security.paths import atomic_write_bytes, check_input_size, safe_extract_zip
 from artifact_skill.security.xml_safety import reject_xml_entity_declaration
 
 _CONTAINER_PATH = "META-INF/container.xml"
@@ -228,18 +231,39 @@ class EpubAdapter(ArtifactAdapter):
             detail="Uses only the standard library (zipfile, xml.etree.ElementTree); always available.",
             detected_via="stdlib",
         )
-        render = Capability(
-            id="epub.render", status=CapabilityStatus.NOT_IMPLEMENTED,
-            detail="Rendering a faithful preview requires resolving a spine document's own relative "
-            "references without reopening the file:// containment boundary other adapters rely on "
-            "(P0-2) — deferred pending a real design, not a missing dependency. See this module's docstring.",
-        )
+        # Self-audit finding: render() is no longer NOT_IMPLEMENTED (see
+        # render() below and this module's docstring for the design that
+        # closed the gap) - capabilities() now reports the same
+        # playwright-availability pattern as HTML/SVG/CSV/Markdown, not a
+        # permanent "deferred" status that would now be stale.
+        if importlib.util.find_spec("playwright") is not None:
+            import importlib.metadata as im
+
+            try:
+                version = im.version("playwright")
+            except im.PackageNotFoundError:
+                version = None
+            render = Capability(
+                id="epub.render", status=CapabilityStatus.AVAILABLE,
+                detail="playwright importable. A matching Chromium build must also be installed "
+                "(`playwright install chromium`) — verified at render() time, not here.",
+                detected_via="import playwright", version=version,
+            )
+        else:
+            render = Capability(
+                id="epub.render", status=CapabilityStatus.MISSING,
+                detail="playwright not importable.", detected_via="import playwright",
+            )
         return [structural, render]
 
     def limitations(self) -> list[str]:
         return [
-            "Rendering is not implemented (see capabilities() — a deliberate scope decision, not a missing "
-            "dependency): structural verification is still fully real.",
+            "render() produces one PNG per spine (reading-order) document, up to Limits.max_pages — a "
+            "document beyond that limit is rejected (ARTIFACT_TOO_MANY_PAGES), not silently truncated, "
+            "same as the PDF adapter. Each spine document is staged into a private, safely-extracted copy "
+            "of the whole archive first, so same-archive cross-directory references (e.g. a chapter under "
+            "OEBPS/text/ referencing an image under OEBPS/images/) resolve correctly; anything outside "
+            "that staged copy is blocked the same way P0-2 blocks it for every other renderer.",
             "metadata_set supports title/author only — EPUB's Dublin Core metadata has no direct analogue "
             "for the subject/keywords fields other formats' metadata_set accepts.",
             "Manifest/spine integrity is checked by presence (does the referenced file exist in the archive), "
@@ -312,6 +336,75 @@ class EpubAdapter(ArtifactAdapter):
                 continue
             texts.append(_TAG_STRIP.sub(" ", raw))
         return find_leftover_markers("\n".join(texts))
+
+    # ---- render ------------------------------------------------------
+
+    def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
+        """One PNG per spine (reading-order) document.
+
+        Design that closes the gap this adapter used to report
+        NOT_IMPLEMENTED for (see this module's docstring and
+        `rendering/chromium_render.py::render_local_files()`'s docstring
+        for the full reasoning): the archive is safely extracted in full
+        (`safe_extract_zip()` — path-escape/symlink/zip-bomb guarded, the
+        same utility FIX_PROMPT P1-1 found declared but never actually
+        wired into a production code path; this is that wiring) into a
+        private temp directory, and every spine document is rendered from
+        its staged copy with the *entire staged tree* as the allowed
+        `file://` root — not just each document's own immediate
+        directory, which would incorrectly block an entirely ordinary
+        same-archive reference like a chapter under `OEBPS/text/`
+        pulling an image from `OEBPS/images/`. The staged tree is nothing
+        but this one EPUB's own content, so widening the boundary to all
+        of it doesn't reopen the P0-2 hole (arbitrary local files) it
+        exists to close - it only stops blocking the archive's own
+        resources from each other.
+        """
+        zf, pkg = _load_package(ref, limits)
+        zf.close()
+
+        if len(pkg.spine) > limits.max_pages:
+            raise ArtifactSecurityError(
+                code="ARTIFACT_TOO_MANY_PAGES",
+                message=f"'{ref.path}' has {len(pkg.spine)} spine document(s), exceeding the render "
+                f"limit of {limits.max_pages}.",
+                remediation="Not rendered; increase Limits.max_pages if this document is legitimately "
+                "expected, or render a subset instead.",
+                evidence={"path": str(ref.path), "spine_count": len(pkg.spine), "max_pages": limits.max_pages},
+            )
+
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix="artifacts-skill-epub-render-") as tmp:
+            extract_root = Path(tmp) / "content"
+            safe_extract_zip(ref.path, extract_root, limits)
+
+            source_paths: list[Path] = []
+            out_paths: list[Path] = []
+            skipped: list[str] = []
+            for i, idref in enumerate(pkg.spine, start=1):
+                item = pkg.manifest.get(idref)
+                if item is None:
+                    skipped.append(idref)
+                    continue
+                href, _media_type = item
+                staged_path = extract_root / pkg.resolve_href(href)
+                if not staged_path.is_file():
+                    skipped.append(idref)
+                    continue
+                source_paths.append(staged_path)
+                out_paths.append(out_dir / f"page-{i:03d}.png")
+
+            warnings = [
+                f"Spine item '{idref}' could not be rendered (missing manifest entry or archive file)."
+                for idref in skipped
+            ]
+            if not source_paths:
+                return RenderResult(kind="page_images", files=[], backend="playwright+chromium", warnings=warnings)
+
+            files = render_local_files(
+                source_paths, out_paths, capability_id="epub.render", limits=limits, allowed_root=extract_root
+            )
+            return RenderResult(kind="page_images", files=files, backend="playwright+chromium", warnings=warnings)
 
     # ---- plan / execute -----------------------------------------------
 

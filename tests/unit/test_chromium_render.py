@@ -45,6 +45,9 @@ class _FakePage:
         with open(path, "wb") as f:
             f.write(b"fake png bytes")
 
+    def close(self) -> None:
+        pass
+
 
 class _FakeBrowser:
     def __init__(self, calls: list[tuple[str, dict]]) -> None:
@@ -132,6 +135,9 @@ def test_goto_receives_a_properly_encoded_file_uri_not_a_naive_concatenation(tmp
             calls.append(("screenshot", {"timeout": timeout}))
             with open(path, "wb") as f:
                 f.write(b"fake png bytes")
+
+        def close(self) -> None:
+            pass
 
     class _RecordingBrowser:
         def new_page(self, viewport):
@@ -253,6 +259,9 @@ def test_render_local_file_blocks_a_file_url_escaping_the_document_directory(tmp
         def screenshot(self, *, path, full_page, timeout) -> None:
             with open(path, "wb") as f:
                 f.write(b"fake png bytes")
+
+        def close(self) -> None:
+            pass
 
     class _RecordingBrowser:
         def new_page(self, viewport):
