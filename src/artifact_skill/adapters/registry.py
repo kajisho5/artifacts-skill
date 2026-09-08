@@ -1,9 +1,13 @@
 """Adapter registry — the only place that maps ArtifactType -> adapter class.
 
-Adapters not yet implemented (spec Tier 2/3 in MVP) are registered as
-`NotImplementedAdapter` placeholders, never silently absent and never a
-fake pass-through. `get_adapter()` always returns *something* that can at
-least explain what is missing and why.
+A type with no registered adapter but a known future one is named in
+`_PLANNED` (an ArtifactType -> description string, not a class) so
+`get_adapter()` raises `ARTIFACT_ADAPTER_NOT_IMPLEMENTED` naming what's
+coming, rather than the generic `ARTIFACT_TYPE_UNSUPPORTED` for a type
+this project has no plan for at all — never silently absent and never a
+fake pass-through either way. `_PLANNED` is empty today: every format
+from the original design brief's Tier 1/2, plus CSV/Markdown/EPUB added
+beyond it, is implemented (see docs/roadmap.md).
 """
 
 from __future__ import annotations

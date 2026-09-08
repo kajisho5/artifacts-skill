@@ -1,6 +1,6 @@
 """Shared LibreOffice-headless conversion, used by every Office-family
 adapter that renders via `format -> PDF -> pypdfium2 page images`
-(PPTX today; DOCX; XLSX once it lands — see docs/roadmap.md).
+(PPTX, DOCX, XLSX — see docs/roadmap.md).
 
 Kept separate from `rendering/pdf_pages.py` because that module only
 knows about PDFs; this one is specifically "how do we get a PDF out of a
