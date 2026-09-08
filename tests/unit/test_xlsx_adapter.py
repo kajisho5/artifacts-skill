@@ -141,6 +141,24 @@ def test_verify_leftover_placeholder_workbook_fails_under_strict_policy(leftover
     assert check.status == CheckStatus.FAIL
 
 
+def test_leftover_text_scan_covers_sheet_names(adapter, tmp_path):
+    """FIX_PROMPT P2-1: only cell string values were scanned for leftover
+    placeholder text - a generated workbook's own sheet name (e.g. a
+    default "TODO sheet" left unrenamed) was previously invisible entirely
+    (confirmed by direct reproduction before this fix)."""
+    import openpyxl
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "TODO sheet"
+    ws["A1"] = "Ordinary reviewed data"
+    path = tmp_path / "todo_sheet_name.xlsx"
+    wb.save(str(path))
+
+    report = adapter.inspect(ArtifactRef.from_path(path))
+    assert "todo" in report.details["leftover_markers"]
+
+
 def test_verify_good_workbook_sheet_count_requirement(good_xlsx, adapter):
     ref = ArtifactRef.from_path(good_xlsx)
     ok = adapter.verify_structural(ref, {"require_sheet_count": 2})

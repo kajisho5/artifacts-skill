@@ -130,6 +130,29 @@ def test_verify_leftover_placeholder_text_deck_fails_under_strict_policy(leftove
     assert check.status == CheckStatus.FAIL
 
 
+def test_leftover_text_scan_covers_table_cells_and_speaker_notes(adapter, tmp_path):
+    """FIX_PROMPT P2-1: a table's cell text lives on the cell's own
+    text_frame, not the enclosing GraphicFrame shape (shape.has_text_frame
+    is False for it) - and speaker notes were counted (slides_with_notes)
+    but never scanned. Both were previously invisible to leftover-text
+    scanning entirely (confirmed by direct reproduction before this fix)."""
+    import pptx
+    from pptx.util import Inches
+
+    prs = pptx.Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    table_shape = slide.shapes.add_table(2, 2, Inches(1), Inches(1), Inches(4), Inches(2))
+    table_shape.table.cell(0, 0).text = "Lorem ipsum dolor"
+    slide.notes_slide.notes_text_frame.text = "TODO: fix this note"
+    path = tmp_path / "table_notes.pptx"
+    prs.save(str(path))
+
+    report = adapter.inspect(ArtifactRef.from_path(path))
+    markers = report.details["leftover_markers"]
+    assert "lorem ipsum" in markers
+    assert "todo" in markers
+
+
 def test_verify_good_deck_slide_count_requirement(good_pptx, adapter):
     ref = ArtifactRef.from_path(good_pptx)
     ok = adapter.verify_structural(ref, {"require_slide_count": 2})

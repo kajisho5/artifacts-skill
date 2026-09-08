@@ -146,6 +146,8 @@ class DocxAdapter(ArtifactAdapter):
             "it is UNKNOWN until render() actually lays the document out.",
             "Hyperlink validity (broken/dangling links) is not checked.",
             "Numbering/list consistency is not checked beyond basic package readability.",
+            "Leftover marker text scanning covers body paragraphs, table cells, and section "
+            "headers/footers — not text boxes, comments, or footnotes/endnotes.",
             "Rendering depends on an external LibreOffice install; a present binary does not guarantee "
             "a specific document converts successfully.",
         ]
@@ -173,9 +175,24 @@ class DocxAdapter(ArtifactAdapter):
             ) from exc
 
         paragraph_count = len(document.paragraphs)
-        all_text = "\n".join(p.text for p in document.paragraphs)
         text_paragraphs = sum(1 for p in document.paragraphs if p.text.strip())
         table_count = len(document.tables)
+
+        # FIX_PROMPT P2-1: document.paragraphs only walks the document
+        # body - table cell text, headers, and footers each live in their
+        # own separate python-docx object graph and were invisible to
+        # leftover-text scanning. Confirmed by direct reproduction before
+        # this fix: "Lorem ipsum" in a table cell and "TODO"/"FIXME" in a
+        # header/footer produced an empty leftover_markers list.
+        text_parts = [p.text for p in document.paragraphs]
+        for table in document.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    text_parts.extend(p.text for p in cell.paragraphs)
+        for section in document.sections:
+            text_parts.extend(p.text for p in section.header.paragraphs)
+            text_parts.extend(p.text for p in section.footer.paragraphs)
+        all_text = "\n".join(text_parts)
 
         broken_media: list[str] = []
         image_count = 0
