@@ -227,3 +227,12 @@ def test_render_happy_path_when_backend_actually_works(good_pptx, adapter, tmp_p
     result = adapter.render(ref, tmp_path / "rendered")
     assert len(result.files) == 2
     assert all(f.exists() for f in result.files)
+
+
+def test_limitations_names_the_real_known_caveats(adapter):
+    """Issue #29: limitations() content had zero test coverage anywhere."""
+    text = " ".join(adapter.limitations())
+    assert "Chart validity is only checked for presence" in text
+    assert "Leftover placeholder" in text
+    assert "Embedded font completeness is not checked" in text
+    assert "LibreOffice install" in text

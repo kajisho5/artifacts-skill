@@ -169,3 +169,12 @@ def test_render_happy_path_when_backend_actually_works(good_svg, adapter, tmp_pa
     result = adapter.render(ref, tmp_path / "rendered")
     assert len(result.files) == 1
     assert result.files[0].exists()
+
+
+def test_limitations_names_the_real_known_caveats(adapter):
+    """Issue #29: limitations() content had zero test coverage anywhere."""
+    text = " ".join(adapter.limitations())
+    assert "No mutating operations" in text
+    assert "@import" in text
+    assert "External resources are never fetched" in text
+    assert "viewport only" in text

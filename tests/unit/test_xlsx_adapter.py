@@ -207,3 +207,12 @@ def test_render_happy_path_when_backend_actually_works(good_xlsx, adapter, tmp_p
     result = adapter.render(ref, tmp_path / "rendered")
     assert len(result.files) >= 1
     assert all(f.exists() for f in result.files)
+
+
+def test_limitations_names_the_real_known_caveats(adapter):
+    """Issue #29: limitations() content had zero test coverage anywhere."""
+    text = " ".join(adapter.limitations())
+    assert "Formulas are never recalculated" in text
+    assert "Chart and embedded-drawing validity is not checked" in text
+    assert "Conditional formatting and data validation" in text
+    assert "LibreOffice install" in text

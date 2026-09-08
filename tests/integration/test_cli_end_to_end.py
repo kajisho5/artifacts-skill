@@ -86,6 +86,98 @@ def test_execute_then_verify_pass(good_pdf, tmp_path):
     assert check_by_id["font_embedding"]["status"] == "pass"
 
 
+# --- plan subcommand (Issue #29: previously zero CLI e2e coverage) --------
+
+
+def test_plan_is_pure_and_writes_nothing(good_pdf, tmp_path):
+    proc = run_cli(
+        ["plan", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}', "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["operation"] == "pdf.metadata_set"
+    assert data["adapter"] == "pdf"
+    assert "output_path" in data
+    # Purely descriptive: no output file, no reports/ dir, from a plan call alone.
+    assert list(tmp_path.iterdir()) == [good_pdf]
+
+
+def test_plan_rejects_unknown_operation_with_input_exit_code(good_pdf, tmp_path):
+    proc = run_cli(
+        ["plan", str(good_pdf), "--operation", "not_a_real_operation", "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 2
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_OPERATION_UNKNOWN"
+
+
+def test_plan_rejects_args_that_violate_the_operations_schema(good_pdf, tmp_path):
+    proc = run_cli(
+        ["plan", str(good_pdf), "--operation", "fit_page_size", "--args", '{"width_pt": "not a number"}', "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 2
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_INVALID_ARGS"
+
+
+# --- render subcommand (Issue #29: previously zero CLI e2e coverage) ------
+
+
+def test_render_produces_one_page_image_per_page(good_pdf, tmp_path):
+    proc = run_cli(["render", str(good_pdf), "--out-dir", "rendered", "--json"], cwd=tmp_path)
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["kind"] == "page_images"
+    assert data["backend"] == "pypdfium2"
+    assert len(data["files"]) == 2  # good_2page.pdf
+    for f in data["files"]:
+        assert (tmp_path / f).exists()
+
+
+def test_render_dry_run_writes_nothing_and_reports_estimated_files(good_pdf, tmp_path):
+    proc = run_cli(["render", str(good_pdf), "--out-dir", "rendered", "--dry-run", "--json"], cwd=tmp_path)
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["dry_run"] is True
+    assert data["estimated_files"] == 2
+    assert not (tmp_path / "rendered").exists()
+
+
+# --- look subcommand (Issue #29: previously zero CLI e2e coverage) --------
+
+
+def test_look_builds_a_real_contact_sheet_png(good_pdf, tmp_path):
+    proc = run_cli(["look", str(good_pdf), "--out-dir", "look_out", "--json"], cwd=tmp_path)
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["source_pages"] == 2
+    sheet_path = tmp_path / data["contact_sheet"]
+    assert sheet_path.exists()
+    assert sheet_path.suffix == ".png"
+
+
+def test_look_compare_to_builds_a_before_after_png(good_pdf, tmp_path):
+    proc = run_cli(
+        ["look", str(good_pdf), "--compare-to", str(good_pdf), "--out-dir", "look_out", "--json"], cwd=tmp_path
+    )
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    sheet_path = tmp_path / data["contact_sheet"]
+    assert sheet_path.exists()
+    assert sheet_path.name == "before-after.png"
+
+
+def test_look_dry_run_writes_nothing(good_pdf, tmp_path):
+    proc = run_cli(["look", str(good_pdf), "--out-dir", "look_out", "--dry-run", "--json"], cwd=tmp_path)
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["dry_run"] is True
+    assert not (tmp_path / "look_out").exists()
+
+
 def test_execute_gates_its_own_receipt_with_an_explicit_policy(good_pdf, tmp_path):
     """Regression guard: execute() used to always verify against an empty
     policy regardless of what the caller wanted, silently ignoring the

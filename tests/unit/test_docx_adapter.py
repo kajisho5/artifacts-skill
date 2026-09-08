@@ -219,3 +219,12 @@ def test_docx_receipt_measures_real_page_count_when_render_works(good_docx, adap
     check = next(c for c in structural["checks"] if c["id"] == "page_count")
     assert check["status"] == "pass"
     assert check["evidence"]["page_count"] >= 1
+
+
+def test_limitations_names_the_real_known_caveats(adapter):
+    """Issue #29: limitations() content had zero test coverage anywhere."""
+    text = " ".join(adapter.limitations())
+    assert "Page count cannot be determined structurally" in text
+    assert "Hyperlink validity" in text
+    assert "Numbering/list consistency" in text
+    assert "LibreOffice install" in text

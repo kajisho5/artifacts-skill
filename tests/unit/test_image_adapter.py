@@ -135,3 +135,10 @@ def test_capabilities_report_never_lies_about_probe_result(adapter):
     assert "image.structural" in caps
     assert "image.render" in caps
     assert caps["image.structural"].status in (CapabilityStatus.AVAILABLE, CapabilityStatus.MISSING)
+
+
+def test_limitations_names_the_real_known_caveats(adapter):
+    """Issue #29: limitations() content had zero test coverage anywhere."""
+    text = " ".join(adapter.limitations())
+    assert "Animated images" in text
+    assert "ICC color profiles" in text
