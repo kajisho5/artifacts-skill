@@ -151,12 +151,12 @@ def run_lifecycle(
         builder.add_operation(record)
 
         structural = adapter.verify_structural(output_ref, policy)
-        visual = _visual_evidence_result(
+        visual, rendered = _visual_evidence_result(
             adapter=adapter, ref=output_ref, evidence_dir=evidence_dir,
             capability_report=capability_report, spec_render_required=bool(spec and spec.render_required),
         )
-        if visual.evidence_files:
-            render_result = RenderResult(kind="page_images", files=[Path(f) for f in visual.evidence_files], backend="pypdfium2")
+        if rendered is not None:
+            render_result = rendered
 
         if spec is not None and not spec.structural_verification_required:
             structural = VerificationResult(
@@ -216,42 +216,61 @@ def _visual_evidence_result(
     evidence_dir: Path,
     capability_report: CapabilityReport,
     spec_render_required: bool,
-) -> VerificationResult:
+) -> tuple[VerificationResult, RenderResult | None]:
+    """Returns the visual VerificationResult plus the real RenderResult (or
+    None if nothing was rendered) — the caller must use the latter's own
+    `backend` rather than assuming one. `render()` implementations report
+    different backends per adapter (`pypdfium2` for PDF/PPTX/DOCX/XLSX,
+    `playwright+chromium` for HTML/SVG, Pillow for images); a caller that
+    hardcoded `backend="pypdfium2"` here previously mislabeled every
+    non-PDF-family adapter's evidence.
+    """
     render_cap_id = f"{adapter.id}.render"
     render_cap = capability_report.get(render_cap_id)
     if render_cap is None or render_cap.status != CapabilityStatus.AVAILABLE:
         status = CheckStatus.SKIPPED if not spec_render_required else CheckStatus.UNKNOWN
-        return VerificationResult(
+        return (
+            VerificationResult(
+                kind="visual",
+                checks=[
+                    Check(
+                        id="visual_evidence",
+                        name="Visual evidence produced",
+                        status=status,
+                        message=f"Rendering capability '{render_cap_id}' is "
+                        f"{render_cap.status.value if render_cap else 'unknown'}; no page images were produced.",
+                    )
+                ],
+            ),
+            None,
+        )
+    try:
+        rendered = adapter.render(ref, evidence_dir / "rendered")
+    except ArtifactError as exc:
+        return (
+            VerificationResult(
+                kind="visual",
+                checks=[
+                    Check(id="visual_evidence", name="Visual evidence produced", status=CheckStatus.UNKNOWN, message=str(exc))
+                ],
+            ),
+            None,
+        )
+    return (
+        VerificationResult(
             kind="visual",
             checks=[
                 Check(
                     id="visual_evidence",
                     name="Visual evidence produced",
-                    status=status,
-                    message=f"Rendering capability '{render_cap_id}' is "
-                    f"{render_cap.status.value if render_cap else 'unknown'}; no page images were produced.",
+                    status=CheckStatus.PASS if rendered.files else CheckStatus.WARN,
+                    message=f"{len(rendered.files)} page image(s) produced via {rendered.backend}. "
+                    "This confirms evidence exists, not that the content is visually correct — "
+                    "an Agent must review the images to make that judgment.",
                 )
             ],
-        )
-    try:
-        rendered = adapter.render(ref, evidence_dir / "rendered")
-    except ArtifactError as exc:
-        return VerificationResult(
-            kind="visual",
-            checks=[Check(id="visual_evidence", name="Visual evidence produced", status=CheckStatus.UNKNOWN, message=str(exc))],
-        )
-    return VerificationResult(
-        kind="visual",
-        checks=[
-            Check(
-                id="visual_evidence",
-                name="Visual evidence produced",
-                status=CheckStatus.PASS if rendered.files else CheckStatus.WARN,
-                message=f"{len(rendered.files)} page image(s) produced via {rendered.backend}. "
-                "This confirms evidence exists, not that the content is visually correct — "
-                "an Agent must review the images to make that judgment.",
-            )
-        ],
-        evidence_files=[str(f) for f in rendered.files],
-        inspected_by=None,
+            evidence_files=[str(f) for f in rendered.files],
+            inspected_by=None,
+        ),
+        rendered,
     )

@@ -94,10 +94,14 @@ fix(ref, op, args, failed_result) -> dict | None         # optional; None = no f
 
 Adding a format means implementing this interface under `adapters/<format>/`
 and registering it in `adapters/registry.py`. Nothing in `core/`, `cli/`, or
-`mcp/` changes. Formats not yet implemented (PPTX, DOCX, XLSX, HTML, SVG,
-image — see `docs/roadmap.md`) are registered in `registry.py`'s `_PLANNED`
-map so `get_adapter()` raises a clear `ARTIFACT_ADAPTER_NOT_IMPLEMENTED`
-instead of `KeyError` or, worse, a fabricated success.
+`mcp/` changes. Every `ArtifactType` this project currently knows about
+(PDF, PPTX, DOCX, XLSX, PNG/JPEG/WebP, HTML, SVG) has a real adapter as of
+`docs/roadmap.md`'s Phase 6 — `registry.py`'s `_PLANNED` map is empty. It
+still exists, and still matters: a future format added there before its
+adapter lands makes `get_adapter()` raise a clear
+`ARTIFACT_ADAPTER_NOT_IMPLEMENTED` instead of `KeyError` or, worse, a
+fabricated success (`tests/unit/test_registry.py` exercises this path via
+a temporary monkeypatched entry, since no real one currently exists).
 
 ### Why PDF first, and why pypdf + pypdfium2
 

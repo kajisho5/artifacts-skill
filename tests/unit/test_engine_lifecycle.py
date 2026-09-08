@@ -136,6 +136,24 @@ def test_build_plan_allows_valid_args_through(good_pdf, tmp_path):
     assert plan.operation == "pdf.fit_page_size"
 
 
+def test_render_result_reports_the_real_backend_not_a_hardcoded_one(good_png, tmp_path):
+    """Regression guard: run_lifecycle() used to reconstruct LifecycleResult.render
+    with a hardcoded backend="pypdfium2" regardless of which adapter actually
+    rendered the evidence — every non-PDF-family adapter's receipt.render
+    reported the wrong backend. Image's render() reports "Pillow"; this proves
+    that real value now survives into the LifecycleResult unchanged."""
+    output_path = tmp_path / "out.png"
+    evidence_dir = tmp_path / "reports"
+
+    result = run_lifecycle(
+        good_png, "resize", {"width": 10, "height": 10}, output_path,
+        evidence_dir=evidence_dir, dry_run=False,
+    )
+
+    assert result.render is not None
+    assert result.render.backend == "Pillow"
+
+
 def test_run_lifecycle_rejects_invalid_args_before_touching_disk(good_pdf, tmp_path):
     output_path = tmp_path / "out.pdf"
     evidence_dir = tmp_path / "reports"

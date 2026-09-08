@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e ".[pdf,pptx,docx,xlsx,image,html,svg,dev]"
+      - run: pip install -e ".[all,dev]"
       - run: playwright install --with-deps chromium
       - run: python -m pytest tests/ -q
       - run: artifact-skill doctor --json

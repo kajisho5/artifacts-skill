@@ -23,7 +23,9 @@ function findPython() {
 
 const py = findPython();
 console.log("\nartifact-skill: Python engine detected at install time as:", py || "NOT FOUND");
-console.log(`To enable the PDF adapter (required for inspect/plan/execute/render/verify/receipt):`);
+console.log(`To enable every adapter (PDF/PPTX/DOCX/XLSX/Image/HTML/SVG):`);
+console.log(`  pip install -e "${pkgRoot}[all]"`);
+console.log(`Only need a subset? Install just what you use instead, e.g.:`);
 console.log(`  pip install -e "${pkgRoot}[pdf]"`);
 console.log("Then check status with: npx artifact-skill doctor\n");
 

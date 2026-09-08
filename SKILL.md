@@ -2,7 +2,7 @@
 name: artifact-skill
 description: Local-first execution and verification engine for real-world artifacts (PDF, PPTX, DOCX, XLSX, PNG/JPEG/WebP, HTML, SVG). Use it whenever you create or modify a document-like file and need to prove it is actually correct before calling the job done — inspect what a file really is, plan a mutation before touching it, execute it without overwriting the original, render it to images, run structural checks, and get a machine-readable Production Receipt. Trigger on requests like "make sure this PDF is correct", "verify this document before I send it", "did the page count come out right", "check this file isn't corrupted", or any time you are about to say a generated artifact is "done" without having checked it.
 license: MIT
-compatibility: "Requires Python 3.10+. PDF support requires the `pdf` extra (pypdf, pypdfium2, Pillow)."
+compatibility: "Requires Python 3.10+. Install the `all` extra for every adapter, or a per-format extra (`pdf`, `pptx`, `docx`, `xlsx`, `image`, `html`, `svg`) for just what you need. PPTX/DOCX/XLSX rendering additionally needs a `soffice`/`libreoffice` binary on PATH; HTML/SVG rendering needs `playwright install chromium` after installing the `html`/`svg` extra. Run `artifact-skill doctor` to see real availability rather than assuming."
 ---
 
 # Artifact Skill

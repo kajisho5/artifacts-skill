@@ -30,18 +30,22 @@ the second one provable — every run ends in a **PASS / WARN / FAIL /
 UNKNOWN** verdict per check, backed by a machine-readable receipt, never a
 guess.
 
-## 30 seconds
+## Quickstart
+
+Not yet published to PyPI/npm (tracked in Issue #9) — for now, clone and
+install locally (see **Install** below), then:
 
 ```bash
-npx artifact-skill doctor                     # what's available locally
-npx artifact-skill inspect report.pdf --json  # what is this file, really
-npx artifact-skill receipt report.pdf \
+artifact-skill doctor                     # what's available locally
+artifact-skill inspect report.pdf --json  # what is this file, really
+artifact-skill receipt report.pdf \
   --operation metadata_set --args '{"title":"Q3 Report"}'
 ```
 
 The last command runs the full lifecycle and writes
 `reports/receipt.json` plus `reports/rendered/*.png` — the evidence, not
-just a claim.
+just a claim. Once published, the same commands work as
+`npx artifact-skill ...` with no local install at all.
 
 ## What's implemented today
 
@@ -86,9 +90,17 @@ the Core/Adapter split makes adding a format additive, not a rewrite.
 ```bash
 git clone https://github.com/kajisho5/artifacts-skill
 cd artifacts-skill
-pip install -e ".[pdf]"
+pip install -e ".[all]"   # every adapter (PDF/PPTX/DOCX/XLSX/Image/HTML/SVG)
 artifact-skill doctor
 ```
+
+Only need a subset? Install just what you use instead — `pip install -e
+".[pdf]"` for PDF alone, `.[html,svg]` for the Playwright-backed adapters,
+etc. (see `pyproject.toml`'s `[project.optional-dependencies]` for the
+full list). PPTX/DOCX/XLSX also need a `soffice`/`libreoffice` binary on
+`PATH` for rendering; HTML/SVG need `playwright install chromium` once
+after installing the `html`/`svg` extra. Run `artifact-skill doctor` to
+see exactly what's available and what's still missing — never assume.
 
 Or, once published: `npx artifact-skill doctor` (the npm package is a thin
 wrapper that locates your Python 3 interpreter — the engine itself is
