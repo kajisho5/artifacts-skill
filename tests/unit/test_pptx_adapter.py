@@ -126,20 +126,20 @@ def test_capabilities_report_never_lies_about_probe_result(adapter):
     assert caps["pptx.render"].status in (CapabilityStatus.AVAILABLE, CapabilityStatus.MISSING)
 
 
-def test_render_backend_failure_raises_structured_error_not_crash(good_pptx, adapter, tmp_path, monkeypatch):
-    """Regardless of whether LibreOffice actually works in this environment,
-    a conversion failure must surface as ARTIFACT_RENDER_BACKEND_FAILED
-    with the backend's own diagnostic — never an uncaught exception or a
-    silently-empty success. Forces the failure via monkeypatch so this test
-    doesn't depend on the real LibreOffice install's health."""
+def test_render_propagates_backend_failure(good_pptx, adapter, tmp_path, monkeypatch):
+    """The conversion logic itself (soffice missing, exits nonzero, exits 0
+    with no output) is fully covered in tests/unit/test_office_convert.py.
+    This only checks that PptxAdapter.render() actually calls the shared
+    helper and doesn't swallow or reshape its error."""
     import artifact_skill.adapters.pptx.adapter as adapter_module
-    from artifact_skill.security.subprocess_exec import ExecResult
 
-    def _fake_run(argv, **kwargs):
-        return ExecResult(argv=argv, returncode=1, stdout="", stderr="fake soffice failure for testing", timed_out=False)
+    def _fake_convert(input_path, pdf_out_dir):
+        raise ArtifactExecutionError(
+            code="ARTIFACT_RENDER_BACKEND_FAILED", message="fake failure for testing",
+            evidence={"stderr": "fake soffice failure for testing"},
+        )
 
-    monkeypatch.setattr(adapter_module, "_soffice_binary", lambda: "/usr/bin/soffice")
-    monkeypatch.setattr(adapter_module, "run_subprocess", _fake_run)
+    monkeypatch.setattr(adapter_module, "convert_to_pdf", _fake_convert)
 
     ref = ArtifactRef.from_path(good_pptx)
     with pytest.raises(ArtifactExecutionError) as exc_info:

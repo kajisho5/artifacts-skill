@@ -56,10 +56,12 @@ agent reading the error can tell "we haven't built this yet" apart from
   `chart_validity: UNKNOWN` when the deck contains a chart (`SKIPPED` when
   it doesn't) — chart *presence* is detected, internal chart data
   correctness is not.
-- **Render**: converts to PDF via LibreOffice headless through
-  `security/subprocess_exec.py` (argv-only, allowlisted `{soffice,
-  libreoffice}`, isolated per-call `UserInstallation` profile dir), then
-  rasterizes with the same code path as the PDF adapter.
+- **Render**: converts to PDF via LibreOffice headless through the shared
+  `rendering/office_convert.py::convert_to_pdf()` (argv-only subprocess via
+  `security/subprocess_exec.py`, allowlisted `{soffice, libreoffice}`,
+  isolated per-call `UserInstallation` profile dir), then rasterizes with
+  the same `rendering/pdf_pages.py` code path as the PDF adapter. The DOCX
+  adapter (below) reuses this exact same conversion helper.
 - **A real, load-bearing lesson from building this adapter**: `soffice`
   being found on `PATH` does not guarantee it can convert a given document
   — this project's own development sandbox has a LibreOffice install that
@@ -80,6 +82,36 @@ agent reading the error can tell "we haven't built this yet" apart from
   slides; embedded font completeness not checked; rendering depends on an
   external, sometimes-unreliable LibreOffice install.
 
+## Implemented: DOCX (`adapters/docx/adapter.py`)
+
+- **Backends**: `python-docx` (structural read/write, MIT, pure Python) +
+  the same `rendering/office_convert.py` LibreOffice-conversion helper the
+  PPTX adapter uses.
+- **Operations**: `metadata_set` (title/author/subject/keywords).
+- **Structural checks**: DOCX readability, paragraph count (+ optional
+  exact/range requirement — the closest pure-XML analogue to PDF's page
+  count/PPTX's slide count that DOCX actually has), broken media
+  references (unreadable embedded images), text presence, arbitrary
+  metadata field matching, and an unconditional `page_count: UNKNOWN`.
+- **Why `page_count` is always `UNKNOWN`, not computed or omitted**: DOCX's
+  XML has no fixed page count — pagination is a function of the layout
+  engine (fonts, margins, the actual rendering pass), something
+  `python-docx` fundamentally cannot compute from the document part alone.
+  Reporting a number derived from paragraph count would be a fabricated
+  proxy; omitting the check would hide a real gap (spec §43, "Unknown is
+  first-class"). A true page count *is* obtainable — after `render()`
+  converts the document and produces real PDF pages — but that is a
+  render-time, visual-adjacent fact, not something `verify_structural()`
+  can determine on its own, and blurring that line is exactly what
+  `docs/verification.md`'s structural/visual split exists to prevent.
+- **Render**: same `office -> PDF -> pypdfium2 page images` path as PPTX.
+- **Known limitations**: page count not structurally determinable (see
+  above); hyperlink validity not checked; numbering/list consistency not
+  checked beyond basic package readability; rendering depends on an
+  external, sometimes-unreliable LibreOffice install (same caveat as
+  PPTX's render — this project's own dev sandbox reproduces it for DOCX
+  too, confirming it's a backend/environment issue, not PPTX-specific).
+
 ## Planned, not implemented
 
 Registered in `_PLANNED` with the phase each is targeted for (see
@@ -87,7 +119,6 @@ Registered in `_PLANNED` with the phase each is targeted for (see
 
 | Type | Phase | Primary backend candidate |
 |---|---|---|
-| DOCX | 3 | `python-docx` (structural) + LibreOffice headless (render) |
 | XLSX | 3 | `openpyxl` (structural) + LibreOffice headless (render) |
 | HTML | 6 | Playwright/Chromium (already vendored in this dev environment) |
 | SVG | 6 | Playwright/Chromium rasterization, or a pure-Python SVG rasterizer |

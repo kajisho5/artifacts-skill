@@ -13,12 +13,14 @@ from __future__ import annotations
 from pathlib import Path
 
 import pypdf
+from docx import Document
 from pptx import Presentation
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
 PDF_OUT_DIR = Path(__file__).parent / "pdf"
 PPTX_OUT_DIR = Path(__file__).parent / "pptx"
+DOCX_OUT_DIR = Path(__file__).parent / "docx"
 
 
 # ---------------------------------------------------------------- PDF ----
@@ -103,9 +105,44 @@ def make_mislabeled_pdf_as_pptx() -> None:
     path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
 
 
+# --------------------------------------------------------------- DOCX ----
+
+def make_good_docx() -> None:
+    path = DOCX_OUT_DIR / "good.docx"
+    doc = Document()
+    doc.add_heading("Sample Document", level=1)
+    doc.add_paragraph("Some body content.")
+    doc.add_table(rows=1, cols=2)
+    doc.save(str(path))
+
+
+def make_empty_docx() -> None:
+    """Zero paragraphs — python-docx always creates at least the body
+    element, but a document with no add_paragraph()/add_heading() calls
+    has zero *paragraph* entries, which is the case verify_structural()'s
+    paragraph_count check should flag as FAIL."""
+    path = DOCX_OUT_DIR / "empty.docx"
+    doc = Document()
+    # Remove the single implicit empty paragraph python-docx starts with.
+    for p in list(doc.paragraphs):
+        p._element.getparent().remove(p._element)
+    doc.save(str(path))
+
+
+def make_corrupt_docx() -> None:
+    path = DOCX_OUT_DIR / "corrupt.docx"
+    path.write_bytes(b"PK\x03\x04this is not a real zip/ooxml body, just garbage bytes")
+
+
+def make_mislabeled_pdf_as_docx() -> None:
+    path = DOCX_OUT_DIR / "mislabeled_pdf.docx"
+    path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
+
+
 if __name__ == "__main__":
     PDF_OUT_DIR.mkdir(parents=True, exist_ok=True)
     PPTX_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    DOCX_OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     make_good_2page()
     make_empty_0page()
@@ -119,5 +156,11 @@ if __name__ == "__main__":
     make_corrupt_pptx()
     make_mislabeled_pdf_as_pptx()
 
+    make_good_docx()
+    make_empty_docx()
+    make_corrupt_docx()
+    make_mislabeled_pdf_as_docx()
+
     print(f"Wrote PDF fixtures to {PDF_OUT_DIR}")
     print(f"Wrote PPTX fixtures to {PPTX_OUT_DIR}")
+    print(f"Wrote DOCX fixtures to {DOCX_OUT_DIR}")

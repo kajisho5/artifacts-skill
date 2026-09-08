@@ -84,12 +84,12 @@ def test_input_not_found_gives_input_exit_code(tmp_path):
 
 
 def test_unimplemented_format_gives_clear_capability_error(tmp_path):
-    """DOCX is still on the `_PLANNED` list (registry.py) as of this test —
-    PPTX moved off it once adapters/pptx/adapter.py landed, so this
+    """XLSX is still on the `_PLANNED` list (registry.py) as of this test —
+    PDF/PPTX/DOCX moved off it as their adapters landed, so this
     specifically needs a format that's genuinely not implemented yet."""
-    docx_like = tmp_path / "letter.docx"
-    docx_like.write_bytes(b"not a real docx, just bytes")
-    proc = run_cli(["inspect", str(docx_like), "--json"], cwd=tmp_path)
+    xlsx_like = tmp_path / "sheet.xlsx"
+    xlsx_like.write_bytes(b"not a real xlsx, just bytes")
+    proc = run_cli(["inspect", str(xlsx_like), "--json"], cwd=tmp_path)
     data = json.loads(proc.stdout)
     assert data["error"]["code"] in ("ARTIFACT_ADAPTER_NOT_IMPLEMENTED", "ARTIFACT_TYPE_UNSUPPORTED")
     assert proc.returncode == 3
@@ -141,3 +141,40 @@ def test_pptx_input_unchanged_after_execute(good_pptx, tmp_path):
         cwd=tmp_path,
     )
     assert sha256_of(good_pptx) == before
+
+
+def test_docx_doctor_reports_structural_capability(tmp_path):
+    proc = run_cli(["doctor", "--json"], cwd=tmp_path)
+    data = json.loads(proc.stdout)
+    assert "docx.structural" in data["capabilities"]
+    assert "docx.render" in data["capabilities"]
+
+
+def test_docx_execute_then_verify(good_docx, tmp_path):
+    exec_proc = run_cli(
+        ["execute", str(good_docx), "--operation", "metadata_set", "--args", '{"title":"CLI DOCX Test"}',
+         "--output", "out.docx", "--json"],
+        cwd=tmp_path,
+    )
+    assert (tmp_path / "out.docx").exists()
+
+    verify_proc = run_cli(
+        ["verify", "out.docx", "--policy", '{"require_metadata": {"title": "CLI DOCX Test"}}', "--json"],
+        cwd=tmp_path,
+    )
+    data = json.loads(verify_proc.stdout)
+    check_by_id = {c["id"]: c for c in data["checks"]}
+    assert check_by_id["metadata_title"]["status"] == "pass"
+    assert check_by_id["page_count"]["status"] == "unknown"
+
+
+def test_docx_input_unchanged_after_execute(good_docx, tmp_path):
+    from artifact_skill.core.artifact import sha256_of
+
+    before = sha256_of(good_docx)
+    run_cli(
+        ["execute", str(good_docx), "--operation", "metadata_set", "--args", '{"title":"x"}',
+         "--output", "out.docx", "--json"],
+        cwd=tmp_path,
+    )
+    assert sha256_of(good_docx) == before

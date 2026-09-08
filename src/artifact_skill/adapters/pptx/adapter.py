@@ -21,7 +21,6 @@ file is exactly the failure mode this design accounts for.
 from __future__ import annotations
 
 import importlib.util
-import shutil
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -29,15 +28,14 @@ from typing import Any
 from artifact_skill.adapters.base import ArtifactAdapter, OperationSpec, RenderResult
 from artifact_skill.core.artifact import ArtifactRef, ArtifactType, InspectionReport
 from artifact_skill.core.capability import Capability, CapabilityStatus
-from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactExecutionError, ArtifactInputError
+from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactInputError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
+from artifact_skill.rendering.office_convert import convert_to_pdf, soffice_binary
 from artifact_skill.rendering.pdf_pages import render_pdf_pages
 from artifact_skill.security.paths import atomic_copy, check_input_size
-from artifact_skill.security.subprocess_exec import run as run_subprocess
 
 _EMU_PER_INCH = 914400
-_SOFFICE_ALLOWLIST = {"soffice", "libreoffice"}
 
 
 def _has(module: str) -> bool:
@@ -55,14 +53,6 @@ def _require_pptx():
     import pptx
 
     return pptx
-
-
-def _soffice_binary() -> str | None:
-    for name in ("soffice", "libreoffice"):
-        path = shutil.which(name)
-        if path:
-            return path
-    return None
 
 
 class PptxAdapter(ArtifactAdapter):
@@ -118,7 +108,7 @@ class PptxAdapter(ArtifactAdapter):
                 Capability(id="pptx.structural", status=CapabilityStatus.MISSING, detail="python-pptx not importable.")
             )
 
-        soffice = _soffice_binary()
+        soffice = soffice_binary()
         if soffice:
             caps.append(
                 Capability(
@@ -293,45 +283,12 @@ class PptxAdapter(ArtifactAdapter):
     # ---- render ----------------------------------------------------
 
     def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
-        soffice = _soffice_binary()
-        if not soffice:
-            raise ArtifactCapabilityError(
-                code="ARTIFACT_CAPABILITY_MISSING",
-                message="No soffice/libreoffice binary found on PATH; cannot render PPTX to images.",
-                remediation="Install LibreOffice and re-run `artifact-skill doctor`.",
-                evidence={"capability_id": "pptx.render"},
-            )
         with tempfile.TemporaryDirectory(prefix="artifact-skill-pptx-render-") as tmp:
-            tmp_dir = Path(tmp)
-            profile_dir = tmp_dir / "profile"
-            pdf_out_dir = tmp_dir / "pdf"
-            pdf_out_dir.mkdir()
-            result = run_subprocess(
-                [
-                    soffice, "--headless", "--norestore", "--nolockcheck", "--nodefault",
-                    f"-env:UserInstallation=file://{profile_dir}",
-                    "--convert-to", "pdf", "--outdir", str(pdf_out_dir), str(ref.path),
-                ],
-                allowlist=_SOFFICE_ALLOWLIST,
-            )
-            produced = list(pdf_out_dir.glob("*.pdf"))
-            if result.returncode != 0 or not produced:
-                reason = (
-                    f"exited {result.returncode}" if result.returncode != 0
-                    else "exited 0 but produced no PDF output"
-                )
-                raise ArtifactExecutionError(
-                    code="ARTIFACT_RENDER_BACKEND_FAILED",
-                    message=f"LibreOffice failed to convert '{ref.path}' to PDF ({reason}).",
-                    remediation="See evidence.stdout/stderr for LibreOffice's own diagnostic. This can mean "
-                    "a missing import filter, a broken LibreOffice profile, or an unsupported feature in the "
-                    "source file — not necessarily a problem with this adapter.",
-                    evidence={"returncode": result.returncode, "stdout": result.stdout, "stderr": result.stderr},
-                )
+            pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf")
             # render_pdf_pages needs the intermediate PDF to survive past
             # this `with` block's cleanup, so render directly from it now
             # rather than returning a path that's about to be deleted.
-            return render_pdf_pages(produced[0], out_dir)
+            return render_pdf_pages(pdf_path, out_dir)
 
     # ---- verify ------------------------------------------------------
 

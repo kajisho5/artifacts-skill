@@ -49,7 +49,8 @@ just a claim.
 |---|---|---|---|---|
 | PDF | ✅ | ✅ | ✅ (`pypdfium2`) | `metadata_set`, `merge` |
 | PPTX | ✅ | ✅ | ✅ (LibreOffice + `pypdfium2`) | `metadata_set` |
-| DOCX / XLSX | planned | planned | planned | — |
+| DOCX | ✅ | ✅ | ✅ (LibreOffice + `pypdfium2`) | `metadata_set` |
+| XLSX | planned | planned | planned | — |
 | HTML / SVG / Image | planned | planned | planned | — |
 
 Unimplemented formats fail loudly with `ARTIFACT_ADAPTER_NOT_IMPLEMENTED`

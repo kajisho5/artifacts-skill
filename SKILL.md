@@ -13,7 +13,7 @@ skill gives you a CLI (`artifact-skill`) that inspects, mutates safely,
 renders to images, and verifies — and it never just tells you "done"
 without evidence.
 
-**Currently implemented: PDF and PPTX.** DOCX/XLSX/HTML/SVG are designed
+**Currently implemented: PDF, PPTX, and DOCX.** XLSX/HTML/SVG are designed
 for (see `docs/architecture.md`, `docs/roadmap.md`) but not yet built —
 running this skill against those formats returns a clear
 `ARTIFACT_ADAPTER_NOT_IMPLEMENTED` error, never a silent no-op.
@@ -72,8 +72,8 @@ artifact-skill receipt deck.pptx --operation metadata_set --args '{"title":"Q3 D
 ```
 
 Supported PDF operations today: `metadata_set` (title/author/subject/keywords)
-and `merge` (append additional PDFs). Supported PPTX operations today:
-`metadata_set` (title/author/subject/keywords). Run
+and `merge` (append additional PDFs). Supported PPTX and DOCX operations
+today: `metadata_set` (title/author/subject/keywords). Run
 `artifact-skill contract --json` for the exact, current, machine-readable
 schema of every command — treat it as the source of truth over this prose
 if they ever disagree.
