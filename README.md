@@ -100,6 +100,12 @@ the Core/Adapter split makes adding a format additive, not a rewrite.
 
 ## Install
 
+> **Note:** the GitHub repo is named `artifacts-skill` (plural) but the
+> package/CLI/binary is `artifact-skill` (singular) — a naming mismatch
+> tracked in Issue #22, not yet resolved. Once published (Issue #9),
+> `pip install artifact-skill`/`npx artifact-skill` will use the singular
+> name even though you cloned the plural repo below.
+
 ```bash
 git clone https://github.com/kajisho5/artifacts-skill
 cd artifacts-skill
