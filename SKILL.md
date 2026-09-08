@@ -21,8 +21,9 @@ EPUB added beyond it. A genuinely unrecognized file returns a clear
 and Markdown have no mutating operations by design (inspect/render/verify
 only — their natural "edit" is markup/prose/cell values, i.e. source-
 content editing, not a property-set operation this skill owns). EPUB has
-one operation (`metadata_set`, title/author only) but no render yet — see
-`docs/adapters.md` for why that gap is honest, not a silent stub.
+one operation (`metadata_set`, title/author only) and renders one PNG per
+spine document via Playwright/Chromium (needs `playwright install
+chromium`) — see `docs/adapters.md` for details.
 
 ## What this is not
 

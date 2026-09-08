@@ -71,10 +71,10 @@ policy; nothing enforces it.
        |              |              |
        +--------------+--------------+
                       |
-                  Adapters
-       +------+------+------+------+------+
-       |      |      |      |      |      |
-      PDF   PPTX   DOCX   XLSX   HTML   SVG
+                       Adapters
+       +------+------+------+------+------+------+------+------+------+
+       |      |      |      |      |      |      |      |      |      |
+      PDF   PPTX   DOCX   XLSX  Image  HTML   SVG   CSV    MD   EPUB
        |
        v
    Local Backends (pypdf, pypdfium2, ...)

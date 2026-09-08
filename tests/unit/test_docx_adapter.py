@@ -1,13 +1,27 @@
 from __future__ import annotations
 
+import zipfile
 from pathlib import Path
 
 import pytest
 
 from artifact_skill.adapters.docx.adapter import DocxAdapter
 from artifact_skill.core.artifact import ArtifactRef, ArtifactType
-from artifact_skill.core.errors import ArtifactExecutionError, ArtifactInputError
+from artifact_skill.core.errors import ArtifactExecutionError, ArtifactInputError, ArtifactSecurityError
 from artifact_skill.core.verification import CheckStatus
+
+
+def _with_entity_declaration_injected(src: Path, dst: Path, member: str) -> None:
+    """See the identical helper in test_pptx_adapter.py."""
+    with zipfile.ZipFile(src) as zin:
+        names = zin.namelist()
+        assert member in names
+        with zipfile.ZipFile(dst, "w") as zout:
+            for name in names:
+                data = zin.read(name)
+                if name == member:
+                    data = b'<?xml version="1.0"?><!DOCTYPE x [<!ENTITY y "z">]>' + data
+                zout.writestr(name, data)
 
 
 @pytest.fixture()
@@ -283,3 +297,27 @@ def test_limitations_names_the_real_known_caveats(adapter):
     assert "Hyperlink validity" in text
     assert "Numbering/list consistency" in text
     assert "LibreOffice install" in text
+
+
+def test_inspect_rejects_entity_declaration_before_opening(good_docx, adapter, tmp_path):
+    """Grok-review finding, verified against current code: `security/
+    xml_safety.py`'s module docstring claims its zip-level entity pre-scan
+    protects PPTX/DOCX too, but it was only ever wired into the XLSX
+    adapter - never called here, despite the claim. python-docx itself is
+    confirmed not vulnerable (lxml with resolve_entities=False), so this
+    guards a documentation-reality gap, not a live exploit path."""
+    hostile = tmp_path / "hostile.docx"
+    _with_entity_declaration_injected(good_docx, hostile, "word/document.xml")
+    ref = ArtifactRef.from_path(hostile)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.inspect(ref)
+    assert exc_info.value.code == "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED"
+
+
+def test_execute_rejects_entity_declaration_before_opening(good_docx, adapter, tmp_path):
+    hostile = tmp_path / "hostile.docx"
+    _with_entity_declaration_injected(good_docx, hostile, "word/document.xml")
+    ref = ArtifactRef.from_path(hostile)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.execute(ref, "metadata_set", {"title": "x"}, tmp_path / "out.docx")
+    assert exc_info.value.code == "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED"

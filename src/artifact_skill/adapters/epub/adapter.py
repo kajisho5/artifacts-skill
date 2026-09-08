@@ -33,15 +33,19 @@ point shape the SVG adapter uses for its single file.
 
 No operations beyond `metadata_set` (title/author only — EPUB's Dublin Core
 metadata has no single-field analogue for `subject`/`keywords` the way
-Office metadata does; see `limitations()`). Rendering is honestly not
-implemented (see `capabilities()`): a faithful preview needs to resolve a
-spine document's own relative references (images/CSS, often in sibling
-directories under the OPF's root) without reopening the P0-2 file://
-containment hole the Chromium renderer's `allowed_root` boundary closes for
-every other adapter — that needs a real design pass, not a quick hack, so
-it's deferred rather than shipped half-verified. Structural verification
-(spine/manifest integrity, leftover text across every content document) is
-still fully real.
+Office metadata does; see `limitations()`). `render()` produces one PNG per
+spine (reading-order) document via Playwright/Chromium: the whole archive is
+safely extracted into a private staging directory first
+(`security/paths.py::safe_extract_zip()`), and every spine document renders
+from its staged copy with that entire staged tree — not just each
+document's own immediate directory — as the allowed `file://` root, so an
+entirely ordinary same-archive cross-directory reference (a chapter under
+`OEBPS/text/` pulling an image from a sibling `OEBPS/images/`) resolves
+correctly without reopening the P0-2 arbitrary-file containment hole (see
+`render()`'s own docstring below, and `rendering/chromium_render.py`'s
+`render_local_files()`). Structural verification (spine/manifest integrity,
+leftover text across every content document) is fully real, same as every
+other adapter.
 """
 
 from __future__ import annotations
@@ -377,10 +381,12 @@ class EpubAdapter(ArtifactAdapter):
         with tempfile.TemporaryDirectory(prefix="artifacts-skill-epub-render-") as tmp:
             extract_root = Path(tmp) / "content"
             safe_extract_zip(ref.path, extract_root, limits)
+            extract_root_resolved = extract_root.resolve()
 
             source_paths: list[Path] = []
             out_paths: list[Path] = []
             skipped: list[str] = []
+            escaped: list[str] = []
             for i, idref in enumerate(pkg.spine, start=1):
                 item = pkg.manifest.get(idref)
                 if item is None:
@@ -391,12 +397,39 @@ class EpubAdapter(ArtifactAdapter):
                 if not staged_path.is_file():
                     skipped.append(idref)
                     continue
+                # Grok-review finding, verified by direct reproduction: a
+                # manifest href with enough "../" segments (e.g.
+                # "../../../../../../etc/passwd") makes resolve_href()
+                # return a path that escapes extract_root entirely -
+                # is_file() still returns True for it (existence doesn't
+                # care about location), so without this check it would be
+                # handed to render_local_files() as a real source_path.
+                # The Chromium-side file:// containment check
+                # (_file_url_is_within, same P0-2 boundary) does still
+                # block the navigation - reproduced directly: the whole
+                # render() call raises ARTIFACT_RENDER_BACKEND_FAILED
+                # instead of leaking the file's content - so this was never
+                # a confidentiality leak. But letting it reach the browser
+                # layer turns one hostile/malformed manifest entry into a
+                # hard failure of the *entire* render batch, discarding
+                # every already-renderable spine document too, instead of
+                # being skipped-with-a-warning the same as an ordinary
+                # missing file. Checked here so it fails closed at the
+                # cheaper, more specific layer instead.
+                if staged_path.resolve() != extract_root_resolved and not staged_path.resolve().is_relative_to(
+                    extract_root_resolved
+                ):
+                    escaped.append(idref)
+                    continue
                 source_paths.append(staged_path)
                 out_paths.append(out_dir / f"page-{i:03d}.png")
 
             warnings = [
                 f"Spine item '{idref}' could not be rendered (missing manifest entry or archive file)."
                 for idref in skipped
+            ] + [
+                f"Spine item '{idref}' could not be rendered (its href resolves outside the archive)."
+                for idref in escaped
             ]
             if not source_paths:
                 return RenderResult(kind="page_images", files=[], backend="playwright+chromium", warnings=warnings)

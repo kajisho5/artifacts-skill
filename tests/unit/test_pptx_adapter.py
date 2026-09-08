@@ -1,13 +1,30 @@
 from __future__ import annotations
 
+import zipfile
 from pathlib import Path
 
 import pytest
 
 from artifact_skill.adapters.pptx.adapter import PptxAdapter
 from artifact_skill.core.artifact import ArtifactRef, ArtifactType
-from artifact_skill.core.errors import ArtifactExecutionError, ArtifactInputError
+from artifact_skill.core.errors import ArtifactExecutionError, ArtifactInputError, ArtifactSecurityError
 from artifact_skill.core.verification import CheckStatus
+
+
+def _with_entity_declaration_injected(src: Path, dst: Path, member: str) -> None:
+    """Copies `src` (a real OOXML zip) to `dst` with a DOCTYPE/ENTITY
+    declaration prepended to one XML member - the same shape as XLSX's
+    `entity_bomb.xlsx` fixture, built inline here rather than as a new
+    binary fixture file since only one member needs changing."""
+    with zipfile.ZipFile(src) as zin:
+        names = zin.namelist()
+        assert member in names
+        with zipfile.ZipFile(dst, "w") as zout:
+            for name in names:
+                data = zin.read(name)
+                if name == member:
+                    data = b'<?xml version="1.0"?><!DOCTYPE x [<!ENTITY y "z">]>' + data
+                zout.writestr(name, data)
 
 
 @pytest.fixture()
@@ -289,3 +306,27 @@ def test_limitations_names_the_real_known_caveats(adapter):
     assert "Leftover placeholder" in text
     assert "Embedded font completeness is not checked" in text
     assert "LibreOffice install" in text
+
+
+def test_inspect_rejects_entity_declaration_before_opening(good_pptx, adapter, tmp_path):
+    """Grok-review finding, verified against current code: `security/
+    xml_safety.py`'s module docstring claims its zip-level entity pre-scan
+    protects PPTX/DOCX too, but it was only ever wired into the XLSX
+    adapter - never called here, despite the claim. python-pptx itself is
+    confirmed not vulnerable (lxml with resolve_entities=False), so this
+    guards a documentation-reality gap, not a live exploit path."""
+    hostile = tmp_path / "hostile.pptx"
+    _with_entity_declaration_injected(good_pptx, hostile, "ppt/presentation.xml")
+    ref = ArtifactRef.from_path(hostile)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.inspect(ref)
+    assert exc_info.value.code == "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED"
+
+
+def test_execute_rejects_entity_declaration_before_opening(good_pptx, adapter, tmp_path):
+    hostile = tmp_path / "hostile.pptx"
+    _with_entity_declaration_injected(good_pptx, hostile, "ppt/presentation.xml")
+    ref = ArtifactRef.from_path(hostile)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.execute(ref, "metadata_set", {"title": "x"}, tmp_path / "out.pptx")
+    assert exc_info.value.code == "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED"

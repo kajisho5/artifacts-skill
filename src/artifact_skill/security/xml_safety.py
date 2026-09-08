@@ -45,10 +45,17 @@ refuse outright before python-pptx/python-docx/openpyxl ever gets a
 chance to parse any of it. This is deliberately *not* implemented by
 monkeypatching openpyxl's internal parser choice - that would be a
 fragile dependency on its exact import structure, liable to silently stop
-working on a version bump. A pre-scan at the zip level protects PPTX/DOCX
-too (defense in depth, even though they're not currently exposed) without
-assuming anything about how any of the three libraries parse XML
-internally.
+working on a version bump.
+
+**Wiring status (Grok-review finding, verified against current code,
+fixed by this session)**: this pre-scan is genuinely load-bearing for
+`XlsxAdapter` and is now also called from `PptxAdapter`/`DocxAdapter`'s
+own `inspect()`/`execute()` (see each adapter's own `_reject_entities_
+before_opening()` helper) - defense in depth for those two, since
+python-pptx/python-docx are confirmed not exposed on their own. This
+function itself makes no assumption about how any of the three libraries
+parse XML internally; it is each adapter's job to actually call it before
+opening the file, which is exactly the gap that used to exist here.
 """
 
 from __future__ import annotations
@@ -96,14 +103,25 @@ def reject_xml_entities_in_file(path: Path) -> None:
 
 
 def reject_xml_entities_in_zip(path: Path) -> None:
-    """Scan every `.xml` member of an OOXML zip (`.pptx`/`.docx`/`.xlsx`)
-    for a DOCTYPE/ENTITY declaration before the format-specific library
-    gets a chance to parse any of them. See this module's docstring for
-    which of the three libraries this is actually load-bearing for
-    (openpyxl) versus defense in depth (python-pptx, python-docx).
+    """Scan every XML member of an OOXML zip (`.pptx`/`.docx`/`.xlsx`) for
+    a DOCTYPE/ENTITY declaration before the format-specific library gets a
+    chance to parse any of them. See this module's docstring for which of
+    the three libraries this is actually load-bearing for (openpyxl)
+    versus defense in depth (python-pptx, python-docx).
+
+    Grok-review finding, verified by direct reproduction before this fix:
+    the OPC package relationship files every OOXML package has
+    (`_rels/.rels`, `xl/_rels/workbook.xml.rels`, etc.) are named `*.rels`,
+    not `*.xml` - a bare `.endswith(".xml")` filter silently skipped every
+    one of them. Confirmed exploitable: a DOCTYPE/ENTITY declaration
+    injected into `xl/_rels/workbook.xml.rels` was let through by this
+    function unmodified, and `openpyxl.load_workbook()` then parsed the
+    file without raising - the same unguarded-XML exposure this function
+    exists to close, just reached through a member this filter didn't
+    recognize as XML.
     """
     with zipfile.ZipFile(path) as zf:
         for info in zf.infolist():
-            if not info.filename.endswith(".xml"):
+            if not (info.filename.endswith(".xml") or info.filename.endswith(".rels")):
                 continue
             reject_xml_entity_declaration(zf.read(info), f"{path}!{info.filename}")
