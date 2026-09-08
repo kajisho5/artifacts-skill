@@ -178,6 +178,14 @@ def test_csv_detected_by_content(tmp_path):
     assert ArtifactRef.from_path(path).type == ArtifactType.CSV
 
 
+def test_csv_with_a_leading_utf8_bom_is_still_detected(tmp_path):
+    """Self-audit finding: Excel/many Windows tools write CSV with a
+    leading UTF-8 BOM - it must not defeat detection."""
+    path = tmp_path / "bom.csv"
+    path.write_bytes(b"\xef\xbb\xbfname,age\nAlice,30\nBob,25\n")
+    assert ArtifactRef.from_path(path).type == ArtifactType.CSV
+
+
 def test_csv_with_one_ragged_row_is_still_detected_by_content(tmp_path):
     """A single malformed row must not defeat detection entirely - that
     would make the adapter's own column_count_consistency check
@@ -205,6 +213,15 @@ def test_a_single_line_of_comma_separated_words_is_too_weak_a_signal_for_csv(tmp
 def test_markdown_detected_by_a_fenced_code_block_alone(tmp_path):
     path = tmp_path / "doc.md"
     path.write_text("Some intro text.\n\n```python\nprint(1)\n```\n")
+    assert ArtifactRef.from_path(path).type == ArtifactType.MARKDOWN
+
+
+def test_markdown_with_a_leading_utf8_bom_is_still_detected_by_a_heading(tmp_path):
+    """Self-audit finding: a BOM glued onto the first line broke the ATX
+    heading regex's '^#' anchor on that specific line, silently
+    misdetecting an otherwise-obvious Markdown document as UNKNOWN."""
+    path = tmp_path / "bom.md"
+    path.write_bytes("﻿# Title\n\n- a\n- b\n".encode())
     assert ArtifactRef.from_path(path).type == ArtifactType.MARKDOWN
 
 

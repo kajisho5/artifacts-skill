@@ -128,15 +128,22 @@ _MD_BLOCKQUOTE = re.compile(r"^ {0,3}>\s?\S", re.MULTILINE)
 
 
 def _decode_text_sample(head: bytes) -> str | None:
+    """Strips a leading UTF-8 BOM after decoding (self-audit finding: a
+    BOM - common from Excel/Windows editors/export tools - glued onto the
+    first line broke the Markdown ATX-heading regex's `^#` anchor on that
+    specific line, silently misdetecting an otherwise-obvious document as
+    UNKNOWN; a CSV header would carry the BOM as part of its first cell
+    name for the same reason)."""
     try:
-        return head.decode("utf-8", errors="strict")
+        decoded = head.decode("utf-8", errors="strict")
     except UnicodeDecodeError as exc:
         if exc.start < len(head) - 4:
             return None  # genuinely invalid, not just a boundary-cut multibyte char
         try:
-            return head[: exc.start].decode("utf-8", errors="strict")
+            decoded = head[: exc.start].decode("utf-8", errors="strict")
         except UnicodeDecodeError:
             return None
+    return decoded.removeprefix("\ufeff")
 
 
 def _looks_like_markdown(text: str) -> bool:

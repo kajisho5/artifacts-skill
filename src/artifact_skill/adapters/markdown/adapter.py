@@ -128,7 +128,11 @@ class MarkdownAdapter(ArtifactAdapter):
     def inspect(self, ref: ArtifactRef) -> InspectionReport:
         check_input_size(ref.path)
         try:
-            text = ref.path.read_text(encoding="utf-8", errors="strict")
+            # utf-8-sig strips a leading BOM if present - self-audit
+            # finding: plain "utf-8" left it glued onto the first line,
+            # breaking the ATX-heading regex's "^#" anchor on that line
+            # and silently misdetecting an otherwise-obvious document.
+            text = ref.path.read_text(encoding="utf-8-sig", errors="strict")
         except UnicodeDecodeError as exc:
             raise ArtifactInputError(
                 code="ARTIFACT_MARKDOWN_UNREADABLE",
@@ -205,7 +209,7 @@ class MarkdownAdapter(ArtifactAdapter):
             )
         from markdown_it import MarkdownIt
 
-        text = ref.path.read_text(encoding="utf-8", errors="strict")
+        text = ref.path.read_text(encoding="utf-8-sig", errors="strict")
         body_html = MarkdownIt("commonmark").render(text)
         doc = (
             "<!doctype html><html><head><meta charset='utf-8'><style>"

@@ -44,6 +44,20 @@ def test_inspect_good_csv_reports_rows_and_header(good_csv, adapter):
     assert report.details["ragged_row_count"] == 0
 
 
+def test_inspect_strips_a_leading_utf8_bom_from_the_header(adapter, tmp_path):
+    """Self-audit finding: Excel and many Windows tools write CSV with a
+    leading UTF-8 BOM (EF BB BF). Reading with plain 'utf-8' (rather than
+    'utf-8-sig') leaves the BOM character (U+FEFF) glued onto the first
+    header cell, silently corrupting it (e.g. 'name' becomes '﻿name')
+    - every comparison against that header value would then mysteriously
+    fail. Confirmed by direct testing before this fix existed."""
+    path = tmp_path / "bom.csv"
+    path.write_bytes(b"\xef\xbb\xbfname,age\nAlice,30\nBob,25\n")
+    ref = ArtifactRef.from_path(path)
+    report = adapter.inspect(ref)
+    assert report.details["header"] == ["name", "age"]
+
+
 def test_inspect_rejects_non_utf8(adapter, tmp_path):
     path = tmp_path / "bad_encoding.csv"
     path.write_bytes("name,city\nÉdouard,São Paulo\n".encode("latin-1"))

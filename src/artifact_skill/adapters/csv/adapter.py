@@ -46,7 +46,12 @@ def _sniff_dialect(sample: str) -> Any:
 
 
 def _read_rows(path: Path) -> tuple[list[list[str]], Any]:
-    text = path.read_text(encoding="utf-8", errors="strict")
+    # utf-8-sig strips a leading BOM if present (common from Excel/Windows
+    # export tools) - self-audit finding: plain "utf-8" left it glued onto
+    # the header's first cell (e.g. "name" became "﻿name"), silently
+    # corrupting every comparison against that header value. Behaves
+    # identically to "utf-8" for a file with no BOM.
+    text = path.read_text(encoding="utf-8-sig", errors="strict")
     sample = "\n".join(text.splitlines()[:50])
     dialect = _sniff_dialect(sample)
     rows = [row for row in csv.reader(io.StringIO(text), dialect) if row]

@@ -494,7 +494,23 @@ deserves a more specific answer than "unrecognized file."
   behavior for nested `file://` navigation.
 - **Known limitations**: manifest/spine integrity is checked by presence,
   not by validating each content document's internal well-formedness
-  beyond XML parsing; `metadata_set` supports title/author only.
+  beyond XML parsing; `metadata_set` supports title/author only; it also
+  re-serializes the whole OPF via `xml.etree.ElementTree`, which silently
+  drops any XML comments in it (ElementTree doesn't retain them by
+  default) — every other archive member, XHTML content documents
+  included, is copied byte-for-byte unchanged.
+- **Self-audit finding, fixed before any external review saw it**:
+  `metadata_set`'s OPF re-serialization was rewriting every element's
+  namespace prefix from the original (virtually every real-world OPF
+  declares its own namespace as the *default*, unprefixed one) to an
+  auto-generated `ns0:` — `ET.tostring()`'s behavior for any namespace
+  URI it has no registered prefix mapping for. Namespace-URI-aware XML
+  parsers (this adapter's own `ET.fromstring()` included) don't care
+  about the prefix name, but it was needless churn a strict validator or
+  a human diffing the output shouldn't have had to see. Fixed by
+  registering the OPF's actual namespace URI (read from the parsed
+  root's own tag, not hardcoded) as the default prefix before
+  serializing.
 
 ## Planned, not implemented
 

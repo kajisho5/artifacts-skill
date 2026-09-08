@@ -36,6 +36,26 @@ def test_plain_prose_with_no_markdown_signals_is_unknown_not_guessed(tmp_path):
     assert ArtifactRef.from_path(path).type == ArtifactType.UNKNOWN
 
 
+def test_a_leading_utf8_bom_does_not_defeat_markdown_type_detection(tmp_path):
+    """Self-audit finding: a UTF-8 BOM (common from Windows editors/export
+    tools) glued onto the first line broke the ATX-heading regex's '^#'
+    anchor match on that line specifically - a real, otherwise-detectable
+    Markdown document (heading + fenced code block) was misdetected as
+    UNKNOWN before this fix. Confirmed by direct testing."""
+    path = tmp_path / "bom.md"
+    path.write_bytes("﻿# Title\n\n```python\nprint(1)\n```\n".encode())
+    assert ArtifactRef.from_path(path).type == ArtifactType.MARKDOWN
+
+
+def test_inspect_strips_a_leading_utf8_bom_before_scanning_headings(good_markdown, adapter, tmp_path):
+    path = tmp_path / "bom.md"
+    path.write_bytes(b"\xef\xbb\xbf# Title\n\nSome text.\n\n- a\n- b\n")
+    ref = ArtifactRef.from_path(path)
+    report = adapter.inspect(ref)
+    assert report.details["heading_count"] == 1
+    assert report.details["headings"][0] == (1, "Title")
+
+
 def test_inspect_good_markdown_reports_headings_and_fence_balance(good_markdown, adapter):
     ref = ArtifactRef.from_path(good_markdown)
     report = adapter.inspect(ref)

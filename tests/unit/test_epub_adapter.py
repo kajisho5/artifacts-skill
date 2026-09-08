@@ -135,6 +135,29 @@ def test_execute_metadata_set_output_is_still_a_readable_epub_by_type(good_epub,
     assert result_ref.type == ArtifactType.EPUB
 
 
+def test_execute_metadata_set_preserves_the_opf_default_namespace_prefix(good_epub, adapter, tmp_path):
+    """Self-audit finding: ET.tostring() auto-generates an 'ns0:' prefix
+    for any namespace it has no registered mapping for. good_epub's OPF
+    (like virtually every real-world EPUB) declares
+    xmlns="http://www.idpf.org/2007/opf" as the *default* (unprefixed)
+    namespace - without registering it as such before serializing, the
+    rewritten OPF's elements were all getting rewritten to
+    <ns0:package>/<ns0:metadata>/etc. Namespace-URI-aware XML parsers
+    (this project's own EpubAdapter included) don't care about the prefix
+    name, but a strict or naive validator/reading system doing
+    string-based tag comparison could - and it's needless churn in output
+    a human might diff against the original."""
+    import zipfile
+
+    ref = ArtifactRef.from_path(good_epub)
+    output_path = tmp_path / "out.epub"
+    adapter.execute(ref, "metadata_set", {"title": "New Title"}, output_path)
+    with zipfile.ZipFile(output_path) as zf:
+        opf_bytes = zf.read("OEBPS/content.opf")
+    assert b"ns0:" not in opf_bytes
+    assert b"<package" in opf_bytes
+
+
 def test_execute_unknown_operation_raises(good_epub, adapter, tmp_path):
     ref = ArtifactRef.from_path(good_epub)
     with pytest.raises(ArtifactInputError) as exc_info:

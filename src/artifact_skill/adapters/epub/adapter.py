@@ -245,6 +245,10 @@ class EpubAdapter(ArtifactAdapter):
             "it is the archive's first entry stored uncompressed (a real EPUB requirement) — that is instead "
             "checked as a structural WARN, matching this project's general 'don't reject on a technicality "
             "at the type-detection layer' precedent (see core/artifact.py).",
+            "metadata_set re-serializes the whole OPF via xml.etree.ElementTree, which silently drops any "
+            "XML comments in it (ElementTree doesn't retain comments by default) — only the OPF itself is "
+            "affected; every other archive member (including all XHTML content documents) is copied "
+            "byte-for-byte unchanged.",
         ]
 
     def recognized_policy_keys(self) -> frozenset[str]:
@@ -369,6 +373,21 @@ class EpubAdapter(ArtifactAdapter):
         with zipfile.ZipFile(buf, "w") as out:
             # EPUB requires "mimetype" to be the first entry, stored uncompressed.
             out.writestr(zipfile.ZipInfo("mimetype"), b"application/epub+zip", zipfile.ZIP_STORED)
+            # Self-audit finding: ET.tostring() auto-generates an "ns0:"
+            # prefix for any namespace with no registered mapping. Every
+            # real-world OPF declares its own namespace as the *default*
+            # (unprefixed) one - without registering it as such here, a
+            # metadata_set on a perfectly ordinary EPUB rewrote every
+            # element in the OPF to <ns0:package>/<ns0:metadata>/etc.
+            # Harmless to a namespace-URI-aware parser (this adapter's own
+            # ET.fromstring() included), but needless churn a strict
+            # validator or human diff shouldn't have to see. Derived from
+            # the actual root tag rather than hardcoded, so this still
+            # does the right thing if a future OPF variant uses a
+            # different namespace URI.
+            if pkg.root.tag.startswith("{"):
+                opf_ns = pkg.root.tag[1:].split("}", 1)[0]
+                ET.register_namespace("", opf_ns)
             new_opf_bytes = ET.tostring(pkg.root, encoding="utf-8", xml_declaration=True)
             for info in zf.infolist():
                 if info.filename in ("mimetype", pkg.opf_path):
