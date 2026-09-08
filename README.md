@@ -51,7 +51,8 @@ just a claim.
 | PPTX | ✅ | ✅ | ✅ (LibreOffice + `pypdfium2`) | `metadata_set` |
 | DOCX | ✅ | ✅ | ✅ (LibreOffice + `pypdfium2`) | `metadata_set` |
 | XLSX | ✅ | ✅ | ✅ (LibreOffice + `pypdfium2`) | `metadata_set` |
-| HTML / SVG / Image | planned | planned | planned | — |
+| Image (PNG/JPEG/WebP) | ✅ | ✅ | ✅ (Pillow) | `resize`, `convert_format` |
+| HTML / SVG | planned | planned | planned | — |
 | HTML / SVG / Image | planned | planned | planned | — |
 
 Unimplemented formats fail loudly with `ARTIFACT_ADAPTER_NOT_IMPLEMENTED`

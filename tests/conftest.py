@@ -9,6 +9,7 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures" / "pdf"
 PPTX_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "pptx"
 DOCX_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "docx"
 XLSX_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "xlsx"
+IMAGE_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "image"
 
 
 @pytest.fixture()
@@ -155,4 +156,39 @@ def corrupt_xlsx(tmp_path: Path) -> Path:
 def mislabeled_pdf_as_xlsx(tmp_path: Path) -> Path:
     dst = tmp_path / "mislabeled_pdf.xlsx"
     shutil.copy(XLSX_FIXTURES_DIR / "mislabeled_pdf.xlsx", dst)
+    return dst
+
+
+@pytest.fixture()
+def good_png(tmp_path: Path) -> Path:
+    dst = tmp_path / "good.png"
+    shutil.copy(IMAGE_FIXTURES_DIR / "good.png", dst)
+    return dst
+
+
+@pytest.fixture()
+def alpha_png(tmp_path: Path) -> Path:
+    dst = tmp_path / "alpha.png"
+    shutil.copy(IMAGE_FIXTURES_DIR / "alpha.png", dst)
+    return dst
+
+
+@pytest.fixture()
+def exif_rotated_jpeg(tmp_path: Path) -> Path:
+    dst = tmp_path / "exif_rotated.jpg"
+    shutil.copy(IMAGE_FIXTURES_DIR / "exif_rotated.jpg", dst)
+    return dst
+
+
+@pytest.fixture()
+def corrupt_png(tmp_path: Path) -> Path:
+    dst = tmp_path / "corrupt.png"
+    shutil.copy(IMAGE_FIXTURES_DIR / "corrupt.png", dst)
+    return dst
+
+
+@pytest.fixture()
+def mislabeled_pdf_as_png(tmp_path: Path) -> Path:
+    dst = tmp_path / "mislabeled_pdf.png"
+    shutil.copy(IMAGE_FIXTURES_DIR / "mislabeled_pdf.png", dst)
     return dst

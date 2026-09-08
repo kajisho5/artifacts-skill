@@ -16,14 +16,21 @@ _REGISTRY: dict[ArtifactType, type[ArtifactAdapter]] = {}
 _PLANNED: dict[ArtifactType, str] = {
     ArtifactType.HTML: "Phase 6 (see docs/roadmap.md)",
     ArtifactType.SVG: "Phase 6 (see docs/roadmap.md)",
-    ArtifactType.IMAGE_PNG: "Phase 6 (see docs/roadmap.md)",
-    ArtifactType.IMAGE_JPEG: "Phase 6 (see docs/roadmap.md)",
-    ArtifactType.IMAGE_WEBP: "Phase 6 (see docs/roadmap.md)",
 }
 
 
 def register(adapter_cls: type[ArtifactAdapter]) -> type[ArtifactAdapter]:
     _REGISTRY[adapter_cls.artifact_type] = adapter_cls
+    return adapter_cls
+
+
+def register_for_types(adapter_cls: type[ArtifactAdapter], types: list[ArtifactType]) -> type[ArtifactAdapter]:
+    """For an adapter that handles more than one `ArtifactType` (the image
+    adapter covers PNG/JPEG/WebP with one implementation) — `adapter_cls`
+    still declares a single nominal `.artifact_type` for its own
+    self-description, but every type in `types` resolves to it here."""
+    for t in types:
+        _REGISTRY[t] = adapter_cls
     return adapter_cls
 
 
@@ -58,6 +65,7 @@ def adapter_for(ref: ArtifactRef) -> ArtifactAdapter:
 
 def _register_builtin_adapters() -> None:
     from artifact_skill.adapters.docx.adapter import DocxAdapter
+    from artifact_skill.adapters.image.adapter import ImageAdapter
     from artifact_skill.adapters.pdf.adapter import PdfAdapter
     from artifact_skill.adapters.pptx.adapter import PptxAdapter
     from artifact_skill.adapters.xlsx.adapter import XlsxAdapter
@@ -66,6 +74,9 @@ def _register_builtin_adapters() -> None:
     register(PptxAdapter)
     register(DocxAdapter)
     register(XlsxAdapter)
+    register_for_types(
+        ImageAdapter, [ArtifactType.IMAGE_PNG, ArtifactType.IMAGE_JPEG, ArtifactType.IMAGE_WEBP]
+    )
 
 
 _register_builtin_adapters()

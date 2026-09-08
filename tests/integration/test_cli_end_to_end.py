@@ -227,3 +227,40 @@ def test_xlsx_input_unchanged_after_execute(good_xlsx, tmp_path):
         cwd=tmp_path,
     )
     assert sha256_of(good_xlsx) == before
+
+
+def test_image_doctor_reports_deduplicated_capability(tmp_path):
+    """PNG/JPEG/WebP share one adapter — doctor should show `image.*`,
+    never per-subtype ids like `image/png.*`."""
+    proc = run_cli(["doctor", "--json"], cwd=tmp_path)
+    data = json.loads(proc.stdout)
+    assert "image.structural" in data["capabilities"]
+    assert "image.render" in data["capabilities"]
+    assert not any(k.startswith("image/") for k in data["capabilities"])
+
+
+def test_image_execute_resize_then_verify(good_png, tmp_path):
+    exec_proc = run_cli(
+        ["execute", str(good_png), "--operation", "resize", "--args", '{"width":50,"height":50}',
+         "--output", "small.png", "--json"],
+        cwd=tmp_path,
+    )
+    assert exec_proc.returncode == 0
+    assert (tmp_path / "small.png").exists()
+
+    verify_proc = run_cli(["verify", "small.png", "--policy", '{"require_width": 50}', "--json"], cwd=tmp_path)
+    assert verify_proc.returncode == 0
+    data = json.loads(verify_proc.stdout)
+    assert data["status"] == "pass"
+
+
+def test_image_input_unchanged_after_execute(good_png, tmp_path):
+    from artifact_skill.core.artifact import sha256_of
+
+    before = sha256_of(good_png)
+    run_cli(
+        ["execute", str(good_png), "--operation", "resize", "--args", '{"width":10,"height":10}',
+         "--output", "out.png", "--json"],
+        cwd=tmp_path,
+    )
+    assert sha256_of(good_png) == before

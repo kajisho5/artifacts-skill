@@ -159,6 +159,47 @@ agent reading the error can tell "we haven't built this yet" apart from
   data validation rules not checked; rendering depends on an external,
   sometimes-unreliable LibreOffice install.
 
+## Implemented: Image — PNG/JPEG/WebP (`adapters/image/adapter.py`)
+
+- **Backend**: Pillow only (MIT, no external binary) — the first adapter
+  with genuinely zero dependency on LibreOffice or any other subprocess,
+  since Pillow reads and writes all three formats natively.
+- **One adapter, three `ArtifactType`s**: `adapters/registry.py`'s
+  `register_for_types()` maps `IMAGE_PNG`/`IMAGE_JPEG`/`IMAGE_WEBP` to the
+  same `ImageAdapter` class, rather than three near-identical adapters.
+  Capability ids are correspondingly `image.structural`/`image.render` —
+  not `image/png.structural` etc. — see `core/contract.py`'s
+  `_registered_adapter_ids()`, added specifically so the contract's
+  dynamically-computed `capabilities` field wouldn't produce three
+  spurious per-subtype ids that don't match what `capabilities()` actually
+  reports (an inconsistency this project caught by testing against the
+  actual adapter, not just eyeballing the diff).
+- **Operations**: `resize` (pixel width/height, aspect-ratio-preserving by
+  default via `Image.thumbnail`, or an exact stretch), `convert_format`
+  (png/jpeg/webp; converting to JPEG composites any alpha channel onto
+  white, since JPEG has no alpha).
+- **Structural checks**: image readability (`Image.verify()`), dimensions
+  (+ optional exact/range requirements), format requirement, and
+  `exif_orientation`.
+- **Why `exif_orientation` is a real check, not decoration**: a JPEG can
+  carry an EXIF orientation tag telling viewers to rotate/flip the stored
+  pixel grid before display. `Image.size` reports the *stored* grid, not
+  the *displayed* one — so a `200x300` image with orientation 6 actually
+  displays as `300x200`. This adapter reports the tag as `WARN` (not
+  `FAIL` — the file isn't broken, just a trap for any downstream code that
+  reads `width`/`height` and assumes it's the display size) and `render()`
+  applies `ImageOps.exif_transpose()` so the evidence image it produces is
+  the one a human/agent would actually see, not the raw grid.
+- **Render**: normalizes to an upright PNG (see above) — the same "produce
+  evidence" role render() plays for every other adapter, even though an
+  image is already visual.
+- **Known limitations**: animated images (APNG/animated WebP) are
+  inspected by their first frame only; ICC color profiles are preserved on
+  save where Pillow supports it but not validated; `convert_format`'s
+  default output path keeps the input's extension (pass `--output`
+  explicitly with the new one, or the file's content format and its
+  filename extension will disagree — the content itself is always correct).
+
 ## Planned, not implemented
 
 Registered in `_PLANNED` with the phase each is targeted for (see
@@ -168,7 +209,6 @@ Registered in `_PLANNED` with the phase each is targeted for (see
 |---|---|---|
 | HTML | 6 | Playwright/Chromium (already vendored in this dev environment) |
 | SVG | 6 | Playwright/Chromium rasterization, or a pure-Python SVG rasterizer |
-| Image (PNG/JPEG/WebP) | 6 | Pillow (already a PDF-adapter dependency) |
 
 None of these are stubbed as "implemented." `doctor` reports the backend
 libraries' import/PATH availability today (informationally, so a

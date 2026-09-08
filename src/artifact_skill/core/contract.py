@@ -77,10 +77,27 @@ def _registered_type_values() -> list[str]:
     return sorted(t.value for t in registered_types())
 
 
+def _registered_adapter_ids() -> list[str]:
+    """Distinct adapter ids currently registered — distinct from
+    `_registered_type_values()` because one adapter can cover several
+    `ArtifactType`s (the image adapter handles PNG/JPEG/WebP as one
+    implementation with one `image.*` capability, not three separate
+    `image/png.*`/`image/jpeg.*`/`image/webp.*` ones)."""
+    from artifact_skill.adapters.registry import get_adapter, registered_types
+
+    seen: list[str] = []
+    for artifact_type in registered_types():
+        adapter_id = get_adapter(artifact_type).id
+        if adapter_id not in seen:
+            seen.append(adapter_id)
+    return sorted(seen)
+
+
 def _capability_ids(suffix: str) -> list[str]:
-    """e.g. suffix='structural' -> ['pdf.structural', 'pptx.structural', ...]
-    across every currently-registered artifact type."""
-    return [f"{t}.{suffix}" for t in _registered_type_values()]
+    """e.g. suffix='structural' -> ['docx.structural', 'pdf.structural', ...]
+    across every currently-registered adapter (not type — see
+    `_registered_adapter_ids()`)."""
+    return [f"{a}.{suffix}" for a in _registered_adapter_ids()]
 
 
 _INPUT_PATH_PROPERTY = {"input": {"type": "string", "description": "Path to the input artifact."}}

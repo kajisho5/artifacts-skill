@@ -17,6 +17,7 @@ import zipfile
 import pypdf
 from docx import Document
 from openpyxl import Workbook
+from PIL import Image
 from pptx import Presentation
 from pypdf.generic import NameObject
 from reportlab.lib.pagesizes import letter
@@ -40,6 +41,7 @@ PDF_OUT_DIR = Path(__file__).parent / "pdf"
 PPTX_OUT_DIR = Path(__file__).parent / "pptx"
 DOCX_OUT_DIR = Path(__file__).parent / "docx"
 XLSX_OUT_DIR = Path(__file__).parent / "xlsx"
+IMAGE_OUT_DIR = Path(__file__).parent / "image"
 
 
 # ---------------------------------------------------------------- PDF ----
@@ -284,11 +286,44 @@ def make_mislabeled_pdf_as_xlsx() -> None:
     path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
 
 
+# -------------------------------------------------------------- IMAGE ----
+
+def make_good_png() -> None:
+    path = IMAGE_OUT_DIR / "good.png"
+    Image.new("RGB", (200, 100), color=(255, 0, 0)).save(path)
+
+
+def make_alpha_png() -> None:
+    path = IMAGE_OUT_DIR / "alpha.png"
+    Image.new("RGBA", (150, 150), color=(0, 255, 0, 128)).save(path)
+
+
+def make_exif_rotated_jpeg() -> None:
+    """EXIF orientation 6 (rotate 90° CW) — pure Pillow, no extra
+    dependency needed; Image.Exif() round-trips through JPEG save/load."""
+    path = IMAGE_OUT_DIR / "exif_rotated.jpg"
+    img = Image.new("RGB", (300, 200), color=(0, 0, 255))
+    exif = img.getexif()
+    exif[274] = 6
+    img.save(path, exif=exif)
+
+
+def make_corrupt_png() -> None:
+    path = IMAGE_OUT_DIR / "corrupt.png"
+    path.write_bytes(b"\x89PNG\r\n\x1a\nthis is not a real PNG body, just garbage bytes")
+
+
+def make_mislabeled_pdf_as_png() -> None:
+    path = IMAGE_OUT_DIR / "mislabeled_pdf.png"
+    path.write_bytes((PDF_OUT_DIR / "good_2page.pdf").read_bytes())
+
+
 if __name__ == "__main__":
     PDF_OUT_DIR.mkdir(parents=True, exist_ok=True)
     PPTX_OUT_DIR.mkdir(parents=True, exist_ok=True)
     DOCX_OUT_DIR.mkdir(parents=True, exist_ok=True)
     XLSX_OUT_DIR.mkdir(parents=True, exist_ok=True)
+    IMAGE_OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     make_good_2page()
     make_empty_0page()
@@ -318,7 +353,14 @@ if __name__ == "__main__":
     make_corrupt_xlsx()
     make_mislabeled_pdf_as_xlsx()
 
+    make_good_png()
+    make_alpha_png()
+    make_exif_rotated_jpeg()
+    make_corrupt_png()
+    make_mislabeled_pdf_as_png()
+
     print(f"Wrote PDF fixtures to {PDF_OUT_DIR}")
     print(f"Wrote PPTX fixtures to {PPTX_OUT_DIR}")
     print(f"Wrote DOCX fixtures to {DOCX_OUT_DIR}")
     print(f"Wrote XLSX fixtures to {XLSX_OUT_DIR}")
+    print(f"Wrote image fixtures to {IMAGE_OUT_DIR}")

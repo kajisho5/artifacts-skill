@@ -1,11 +1,12 @@
 # Roadmap
 
 Phases per the original design brief. **Phase 0-1, Phase 2 (PDF + PPTX),
-Phase 3 (DOCX + XLSX), and a working slice of Phase 4/5 are done as of
-this writing** — everything below "Now" is planned, not implemented, and
-nothing in this codebase claims otherwise (`doctor`/`registry.py` report
-unimplemented formats explicitly). All four Tier 1 formats from the
-original design brief (PDF/PPTX/DOCX/XLSX) are now implemented.
+Phase 3 (DOCX + XLSX), a working slice of Phase 4/5, and the Image slice
+of Phase 6 are done as of this writing** — everything below "Now" is
+planned, not implemented, and nothing in this codebase claims otherwise
+(`doctor`/`registry.py` report unimplemented formats explicitly). All four
+Tier 1 formats from the original design brief (PDF/PPTX/DOCX/XLSX) are now
+implemented, plus PNG/JPEG/WebP from Tier 2.
 
 ## Done
 
@@ -64,20 +65,34 @@ original design brief (PDF/PPTX/DOCX/XLSX) are now implemented.
   PDF now genuinely rolls up to overall `PASS`, not `UNKNOWN` — see
   `docs/verification.md` for the before/after and `docs/adapters.md` for
   the implementation detail.
+- **Phase 6 (Image slice).** `adapters/image/adapter.py`: inspect, plan,
+  execute (`resize`, `convert_format`), render, structural verify for
+  PNG/JPEG/WebP — via Pillow alone, no external binary, the first adapter
+  with no LibreOffice dependency at all. One adapter class covers all
+  three formats (`adapters/registry.py::register_for_types()`), which
+  exposed a real gap in `core/contract.py`'s dynamic capability-id
+  computation (it would have produced three spurious per-subtype
+  `image/png.*`/`image/jpeg.*`/`image/webp.*` ids instead of one shared
+  `image.*`) — fixed by deriving capability ids from distinct adapter
+  objects, not from `ArtifactType` values directly. Also added a genuine,
+  format-specific honesty check: `exif_orientation` (`WARN` when a JPEG's
+  EXIF orientation tag means its stored pixel grid isn't its display
+  orientation) — `render()` corrects this in its evidence output, the raw
+  file does not carry the correction.
 
 ## Now / Next
 
-All four Tier 1 formats (PDF, PPTX, DOCX, XLSX) are implemented, and the
-PDF font-embedding gap flagged since the MVP is closed. Nothing is
-currently in progress — see "Later" below for what's next, and
-`docs/adapters.md`'s "Writing a new adapter" checklist for how to start
-one of them.
+All four Tier 1 formats (PDF, PPTX, DOCX, XLSX) are implemented, the PDF
+font-embedding gap flagged since the MVP is closed, and the Image slice of
+Phase 6 is done. HTML and SVG (both needing a Chromium/Playwright render
+path, not yet wired up) are what's left of Phase 6 — see "Later" below,
+and `docs/adapters.md`'s "Writing a new adapter" checklist for how to
+start one of them.
 
 ## Later
 
-- **Phase 6 — HTML, SVG, Image.** Chromium (via Playwright, already
-  available in CI-like dev environments) for HTML/SVG rendering; Pillow
-  (already a dependency) for raster image normalization/preview. Network
+- **Phase 6 (remaining) — HTML, SVG.** Chromium (via Playwright, already
+  available in CI-like dev environments) for HTML/SVG rendering. Network
   access for externally-referenced assets (remote fonts/images/stylesheets)
   stays off by default per `docs/security.md` — referenced-but-unfetched
   externals are reported, not silently fetched.
