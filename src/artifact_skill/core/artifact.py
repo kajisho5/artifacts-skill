@@ -265,6 +265,18 @@ def detect_type(path: Path) -> ArtifactType:
         return ArtifactType.SVG
     if stripped.startswith((b"<!doctype html", b"<html")):
         return ArtifactType.HTML
+    # FIX_PROMPT P2-3: a real, unremarkable XHTML document (an XML
+    # declaration followed by an <html> root, e.g.
+    # `<?xml version="1.0"?><html xmlns="...">`) fell through both the
+    # SVG check above (no "<svg" anywhere in the window) and the bare
+    # "<!doctype html"/"<html" check (the file starts with "<?xml", not
+    # either of those) straight to UNKNOWN - confirmed by direct
+    # reproduction before this fix. Deliberately narrow: only a
+    # doctype-or-root-tag match still recognized as HTML, same as the
+    # non-XML-declared case just above - a fragment with no <html> tag at
+    # all is still honestly UNKNOWN (see SKILL.md).
+    if stripped.startswith(b"<?xml") and b"<html" in stripped[:2048]:
+        return ArtifactType.HTML
     text = _decode_text_sample(head)
     if text is not None:
         if _looks_like_markdown(text):

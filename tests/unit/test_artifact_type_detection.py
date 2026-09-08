@@ -82,6 +82,42 @@ def test_svg_with_a_leading_comment_before_bare_svg_tag_is_still_detected(tmp_pa
     assert ArtifactRef.from_path(path).type == ArtifactType.SVG
 
 
+# --- XHTML: an XML declaration followed by an <html> root (FIX_PROMPT P2-3) -
+#
+# A real, unremarkable XHTML document (`<?xml ...?><html xmlns=...>`) fell
+# through both the SVG check (no "<svg" anywhere) and the bare
+# "<!doctype html"/"<html" check (the file starts with "<?xml", not either
+# of those) straight to UNKNOWN - confirmed by direct reproduction before
+# this fix.
+
+
+def test_xhtml_with_xml_declaration_is_detected_as_html(tmp_path):
+    path = tmp_path / "test.xhtml"
+    path.write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>t</title></head>'
+        "<body><p>hello</p></body></html>"
+    )
+    assert ArtifactRef.from_path(path).type == ArtifactType.HTML
+
+
+def test_xhtml_detection_does_not_steal_svg_documents(tmp_path):
+    """An <?xml ...?> document containing <svg> must still be typed SVG,
+    not HTML - the new XHTML check must not run before (or instead of) the
+    existing SVG check."""
+    path = tmp_path / "test.svg"
+    path.write_text('<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg"><circle r="1"/></svg>')
+    assert ArtifactRef.from_path(path).type == ArtifactType.SVG
+
+
+def test_plain_xml_document_with_no_html_root_stays_unknown(tmp_path):
+    """The XHTML fix must be narrow: an ordinary XML document unrelated to
+    HTML must not be swept in just because it starts with <?xml."""
+    path = tmp_path / "test.xml"
+    path.write_text('<?xml version="1.0"?><root><item>data</item></root>')
+    assert ArtifactRef.from_path(path).type == ArtifactType.UNKNOWN
+
+
 def test_an_unterminated_leading_comment_is_left_as_unknown_not_misdetected(tmp_path):
     """The closing --> never appears at all: detect_type() must not guess
     past it - UNKNOWN is the honest answer here, not a silent misdetection."""

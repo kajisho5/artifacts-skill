@@ -321,6 +321,14 @@ deserves a more specific answer than "unrecognized file."
 - **Known limitations**: JavaScript-driven content that renders
   asynchronously after `load` may not be captured; ARIA/accessibility
   structure is not inspected.
+- **Type detection scope** (`core/artifact.py`'s `detect_type()`,
+  FIX_PROMPT P2-3): recognizes a full HTML document — `<!doctype html>`,
+  a bare `<html>` root, or an XHTML document (`<?xml ...?>` followed by
+  `<html ...>`) — each after stripping any leading comment (Issue #26).
+  A bare fragment with no `<html>` tag at all (e.g. starting directly with
+  `<head>`/`<body>`, or a generation snippet with neither) is honestly
+  `UNKNOWN`, not a guess — save such a fragment wrapped in a real
+  `<html>` document if you want it recognized and verified as HTML.
 
 ## Implemented: SVG (`adapters/svg/adapter.py`)
 
