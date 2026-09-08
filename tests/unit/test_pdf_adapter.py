@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from artifact_skill.adapters.pdf.adapter import PdfAdapter

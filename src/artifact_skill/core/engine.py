@@ -98,8 +98,8 @@ def run_lifecycle(
 
     if capability_report is None:
         capability_report = CapabilityReport()
-        for cap in adapter.capabilities():
-            capability_report.add(cap)
+        for adapter_cap in adapter.capabilities():
+            capability_report.add(adapter_cap)
 
     for cap_id in plan.required_capabilities:
         cap = capability_report.get(cap_id)

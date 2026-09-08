@@ -10,8 +10,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 CLI = shutil.which("artifact-skill")
 
 
@@ -46,7 +44,7 @@ def test_execute_dry_run_writes_nothing(good_pdf, tmp_path):
     data = json.loads(proc.stdout)
     assert data["dry_run"] is True
     produced = list(tmp_path.iterdir())
-    assert produced == [good_pdf] or set(p.name for p in produced) == {good_pdf.name}
+    assert produced == [good_pdf] or {p.name for p in produced} == {good_pdf.name}
 
 
 def test_execute_then_verify_pass(good_pdf, tmp_path):
@@ -149,7 +147,11 @@ def test_pptx_doctor_reports_structural_capability(tmp_path):
 
 
 def test_pptx_execute_then_verify(good_pptx, tmp_path):
-    exec_proc = run_cli(
+    # No returncode==0 assertion: overall status (and thus exit code) can be
+    # UNKNOWN here if the environment's LibreOffice can't actually render
+    # (present-but-non-functional soffice - see PptxAdapter's docstring),
+    # same reasoning as the unit tests' _probe_pptx_render_works pattern.
+    run_cli(
         ["execute", str(good_pptx), "--operation", "metadata_set", "--args", '{"title":"CLI PPTX Test"}',
          "--output", "out.pptx", "--json"],
         cwd=tmp_path,
@@ -187,7 +189,8 @@ def test_docx_doctor_reports_structural_capability(tmp_path):
 
 
 def test_docx_execute_then_verify(good_docx, tmp_path):
-    exec_proc = run_cli(
+    # No returncode==0 assertion: see the equivalent PPTX test's comment above.
+    run_cli(
         ["execute", str(good_docx), "--operation", "metadata_set", "--args", '{"title":"CLI DOCX Test"}',
          "--output", "out.docx", "--json"],
         cwd=tmp_path,
@@ -224,7 +227,8 @@ def test_xlsx_doctor_reports_structural_capability(tmp_path):
 
 
 def test_xlsx_execute_then_verify(good_xlsx, tmp_path):
-    exec_proc = run_cli(
+    # No returncode==0 assertion: see the equivalent PPTX test's comment above.
+    run_cli(
         ["execute", str(good_xlsx), "--operation", "metadata_set", "--args", '{"title":"CLI XLSX Test"}',
          "--output", "out.xlsx", "--json"],
         cwd=tmp_path,

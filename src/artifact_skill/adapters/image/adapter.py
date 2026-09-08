@@ -149,7 +149,7 @@ class ImageAdapter(ArtifactAdapter):
             # verify() invalidates the file handle; a fresh open is required
             # to actually read pixel data / metadata afterwards.
             img = Image.open(ref.path)
-        except Exception as exc:  # noqa: BLE001 - surface as structured input error
+        except Exception as exc:
             raise ArtifactInputError(
                 code="ARTIFACT_IMAGE_UNREADABLE",
                 message=f"Pillow could not open '{ref.path}': {exc}",

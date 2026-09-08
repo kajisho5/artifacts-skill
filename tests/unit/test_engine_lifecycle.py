@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from artifact_skill.core.engine import build_plan, run_lifecycle

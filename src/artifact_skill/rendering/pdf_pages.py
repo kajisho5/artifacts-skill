@@ -52,7 +52,7 @@ def render_pdf_pages(pdf_path: Path, out_dir: Path, dpi: int = 150) -> RenderRes
 
     try:
         reader = pypdf.PdfReader(str(pdf_path))
-    except Exception as exc:  # noqa: BLE001 - surfaced as a structured error
+    except Exception as exc:
         raise ArtifactInputError(
             code="ARTIFACT_PDF_UNREADABLE",
             message=f"pypdf could not open '{pdf_path}' for rendering: {exc}",

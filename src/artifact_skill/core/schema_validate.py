@@ -92,14 +92,16 @@ def _validate_object(value: Any, schema: dict[str, Any], path: str, errors: list
     if not isinstance(value, dict):
         return
     properties: dict[str, Any] = schema.get("properties", {})
-    for key in schema.get("required", []):
-        if key not in value:
-            errors.append(f"{path}: missing required property '{key}'")
+    errors.extend(
+        f"{path}: missing required property '{key}'" for key in schema.get("required", []) if key not in value
+    )
     additional = schema.get("additionalProperties")
     if additional is False:
-        for key in value:
-            if key not in properties:
-                errors.append(f"{path}: unexpected property '{key}' (additionalProperties: false)")
+        errors.extend(
+            f"{path}: unexpected property '{key}' (additionalProperties: false)"
+            for key in value
+            if key not in properties
+        )
     elif isinstance(additional, dict):
         # A dynamic-keyed map (e.g. capability_id -> Capability): every key
         # not explicitly declared in `properties` must match this schema.

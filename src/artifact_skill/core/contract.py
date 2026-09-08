@@ -41,11 +41,11 @@ module docstring for why not).
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from artifact_skill import __version__
-from artifact_skill.core.errors import EXIT_CODE_BY_CATEGORY, EXIT_FAIL, EXIT_OK, ErrorCategory
+from artifact_skill.core.errors import EXIT_CODE_BY_CATEGORY, EXIT_FAIL, EXIT_OK
 
 CONTRACT_SCHEMA = "artifact-contract/v1"
 

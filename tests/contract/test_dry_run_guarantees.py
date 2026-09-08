@@ -7,10 +7,6 @@ true as more adapters are added.
 
 from __future__ import annotations
 
-from pathlib import Path
-
-import pytest
-
 from artifact_skill.core.artifact import sha256_of
 from artifact_skill.core.engine import run_lifecycle
 from artifact_skill.security import subprocess_exec

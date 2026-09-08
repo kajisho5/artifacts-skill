@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import json
 
-from artifact_skill.mcp.server import CAPABILITY_PREFIX, PROTOCOL_VERSION, _handle_request, _negotiate_protocol_version, call_tool
+from artifact_skill.mcp.server import (
+    CAPABILITY_PREFIX,
+    PROTOCOL_VERSION,
+    _handle_request,
+    _negotiate_protocol_version,
+    call_tool,
+)
 
 
 def test_missing_required_argument_returns_structured_error_not_a_crash(good_pdf):

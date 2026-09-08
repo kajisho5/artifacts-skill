@@ -35,7 +35,7 @@ import sys
 def _run_cli(*args: str) -> dict:
     binary = shutil.which("artifact-skill")
     cmd = [binary, *args] if binary else [sys.executable, "-m", "artifact_skill.cli.main", *args]
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)  # noqa: S603 - cmd[0] resolved via shutil.which()
     if not proc.stdout.strip():
         raise SystemExit(f"error: '{' '.join(cmd)}' produced no stdout.\nstderr: {proc.stderr}")
     return json.loads(proc.stdout)

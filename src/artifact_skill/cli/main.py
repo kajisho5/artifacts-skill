@@ -144,7 +144,7 @@ def _load_json_arg(raw: str, flag: str) -> dict[str, Any]:
     try:
         value = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise SystemExit(f"error: {flag} is not valid JSON: {exc}")
+        raise SystemExit(f"error: {flag} is not valid JSON: {exc}") from exc
     if not isinstance(value, dict):
         raise SystemExit(f"error: {flag} must be a JSON object.")
     return value
@@ -155,7 +155,7 @@ def _resolve_policy_arg(args: argparse.Namespace) -> dict[str, Any]:
     try:
         return resolve_policy(getattr(args, "policy_preset", None), policy)
     except KeyError as exc:
-        raise SystemExit(f"error: {exc}")
+        raise SystemExit(f"error: {exc}") from exc
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -334,7 +334,7 @@ def _cmd_receipt(args: argparse.Namespace) -> int:
     return _exit_for_status(result.receipt.status)
 
 
-def _human_report(result, evidence_dir: Path) -> "Any":  # LifecycleResult, avoid import cycle in the type hint
+def _human_report(result, evidence_dir: Path) -> Any:  # LifecycleResult, avoid import cycle in the type hint
     r = result.receipt
     lines = [
         "ARTIFACT REPORT", "",
@@ -348,12 +348,10 @@ def _human_report(result, evidence_dir: Path) -> "Any":  # LifecycleResult, avoi
         f"Iterations: {r.iterations}",
         f"Warnings:   {len(r.warnings)}",
     ]
-    for w in r.warnings:
-        lines.append(f"  - {w}")
+    lines.extend(f"  - {w}" for w in r.warnings)
     if r.limitations:
         lines.append(f"Limitations: {len(r.limitations)}")
-        for lim in r.limitations:
-            lines.append(f"  - {lim}")
+        lines.extend(f"  - {lim}" for lim in r.limitations)
     lines += ["", "Evidence:", f"  {evidence_dir / 'receipt.json'}"]
     for art in r.artifacts:
         lines.append(f"  {art['path']} ({art['role']})")

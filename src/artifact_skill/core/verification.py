@@ -38,7 +38,7 @@ _PRECEDENCE = [
 
 
 class CheckStatus(str, enum.Enum):
-    PASS = "pass"
+    PASS = "pass"  # noqa: S105 - an enum value, not a credential
     WARN = "warn"
     FAIL = "fail"
     UNKNOWN = "unknown"

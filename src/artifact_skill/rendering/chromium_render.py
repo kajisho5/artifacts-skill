@@ -15,11 +15,16 @@ through its own API), and `docs/security.md` for the same reasoning.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactExecutionError
 
-_VIEWPORT = {"width": 1280, "height": 800}
+if TYPE_CHECKING:
+    # playwright is an optional dependency (see require_playwright() below) -
+    # only imported for type annotations, never at runtime.
+    from playwright.sync_api import ViewportSize
+
+_VIEWPORT: ViewportSize = {"width": 1280, "height": 800}
 _NAV_TIMEOUT_MS = 30_000
 
 

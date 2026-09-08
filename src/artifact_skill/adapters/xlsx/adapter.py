@@ -163,7 +163,7 @@ class XlsxAdapter(ArtifactAdapter):
         warnings: list[str] = []
         try:
             wb = openpyxl.load_workbook(str(ref.path), data_only=False)
-        except Exception as exc:  # noqa: BLE001 - surface as structured input error
+        except Exception as exc:
             raise ArtifactInputError(
                 code="ARTIFACT_XLSX_UNREADABLE",
                 message=f"openpyxl could not open '{ref.path}': {exc}",

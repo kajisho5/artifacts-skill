@@ -64,7 +64,9 @@ def build_before_after(before_paths: list[Path], after_paths: list[Path], out_pa
         raise ArtifactInputError(
             code="ARTIFACT_INPUT_NOT_FOUND", message="Both `before` and `after` need at least one rendered page."
         )
-    pairs = list(zip(before_paths, after_paths))
+    # strict=False: before/after page counts can legitimately differ (e.g. delete_pages);
+    # pairing up to the shorter list is the desired comparison, not an error.
+    pairs = list(zip(before_paths, after_paths, strict=False))
     cell_w = _THUMB_SIZE[0] * 2 + _MARGIN * 3
     cell_h = _THUMB_SIZE[1] + _MARGIN + _LABEL_HEIGHT
     sheet = Image.new("RGB", (cell_w, len(pairs) * cell_h + _MARGIN), color="white")

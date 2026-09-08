@@ -93,7 +93,7 @@ def test_cli_flags_match_input_schema_properties_in_both_directions():
                 )
 
         # every CLI flag must be a schema property or explicitly CLI-only
-        for dest, action in actions_by_dest.items():
+        for dest in actions_by_dest:
             if dest == "input":
                 assert "input" in schema_props, f"{tool.name}: CLI has positional 'input' but schema doesn't declare it"
                 continue

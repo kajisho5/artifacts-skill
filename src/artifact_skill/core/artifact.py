@@ -73,7 +73,7 @@ def detect_type(path: Path) -> ArtifactType:
 
     if head.startswith(b"%PDF-"):
         return ArtifactType.PDF
-    if head.startswith(b"PK\x03\x04") or head.startswith(b"PK\x05\x06"):
+    if head.startswith((b"PK\x03\x04", b"PK\x05\x06")):
         return _sniff_zip_ooxml(path)
     if head.startswith(b"\x89PNG\r\n\x1a\n"):
         return ArtifactType.IMAGE_PNG
@@ -86,7 +86,7 @@ def detect_type(path: Path) -> ArtifactType:
         return ArtifactType.SVG
     if stripped.startswith(b"<svg"):
         return ArtifactType.SVG
-    if stripped.startswith(b"<!doctype html") or stripped.startswith(b"<html"):
+    if stripped.startswith((b"<!doctype html", b"<html")):
         return ArtifactType.HTML
     return ArtifactType.UNKNOWN
 
@@ -101,7 +101,7 @@ class ArtifactRef:
     size_bytes: int
 
     @classmethod
-    def from_path(cls, path: Path | str) -> "ArtifactRef":
+    def from_path(cls, path: Path | str) -> ArtifactRef:
         p = Path(path)
         if not p.is_file():
             from artifact_skill.core.errors import ArtifactInputError

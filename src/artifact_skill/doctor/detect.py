@@ -69,13 +69,18 @@ def _binary_capability(cap_id: str, names: list[str], required: bool = False) ->
 
 
 def _probe_version(path: str) -> str | None:
+    # path is a binary already resolved via shutil.which() by the caller, not
+    # attacker-controlled input; check=False because a non-zero exit (e.g. a
+    # flag the binary doesn't recognize) is expected and handled below.
     for flag in ("--version", "-version", "--Version"):
         try:
-            proc = subprocess.run([path, flag], capture_output=True, text=True, timeout=5)
+            proc = subprocess.run(  # noqa: S603
+                [path, flag], capture_output=True, text=True, timeout=5, check=False,
+            )
             out = (proc.stdout or proc.stderr).strip().splitlines()
             if out:
                 return out[0][:120]
-        except (OSError, subprocess.TimeoutExpired):
+        except (OSError, subprocess.TimeoutExpired):  # noqa: PERF203
             continue
     return None
 
@@ -141,7 +146,7 @@ def detect_environment() -> CapabilityReport:
     report.add(_module_capability("library.openpyxl", "openpyxl", required=False))
 
     # Fold in each *implemented* adapter's own self-reported capabilities.
-    from artifact_skill.adapters.registry import registered_types, get_adapter
+    from artifact_skill.adapters.registry import get_adapter, registered_types
 
     for artifact_type in registered_types():
         adapter = get_adapter(artifact_type)

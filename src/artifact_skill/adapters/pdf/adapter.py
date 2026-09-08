@@ -386,7 +386,7 @@ class PdfAdapter(ArtifactAdapter):
         warnings: list[str] = []
         try:
             reader = pypdf.PdfReader(str(ref.path))
-        except Exception as exc:  # noqa: BLE001 - surface as structured input error
+        except Exception as exc:
             raise ArtifactInputError(
                 code="ARTIFACT_PDF_UNREADABLE",
                 message=f"pypdf could not open '{ref.path}': {exc}",
@@ -438,14 +438,14 @@ class PdfAdapter(ArtifactAdapter):
                 has_text = False
                 try:
                     has_text = bool(page.extract_text().strip())
-                except Exception:  # noqa: BLE001 - a single bad page must not abort inspect
+                except Exception:  # noqa: BLE001, S110 - a single bad page must not abort inspect
                     pass
                 if has_text:
                     text_extractable_pages += 1
                 has_images = False
                 try:
                     has_images = len(page.images) > 0
-                except Exception:  # noqa: BLE001 - same: a bad page's image list must not abort inspect
+                except Exception:  # noqa: BLE001, S110 - same: a bad page's image list must not abort inspect
                     pass
                 if not has_text and not has_images:
                     blank_pages.append(i + 1)
@@ -626,10 +626,14 @@ class PdfAdapter(ArtifactAdapter):
                 )
             page_count = len(reader.pages)
             pages_arg = args.get("pages")
-            indices = set(_resolve_page_indices(pages_arg, page_count, operation)) if pages_arg is not None else set(range(page_count))
+            rotate_indices = (
+                set(_resolve_page_indices(pages_arg, page_count, operation))
+                if pages_arg is not None
+                else set(range(page_count))
+            )
             writer = pypdf.PdfWriter()
             writer.append(reader)
-            for i in indices:
+            for i in rotate_indices:
                 writer.pages[i].rotate(degrees)
             _write_pdf(writer, output_path)
         else:

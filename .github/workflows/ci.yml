@@ -7,19 +7,87 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        include:
+          - os: ubuntu-latest
+            python-version: "3.10"
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          - os: macos-latest
+            python-version: "3.12"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[all,dev]"
-      - run: playwright install --with-deps chromium
+
+      # LibreOffice backs PPTX/DOCX/XLSX render() (see docs/adapters.md); without
+      # it those render-happy-path tests self-skip via each adapter's own
+      # soffice-actually-works probe instead of running for real.
+      - name: Install LibreOffice (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libreoffice-impress libreoffice-writer libreoffice-calc
+      - name: Install LibreOffice (macOS)
+        if: runner.os == 'macOS'
+        run: brew install --cask libreoffice
+
+      - name: Install Chromium for Playwright (Linux)
+        if: runner.os == 'Linux'
+        run: playwright install --with-deps chromium
+      - name: Install Chromium for Playwright (macOS)
+        if: runner.os == 'macOS'
+        run: playwright install chromium
+
+      - run: ruff check .
+      - run: mypy
       - run: python -m pytest tests/ -q
       - run: artifact-skill doctor --json
       - run: artifact-skill contract --json
       - run: python3 tests/benchmark/run_benchmark.py
       - run: python3 examples/standalone_contract_consumer.py tests/fixtures/pdf/good_2page.pdf
+
+  # Verifies the actual distributable artifacts install and run cleanly, not
+  # just the source tree under pytest (Issue #13) - this was previously only
+  # ever checked manually, once, during a review pass.
+  packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - run: pip install build
+      - run: python -m build
+
+      - name: Install the wheel into a fresh venv and smoke-test it
+        run: |
+          python -m venv /tmp/wheel-venv
+          /tmp/wheel-venv/bin/pip install dist/*.whl
+          /tmp/wheel-venv/bin/python -c "import artifact_skill; print(artifact_skill.__file__)"
+          /tmp/wheel-venv/bin/artifact-skill --version
+          /tmp/wheel-venv/bin/artifact-skill doctor --json
+
+      - name: Verify the npm package contents against package.json's files list
+        run: |
+          test -x bin/artifact-skill.js
+          npm pack --dry-run --json > /tmp/npm-pack.json
+          python3 - <<'EOF'
+          import json
+          with open("/tmp/npm-pack.json") as f:
+              data = json.load(f)
+          files = {e["path"] for e in data[0]["files"]}
+          for required in ("bin/artifact-skill.js", "package.json", "SKILL.md", "README.md"):
+              assert required in files, f"{required} missing from npm package: {sorted(files)}"
+          EOF

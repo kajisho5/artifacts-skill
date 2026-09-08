@@ -165,7 +165,7 @@ class PptxAdapter(ArtifactAdapter):
         warnings: list[str] = []
         try:
             prs = pptx.Presentation(str(ref.path))
-        except Exception as exc:  # noqa: BLE001 - surface as structured input error
+        except Exception as exc:
             raise ArtifactInputError(
                 code="ARTIFACT_PPTX_UNREADABLE",
                 message=f"python-pptx could not open '{ref.path}': {exc}",

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import hashlib
-
-from artifact_skill.core.artifact import ArtifactRef, sha256_of
+from artifact_skill.core.artifact import sha256_of
 from artifact_skill.core.engine import run_lifecycle
 from artifact_skill.core.operation import default_output_path
 

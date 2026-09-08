@@ -124,7 +124,7 @@ class SvgAdapter(ArtifactAdapter):
         _reject_xml_entities(ref.path)
         warnings: list[str] = []
         try:
-            tree = ET.parse(ref.path)
+            tree = ET.parse(ref.path)  # noqa: S314 - _reject_xml_entities() above already rejects DOCTYPE/entity payloads
         except ET.ParseError as exc:
             raise ArtifactInputError(
                 code="ARTIFACT_SVG_UNREADABLE",

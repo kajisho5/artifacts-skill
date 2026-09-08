@@ -10,9 +10,8 @@ valid ones — the point is to test the *detection* of real problems.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import zipfile
+from pathlib import Path
 
 import pypdf
 from docx import Document
@@ -371,19 +370,19 @@ def make_external_link_xlsx() -> None:
     ).encode()
 
     items["xl/externalLinks/externalLink1.xml"] = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<externalLink xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        '<externalBook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1">'
-        "<sheetNames><sheetName val=\"Sheet1\"/></sheetNames>"
-        "</externalBook></externalLink>"
-    ).encode()
+        b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        b'<externalLink xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        b'<externalBook xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId1">'
+        b"<sheetNames><sheetName val=\"Sheet1\"/></sheetNames>"
+        b"</externalBook></externalLink>"
+    )
     items["xl/externalLinks/_rels/externalLink1.xml.rels"] = (
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-        '<Relationship Id="rId1" '
-        'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLinkPath" '
-        'Target="other_workbook.xlsx" TargetMode="External"/></Relationships>'
-    ).encode()
+        b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        b'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        b'<Relationship Id="rId1" '
+        b'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLinkPath" '
+        b'Target="other_workbook.xlsx" TargetMode="External"/></Relationships>'
+    )
 
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
         for name, data in items.items():

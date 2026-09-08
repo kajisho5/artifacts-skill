@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from artifact_skill.core.artifact import ArtifactRef, ArtifactType, InspectionReport
-from artifact_skill.core.capability import Capability, CapabilityReport
+from artifact_skill.core.capability import Capability
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import VerificationResult
 

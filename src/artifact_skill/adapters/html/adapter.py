@@ -85,8 +85,9 @@ class _ResourceCollector(HTMLParser):
         if tag in ("script", "style"):
             self._in_skip_tag = True
         target_attr = _RESOURCE_ATTRS.get(tag)
-        if target_attr and attr_map.get(target_attr):
-            self.resources.append((tag, attr_map[target_attr]))
+        url = attr_map.get(target_attr) if target_attr else None
+        if url:
+            self.resources.append((tag, url))
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "title":
@@ -178,7 +179,7 @@ class HtmlAdapter(ArtifactAdapter):
         parser = _ResourceCollector()
         try:
             parser.feed(text)
-        except Exception as exc:  # noqa: BLE001 - html.parser is very tolerant; a real failure is notable
+        except Exception as exc:
             raise ArtifactInputError(
                 code="ARTIFACT_HTML_UNREADABLE",
                 message=f"Could not parse '{ref.path}' as HTML: {exc}",

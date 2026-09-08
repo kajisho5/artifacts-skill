@@ -229,6 +229,7 @@ def _handle_request(msg: dict[str, Any]) -> dict[str, Any] | None:
     msg_id = msg.get("id")
     params = msg.get("params") or {}
 
+    result: dict[str, Any]
     if method == "initialize":
         result = {
             "protocolVersion": _negotiate_protocol_version(params.get("protocolVersion")),

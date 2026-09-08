@@ -23,9 +23,9 @@ def test_corrupt_pdf_is_still_type_pdf_by_header(corrupt_pdf):
 
 
 def test_missing_file_raises_input_error(tmp_path):
-    from artifact_skill.core.errors import ArtifactInputError
-
     import pytest
+
+    from artifact_skill.core.errors import ArtifactInputError
 
     with pytest.raises(ArtifactInputError):
         ArtifactRef.from_path(tmp_path / "does_not_exist.pdf")

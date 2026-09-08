@@ -12,7 +12,8 @@ def _record(succeeded: bool) -> OperationRecord:
         operation="pdf.metadata_set", adapter="pdf", args={},
         started_at="2026-01-01T00:00:00+00:00", finished_at="2026-01-01T00:00:01+00:00",
         input_sha256="a" * 64, output_sha256="b" * 64 if succeeded else None,
-        output_path="/tmp/out.pdf" if succeeded else None, succeeded=succeeded,
+        output_path="/tmp/out.pdf" if succeeded else None,  # noqa: S108 - opaque record field, never written to
+        succeeded=succeeded,
     )
 
 

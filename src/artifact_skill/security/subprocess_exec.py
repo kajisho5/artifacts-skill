@@ -106,7 +106,9 @@ def run(
     with tempfile.TemporaryDirectory(prefix="artifact-skill-exec-") as tmp:
         run_cwd = str(cwd) if cwd is not None else tmp
         try:
-            proc = subprocess.run(
+            # argv[0] was already resolved above and checked against the caller's
+            # allowlist; check=False because the caller reads proc.returncode itself.
+            proc = subprocess.run(  # noqa: S603
                 argv,
                 cwd=run_cwd,
                 capture_output=True,
@@ -114,6 +116,7 @@ def run(
                 timeout=effective_timeout,
                 shell=False,
                 env=_minimal_env(),
+                check=False,
             )
             return ExecResult(
                 argv=argv, returncode=proc.returncode, stdout=proc.stdout, stderr=proc.stderr, timed_out=False

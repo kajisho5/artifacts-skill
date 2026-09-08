@@ -173,12 +173,12 @@ unbuilt — nothing outside this repo consumes it yet, and speculatively
 building it now would be exactly the kind of premature abstraction
 `docs/architecture.md` argues against.
 
-**Cross-platform verification (spec §36).** This project's CI only runs
-`ubuntu-latest`, so "verified on macOS/Windows" would be a claim nothing
-actually checked — the honest version of this work is a direct code
-audit against known Windows/POSIX differences, documenting what was
-checked and what remains genuinely unverifiable without a real
-Windows/macOS run:
+**Cross-platform verification (spec §36).** At the time this section was
+first written, this project's CI only ran `ubuntu-latest`, so "verified on
+macOS/Windows" would have been a claim nothing actually checked — the
+honest version of that work was a direct code audit against known
+Windows/POSIX differences, documenting what was checked and what remained
+genuinely unverifiable without a real macOS/Windows run:
 - **Found and fixed a real bug**: `security/subprocess_exec.py`'s
   executable-allowlist check compared a resolved path's bare filename
   directly against adapters' platform-neutral allowlist names
@@ -206,9 +206,15 @@ Windows/macOS run:
   `python` — plausible on some Windows Python installs that don't
   register either name on `PATH`, but this is a documented gap, not a
   confirmed bug (unlike the subprocess allowlist issue above, nothing
-  demonstrated this actually breaks anything). A real Windows/macOS CI
-  run remains the only way to close this out completely; it is not set
-  up as part of this issue.
+  demonstrated this actually breaks anything).
+
+**Closed the macOS half of this gap (Issue #13).** `.github/workflows/ci.yml`
+now includes a real `macos-latest` run (LibreOffice via `brew install
+--cask libreoffice`, Chromium via `playwright install chromium`) — CI
+actually renders PPTX/DOCX/XLSX/HTML/SVG on macOS now, not just Linux.
+A Windows runner would close the remaining gap but is still lower
+priority than macOS was, per the reasoning above: no Windows-specific bug
+has ever been found by the code audit, only fixed proactively.
 
 ## Explicitly not planned (see spec §62)
 

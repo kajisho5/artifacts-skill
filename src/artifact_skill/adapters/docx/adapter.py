@@ -157,7 +157,7 @@ class DocxAdapter(ArtifactAdapter):
         warnings: list[str] = []
         try:
             document = docx.Document(str(ref.path))
-        except Exception as exc:  # noqa: BLE001 - surface as structured input error
+        except Exception as exc:
             raise ArtifactInputError(
                 code="ARTIFACT_DOCX_UNREADABLE",
                 message=f"python-docx could not open '{ref.path}': {exc}",

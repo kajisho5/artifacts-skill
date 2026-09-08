@@ -13,14 +13,14 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from cases import (  # noqa: E402
+from cases import (
     EXCEPTION_CASES,
     KNOWN_GOOD_CASES,
     STRUCTURAL_DEFECT_CASES,
     TYPE_DETECTION_CASES,
     TYPE_REJECTED_CASES,
 )
-from run_benchmark import (  # noqa: E402
+from run_benchmark import (
     _check_exception,
     _check_known_good,
     _check_structural_defect,
