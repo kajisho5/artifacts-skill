@@ -126,6 +126,16 @@ agent reading the error can tell "we haven't built this yet" apart from
   heuristic that can false-positive on intentionally blank section-header
   slides; embedded font completeness not checked; rendering depends on an
   external, sometimes-unreliable LibreOffice install.
+- **If `strip_placeholders` starts silently doing nothing (or breaking) on
+  a future python-pptx upgrade**: `shape._element.getparent().remove(shape._element)`
+  reaches into python-pptx's internal `lxml` element tree because there is
+  no public shape-removal API to call instead. This is a private-API risk
+  by construction, not an oversight — if a python-pptx release changes how
+  placeholder shapes are represented internally, the fix is to re-derive
+  the removal call against that version's actual `_element`/`getparent()`
+  shape (start from `tests/unit/test_pptx_adapter.py`'s
+  `test_execute_strip_placeholders_removes_empty_ones` — a failure there
+  is the signal), not to silently pin an old python-pptx version.
 
 ## Implemented: DOCX (`adapters/docx/adapter.py`)
 

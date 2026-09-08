@@ -72,9 +72,14 @@ match.
 | `engine.py` | `run_lifecycle()` — the inspect→plan→execute→render→verify→fix loop |
 
 Core never imports a format-specific library (no `import pypdf` outside
-`adapters/pdf/`). This is enforced by convention today; a lint rule that
-greps for it is a natural Phase-2 addition once there is a second adapter
-to check the rule against.
+`adapters/pdf/`). This is still enforced by convention only, not by a
+lint rule — CI runs `ruff`/`mypy` (Issue #13) but neither has a
+project-specific rule for this particular invariant configured. Seven
+adapters now exist to check the rule against, so "once there is a second
+adapter" (this sentence's original framing) is long past; a static check
+(`ruff`'s `TID251` banned-api rule, or a small custom AST grep in CI)
+remains a real, not-yet-done addition, not something the current ruff/
+mypy step already covers for free.
 
 ## Adapters (`src/artifact_skill/adapters/`)
 
