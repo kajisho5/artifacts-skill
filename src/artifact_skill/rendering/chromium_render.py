@@ -120,7 +120,14 @@ def render_local_file(
                         route.abort()
 
                 page.route("**/*", _block_external)
-                page.goto(f"file://{source_path.resolve()}", wait_until="load", timeout=nav_timeout_ms)
+                # Path.as_uri() (self-audit finding, FIX_PROMPT P1-3): a
+                # naive f"file://{path}" string doesn't percent-encode the
+                # path — confirmed directly that a filename containing "#"
+                # (a URL fragment separator) made Chromium navigate to a
+                # truncated path and fail with net::ERR_FILE_NOT_FOUND,
+                # not merely a theoretical concern. Also the only correct
+                # way to build a Windows file:// URI ("file:///C:/...").
+                page.goto(source_path.resolve().as_uri(), wait_until="load", timeout=nav_timeout_ms)
                 page.screenshot(path=str(out_path), full_page=full_page, timeout=nav_timeout_ms)
             finally:
                 browser.close()

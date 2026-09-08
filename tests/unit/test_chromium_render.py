@@ -107,6 +107,66 @@ def test_a_custom_limits_render_timeout_reaches_goto_and_screenshot(tmp_path, mo
     assert ("screenshot", {"timeout": 5_000}) in calls
 
 
+# --- the navigation URL itself is a real, percent-encoded file:// URI -----
+# (self-audit finding, FIX_PROMPT P1-3: a naive f"file://{path}" string
+# doesn't percent-encode "#"/"?"/spaces - confirmed directly against a
+# real Chromium launch that a "#" in a filename made navigation fail with
+# net::ERR_FILE_NOT_FOUND, since "#..." was read as a URL fragment and
+# silently dropped from the path. Path.as_uri() is also the only correct
+# way to build a Windows file:// URI ("file:///C:/...").)
+
+
+def test_goto_receives_a_properly_encoded_file_uri_not_a_naive_concatenation(tmp_path, monkeypatch):
+    calls: list[tuple[str, dict]] = []
+    urls: list[str] = []
+
+    class _RecordingPage:
+        def route(self, pattern, handler) -> None:
+            pass
+
+        def goto(self, url, *, wait_until, timeout) -> None:
+            urls.append(url)
+            calls.append(("goto", {"timeout": timeout}))
+
+        def screenshot(self, *, path, full_page, timeout) -> None:
+            calls.append(("screenshot", {"timeout": timeout}))
+            with open(path, "wb") as f:
+                f.write(b"fake png bytes")
+
+    class _RecordingBrowser:
+        def new_page(self, viewport):
+            return _RecordingPage()
+
+        def close(self) -> None:
+            pass
+
+    class _RecordingChromium:
+        def launch(self):
+            return _RecordingBrowser()
+
+    class _RecordingContext:
+        def __init__(self) -> None:
+            self.chromium = _RecordingChromium()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    playwright_sync_api = pytest.importorskip("playwright.sync_api")
+    monkeypatch.setattr(playwright_sync_api, "sync_playwright", lambda: _RecordingContext())
+
+    source = tmp_path / "report#1 (final).html"
+    source.write_text("<html></html>")
+    chromium_render.render_local_file(source, tmp_path / "out.png", capability_id="html.render")
+
+    assert urls == [source.resolve().as_uri()]
+    assert "%23" in urls[0]  # '#' is percent-encoded, not a literal URL-fragment separator
+    assert "#" not in urls[0].split("://", 1)[1]  # no literal '#' anywhere in the path portion
+    assert " " not in urls[0]  # spaces must be percent-encoded, never literal
+
+
 # --- file:// requests outside the document's own directory are blocked ----
 # (Grok review P0-2: previously *any* file:// URL was allowed through
 # unconditionally, letting a hostile document pull in an arbitrary local

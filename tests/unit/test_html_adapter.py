@@ -166,6 +166,25 @@ def test_render_happy_path_when_backend_actually_works(good_html, adapter, tmp_p
     assert result.files[0].exists()
 
 
+def test_render_succeeds_for_a_filename_containing_a_hash_character(tmp_path, adapter):
+    """Self-audit finding, FIX_PROMPT P1-3: the old f"file://{path}" URL
+    construction didn't percent-encode '#', which Chromium reads as a URL
+    fragment separator - a document named e.g. "report#2.html" (not an
+    exotic filename; ticket/issue-number-suffixed report names are
+    realistic) would silently fail navigation with
+    net::ERR_FILE_NOT_FOUND. Confirmed directly against a real Chromium
+    launch before switching to Path.as_uri()."""
+    html_path = tmp_path / "report#2 (draft).html"
+    html_path.write_text("<!doctype html><html><body>real content</body></html>")
+    ref = ArtifactRef.from_path(html_path)
+    if not _probe_html_render_works(adapter, ref, tmp_path):
+        pytest.skip("Playwright/Chromium in this environment cannot render (see adapter docstring)")
+    result = adapter.render(ref, tmp_path / "rendered")
+    assert len(result.files) == 1
+    assert result.files[0].exists()
+    assert result.files[0].stat().st_size > 0
+
+
 def test_render_blocks_external_requests_when_backend_works(tmp_path, adapter):
     """The real behavior this adapter exists to guarantee: navigating to a
     page that references an external resource must not fetch it."""

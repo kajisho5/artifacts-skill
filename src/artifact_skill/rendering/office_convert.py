@@ -63,10 +63,21 @@ def convert_to_pdf(input_path: Path, pdf_out_dir: Path, *, limits: Limits = DEFA
     soffice = require_soffice_binary("render")
     pdf_out_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="artifacts-skill-soffice-profile-") as profile_dir:
+        # Path.as_uri() (self-audit finding, FIX_PROMPT P1-3): naive
+        # f"file://{profile_dir}" string concatenation is wrong on Windows
+        # (needs "file:///C:/..." — an extra slash plus backslash-to-slash
+        # conversion) and, even on POSIX, doesn't percent-encode a path
+        # containing spaces or "#"/"?" (a "#" would be read as a URL
+        # fragment separator, silently truncating the path — confirmed
+        # directly against a real Chromium/file:// navigation while
+        # auditing the sibling case in chromium_render.py below).
+        # tempfile.TemporaryDirectory() always yields an absolute path, so
+        # .as_uri() alone (no .resolve() needed) is correct here.
+        profile_uri = Path(profile_dir).as_uri()
         result = run_subprocess(
             [
                 soffice, "--headless", "--norestore", "--nolockcheck", "--nodefault",
-                f"-env:UserInstallation=file://{profile_dir}",
+                f"-env:UserInstallation={profile_uri}",
                 "--convert-to", "pdf", "--outdir", str(pdf_out_dir), str(input_path),
             ],
             allowlist=SOFFICE_ALLOWLIST,
