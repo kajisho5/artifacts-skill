@@ -12,7 +12,9 @@
     "pyproject.toml",
     "SKILL.md",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "!**/__pycache__/**",
+    "!**/*.pyc"
   ],
   "scripts": {
     "postinstall": "node bin/postinstall.js"
