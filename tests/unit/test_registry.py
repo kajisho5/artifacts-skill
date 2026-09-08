@@ -46,3 +46,18 @@ def test_register_for_types_maps_one_adapter_to_several_types():
 
     for t in (ArtifactType.IMAGE_PNG, ArtifactType.IMAGE_JPEG, ArtifactType.IMAGE_WEBP):
         assert registry.get_adapter(t).id == ImageAdapter.id
+
+
+def test_get_adapter_raises_a_specific_error_for_a_cfb_ole2_container():
+    """Issue #27: a password-protected Office file (or a legacy pre-2007
+    binary Office file) is a CFB/OLE2 container, which the type detector
+    now recognizes as its own distinct type rather than lumping it in
+    with a genuinely unrecognized file. This must get a specific,
+    actionable error — not the generic ARTIFACT_TYPE_UNSUPPORTED message,
+    which would tell a user nothing about *why* their real .pptx file
+    (just password-protected) isn't opening."""
+    with pytest.raises(ArtifactCapabilityError) as exc_info:
+        registry.get_adapter(ArtifactType.OLE_COMPOUND_FILE)
+    assert exc_info.value.code == "ARTIFACT_OLE_COMPOUND_FILE_UNSUPPORTED"
+    assert exc_info.value.code != "ARTIFACT_TYPE_UNSUPPORTED"
+    assert "password" in exc_info.value.remediation.lower()

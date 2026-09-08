@@ -88,3 +88,31 @@ def test_an_unterminated_leading_comment_is_left_as_unknown_not_misdetected(tmp_
     path = tmp_path / "broken.html"
     path.write_text("<!-- this comment never closes <!doctype html><html></html>")
     assert ArtifactRef.from_path(path).type == ArtifactType.UNKNOWN
+
+
+# --- CFB/OLE2 container detection (Issue #27) ------------------------------
+#
+# A password-protected Office 2007+ file (.pptx/.docx/.xlsx saved with
+# encryption) isn't a zip at all - Office wraps the whole encrypted package
+# in a Compound File Binary (CFB, aka "OLE2") container, the same container
+# format legacy pre-2007 binary Office files (.doc/.ppt/.xls) use for their
+# own, unrelated reasons. The 8-byte signature tested here
+# (D0 CF 11 E0 A1 B1 1A E1) is fixed by the MS-CFB spec - every real file in
+# either category starts with exactly these bytes, not something specific
+# to any one file this project could have generated itself.
+
+_CFB_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+
+def test_cfb_ole2_container_is_detected_as_its_own_type_not_unknown(tmp_path):
+    path = tmp_path / "password_protected.pptx"
+    path.write_bytes(_CFB_MAGIC + b"\x00" * 512)  # real CFB files carry more header after the signature
+    assert ArtifactRef.from_path(path).type == ArtifactType.OLE_COMPOUND_FILE
+
+
+def test_cfb_detection_applies_regardless_of_file_extension(tmp_path):
+    """Spec #7 applies here too - a CFB file mislabeled .zip must still be
+    detected by content, not by its (wrong) extension."""
+    path = tmp_path / "mislabeled.zip"
+    path.write_bytes(_CFB_MAGIC + b"\x00" * 512)
+    assert ArtifactRef.from_path(path).type == ArtifactType.OLE_COMPOUND_FILE

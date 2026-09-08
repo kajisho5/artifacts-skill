@@ -17,6 +17,20 @@ from typing import Any
 
 _CHUNK = 1024 * 1024
 
+# The Compound File Binary (CFB, aka "OLE2") container signature (fixed by
+# the MS-CFB spec, MS-CFB §2.2 "Compound File Header" - the same 8 bytes for
+# every CFB file ever written, not something specific to any one producer).
+# A password-protected OOXML file (.pptx/.docx/.xlsx saved with encryption)
+# is NOT a zip: Office wraps the whole encrypted zip package inside a CFB
+# envelope (as an "EncryptedPackage" stream), so this project's zip-magic
+# check never matches it at all. Legacy pre-2007 binary Office files
+# (.doc/.ppt/.xls) use the same CFB container for their own, unrelated
+# reasons. This project has no CFB/OLE2 parser (Issue #27) and isn't
+# adding one just to say "this is encrypted" - recognizing the fixed
+# signature is enough to give a specific, actionable error instead of a
+# generic "unknown type" one.
+_CFB_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
 
 class ArtifactType(str, enum.Enum):
     PDF = "pdf"
@@ -29,6 +43,7 @@ class ArtifactType(str, enum.Enum):
     IMAGE_JPEG = "image/jpeg"
     IMAGE_WEBP = "image/webp"
     ZIP = "zip"
+    OLE_COMPOUND_FILE = "ole_compound_file"
     UNKNOWN = "unknown"
 
 
@@ -98,6 +113,8 @@ def detect_type(path: Path) -> ArtifactType:
 
     if head.startswith(b"%PDF-"):
         return ArtifactType.PDF
+    if head.startswith(_CFB_MAGIC):
+        return ArtifactType.OLE_COMPOUND_FILE
     if head.startswith((b"PK\x03\x04", b"PK\x05\x06")):
         return _sniff_zip_ooxml(path)
     if head.startswith(b"\x89PNG\r\n\x1a\n"):

@@ -199,6 +199,21 @@ def test_unrecognized_content_gives_clear_type_unsupported_error(tmp_path):
     proc = run_cli(["inspect", str(unknown_like), "--json"], cwd=tmp_path)
     data = json.loads(proc.stdout)
     assert data["error"]["code"] == "ARTIFACT_TYPE_UNSUPPORTED"
+
+
+def test_password_protected_looking_ooxml_gives_a_specific_actionable_error(tmp_path):
+    """Issue #27: a .pptx/.docx/.xlsx saved with a password isn't a zip at
+    all - Office wraps it in a CFB/OLE2 container instead. That must not
+    collapse into the same generic "unrecognized file" error as content
+    matching no known format signature at all (the case above) - the CLI
+    should say specifically what's going on and what to do about it."""
+    cfb_magic = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+    looks_encrypted = tmp_path / "protected.pptx"
+    looks_encrypted.write_bytes(cfb_magic + b"\x00" * 512)
+    proc = run_cli(["inspect", str(looks_encrypted), "--json"], cwd=tmp_path)
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_OLE_COMPOUND_FILE_UNSUPPORTED"
+    assert "password" in data["error"]["remediation"].lower()
     assert proc.returncode == 3
 
 
