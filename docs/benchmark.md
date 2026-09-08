@@ -75,7 +75,7 @@ table can't quietly go stale as fixtures are added or removed.
    checklist).
 2. Run the new file through the adapter by hand first — `python3 -c` a
    quick `verify_structural()` call, or use
-   `artifact-skill verify <path> --json` — and read back what actually
+   `artifacts-skill verify <path> --json` — and read back what actually
    happens. Do not guess the expected status from reading the adapter's
    source; this benchmark's entire premise is that expected outcomes are
    established empirically, not asserted on faith.

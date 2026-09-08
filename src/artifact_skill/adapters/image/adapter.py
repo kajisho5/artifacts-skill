@@ -51,7 +51,7 @@ def _require_pillow():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="Pillow is not installed; image inspect/verify/operations are unavailable.",
-            remediation="Install with: pip install 'artifact-skill[pdf]' (or `pip install Pillow`).",
+            remediation="Install with: pip install 'artifacts-skill[pdf]' (or `pip install Pillow`).",
             evidence={"capability_id": "image.structural"},
         )
     from PIL import Image

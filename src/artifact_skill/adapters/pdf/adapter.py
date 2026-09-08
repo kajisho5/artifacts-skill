@@ -49,7 +49,7 @@ def _require_pypdf():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="pypdf is not installed; PDF structural read/write is unavailable.",
-            remediation="Install with: pip install 'artifact-skill[pdf]' (or `pip install pypdf`).",
+            remediation="Install with: pip install 'artifacts-skill[pdf]' (or `pip install pypdf`).",
             evidence={"capability_id": "pdf.structural"},
         )
     import pypdf
@@ -62,7 +62,7 @@ def _require_pypdfium2():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="pypdfium2 is not installed; PDF rendering is unavailable.",
-            remediation="Install with: pip install 'artifact-skill[pdf]' (or `pip install pypdfium2`).",
+            remediation="Install with: pip install 'artifacts-skill[pdf]' (or `pip install pypdfium2`).",
             evidence={"capability_id": "pdf.render"},
         )
     import pypdfium2

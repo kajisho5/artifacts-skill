@@ -127,7 +127,7 @@ def resolve_policy(preset_name: str | None, explicit_policy: dict[str, Any] | No
     if bad:
         raise KeyError(
             f"Unknown policy key(s): {bad}. No adapter recognizes {'this key' if len(bad) == 1 else 'these keys'} "
-            "— check for a typo. Run `artifact-skill contract --json` or see docs/verification.md for valid "
+            "— check for a typo. Run `artifacts-skill contract --json` or see docs/verification.md for valid "
             "policy keys per format."
         )
     return base

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Standalone consumer of `artifact-skill contract --json`.
+"""Standalone consumer of `artifacts-skill contract --json`.
 
 This is the dogfood proof for Issue #10 / spec #40 ("ecosystem
 integration"): can an external, unfamiliar orchestrator — the kind of
@@ -8,7 +8,7 @@ actually drive this tool by reading nothing but the machine-readable
 contract, without importing this package or reading any of its source?
 
 Deliberately imports NOTHING from `artifact_skill` and uses only the
-Python standard library. It shells out to the installed `artifact-skill`
+Python standard library. It shells out to the installed `artifacts-skill`
 console script exactly the way an unrelated external process would.
 
 It also doesn't hardcode the tool name "inspect" — it *discovers* a
@@ -33,7 +33,7 @@ import sys
 
 
 def _run_cli(*args: str) -> dict:
-    binary = shutil.which("artifact-skill")
+    binary = shutil.which("artifacts-skill")
     cmd = [binary, *args] if binary else [sys.executable, "-m", "artifact_skill.cli.main", *args]
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)  # noqa: S603 - cmd[0] resolved via shutil.which()
     if not proc.stdout.strip():

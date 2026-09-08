@@ -47,8 +47,8 @@ from artifact_skill.policies import resolve_policy
 from artifact_skill.rendering.contact_sheet import build_before_after, build_contact_sheet
 from artifact_skill.security.subprocess_exec import treat_sigterm_as_interrupt
 
-SERVER_NAME = "artifact-skill"
-CAPABILITY_PREFIX = "artifact-skill"
+SERVER_NAME = "artifacts-skill"
+CAPABILITY_PREFIX = "artifacts-skill"
 PROTOCOL_VERSION = "2024-11-05"
 
 _VERSION_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -146,7 +146,7 @@ def call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             code="ARTIFACT_MCP_TOOL_INTERNAL_ERROR",
             category=ErrorCategory.INTERNAL,
             message=f"Tool '{name}' raised an unexpected {type(exc).__name__}: {exc}",
-            remediation="This is likely a bug in artifact-skill. Please report it with the input that triggered it.",
+            remediation="This is likely a bug in artifacts-skill. Please report it with the input that triggered it.",
         )
         return _text_result({"error": internal.to_dict()}, is_error=True)
 

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/kajisho5/artifacts-skill/schemas/artifact-contract-v1.schema.json",
   "title": "Artifact Skill — Contract (artifact-contract/v1)",
-  "description": "The document `artifact-skill contract --json` emits (core/contract.py::build_contract()). Generated from the code that runs, not maintained by hand beside it — see docs/contract.md. Validated in tests/schemas/test_schema_files.py against a freshly-generated real contract document on every CI run, so this file cannot silently drift from what the tool actually emits.",
+  "description": "The document `artifacts-skill contract --json` emits (core/contract.py::build_contract()). Generated from the code that runs, not maintained by hand beside it — see docs/contract.md. Validated in tests/schemas/test_schema_files.py against a freshly-generated real contract document on every CI run, so this file cannot silently drift from what the tool actually emits.",
   "type": "object",
   "properties": {
     "schema": { "type": "string", "enum": ["artifact-contract/v1"] },

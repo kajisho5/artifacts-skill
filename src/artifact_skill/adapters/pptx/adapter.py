@@ -49,7 +49,7 @@ def _require_pptx():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="python-pptx is not installed; PPTX structural read/write is unavailable.",
-            remediation="Install with: pip install 'artifact-skill[pptx]' (or `pip install python-pptx`).",
+            remediation="Install with: pip install 'artifacts-skill[pptx]' (or `pip install python-pptx`).",
             evidence={"capability_id": "pptx.structural"},
         )
     import pptx
@@ -316,7 +316,7 @@ class PptxAdapter(ArtifactAdapter):
     # ---- render ----------------------------------------------------
 
     def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
-        with tempfile.TemporaryDirectory(prefix="artifact-skill-pptx-render-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="artifacts-skill-pptx-render-") as tmp:
             pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf", limits=limits)
             # render_pdf_pages needs the intermediate PDF to survive past
             # this `with` block's cleanup, so render directly from it now

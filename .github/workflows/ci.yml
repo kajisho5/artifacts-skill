@@ -49,8 +49,8 @@ jobs:
       - run: ruff check .
       - run: mypy
       - run: python -m pytest tests/ -q
-      - run: artifact-skill doctor --json
-      - run: artifact-skill contract --json
+      - run: artifacts-skill doctor --json
+      - run: artifacts-skill contract --json
       - run: python3 tests/benchmark/run_benchmark.py
       - run: python3 examples/standalone_contract_consumer.py tests/fixtures/pdf/good_2page.pdf
 
@@ -76,12 +76,12 @@ jobs:
           python -m venv /tmp/wheel-venv
           /tmp/wheel-venv/bin/pip install dist/*.whl
           /tmp/wheel-venv/bin/python -c "import artifact_skill; print(artifact_skill.__file__)"
-          /tmp/wheel-venv/bin/artifact-skill --version
-          /tmp/wheel-venv/bin/artifact-skill doctor --json
+          /tmp/wheel-venv/bin/artifacts-skill --version
+          /tmp/wheel-venv/bin/artifacts-skill doctor --json
 
       - name: Verify the npm package contents against package.json's files list
         run: |
-          test -x bin/artifact-skill.js
+          test -x bin/artifacts-skill.js
           npm pack --dry-run --json > /tmp/npm-pack.json
           python3 - <<'EOF'
           import json
@@ -104,5 +104,5 @@ jobs:
               matches = [p for p in packed_paths if p == entry or p.startswith(entry + "/")]
               assert matches, f"'{entry}' (from package.json's files list) has nothing packed under it: {sorted(packed_paths)}"
 
-          assert "bin/artifact-skill.js" in packed_paths, "bin/artifact-skill.js missing from npm package"
+          assert "bin/artifacts-skill.js" in packed_paths, "bin/artifacts-skill.js missing from npm package"
           EOF

@@ -65,7 +65,7 @@ class CapabilityReport:
             raise ArtifactCapabilityError(
                 code="ARTIFACT_CAPABILITY_MISSING",
                 message=f"Required capability '{capability_id}' is {status}: {detail}",
-                remediation="Run `artifact-skill doctor --json` to see how to satisfy this capability.",
+                remediation="Run `artifacts-skill doctor --json` to see how to satisfy this capability.",
                 evidence={"capability_id": capability_id, "status": status},
             )
         return cap

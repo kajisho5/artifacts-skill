@@ -35,7 +35,7 @@ def require_playwright(capability_id: str) -> None:
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="playwright is not installed; cannot render to an image.",
-            remediation="Install with: pip install 'artifact-skill[html]' (or `pip install playwright` "
+            remediation="Install with: pip install 'artifacts-skill[html]' (or `pip install playwright` "
             "then `playwright install chromium`).",
             evidence={"capability_id": capability_id},
         )

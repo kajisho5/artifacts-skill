@@ -2,7 +2,7 @@
 CI run rather than being a one-off manual check: runs
 examples/standalone_contract_consumer.py — a script that imports nothing
 from `artifact_skill` and discovers what to call purely from
-`artifact-skill contract --json` — against a real fixture, as a real
+`artifacts-skill contract --json` — against a real fixture, as a real
 subprocess, exactly as an external, unfamiliar orchestrator would.
 """
 

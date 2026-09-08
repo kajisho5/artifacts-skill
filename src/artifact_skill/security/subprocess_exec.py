@@ -128,14 +128,14 @@ def run(
         raise ArtifactExecutionError(
             code="ARTIFACT_EXECUTABLE_NOT_FOUND",
             message=f"Executable '{argv[0]}' was not found on PATH.",
-            remediation="Run `artifact-skill doctor` to see which backends are installed.",
+            remediation="Run `artifacts-skill doctor` to see which backends are installed.",
             evidence={"executable": argv[0]},
         )
 
     effective_timeout = timeout if timeout is not None else limits.subprocess_timeout_seconds
     argv = [resolved, *argv[1:]]
 
-    with tempfile.TemporaryDirectory(prefix="artifact-skill-exec-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="artifacts-skill-exec-") as tmp:
         run_cwd = str(cwd) if cwd is not None else tmp
         try:
             # argv[0] was already resolved above and checked against the caller's

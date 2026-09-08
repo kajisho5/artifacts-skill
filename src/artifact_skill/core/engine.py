@@ -71,7 +71,7 @@ def _validate_operation_args(adapter: ArtifactAdapter, operation: str, args: dic
             code="ARTIFACT_INVALID_ARGS",
             message=f"Arguments for '{adapter.id}.{operation}' do not match its declared schema: "
             f"{'; '.join(errors)}",
-            remediation="Check `artifact-skill contract --json` for the expected shape of --args.",
+            remediation="Check `artifacts-skill contract --json` for the expected shape of --args.",
             evidence={"operation": f"{adapter.id}.{operation}", "errors": errors, "args": args},
         )
 
@@ -96,7 +96,7 @@ def run_lifecycle(
             code="ARTIFACT_INVALID_ARGS",
             message=f"Unknown policy key(s): {bad_keys}. No adapter recognizes "
             f"{'this key' if len(bad_keys) == 1 else 'these keys'} — check for a typo.",
-            remediation="Run `artifact-skill contract --json` or see docs/verification.md for valid policy keys.",
+            remediation="Run `artifacts-skill contract --json` or see docs/verification.md for valid policy keys.",
             evidence={"unknown_keys": bad_keys},
         )
     # None means "use the real default", not "run the fix loop once and stop" -
@@ -144,7 +144,7 @@ def run_lifecycle(
             raise ArtifactCapabilityError(
                 code="ARTIFACT_CAPABILITY_MISSING",
                 message=f"Operation '{operation}' requires capability '{cap_id}' which is {cap.status.value}.",
-                remediation="Run `artifact-skill doctor --json` for install guidance.",
+                remediation="Run `artifacts-skill doctor --json` for install guidance.",
                 evidence={"capability_id": cap_id, "status": cap.status.value},
             )
 

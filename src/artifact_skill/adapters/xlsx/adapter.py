@@ -65,7 +65,7 @@ def _require_openpyxl():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="openpyxl is not installed; XLSX structural read/write is unavailable.",
-            remediation="Install with: pip install 'artifact-skill[xlsx]' (or `pip install openpyxl`).",
+            remediation="Install with: pip install 'artifacts-skill[xlsx]' (or `pip install openpyxl`).",
             evidence={"capability_id": "xlsx.structural"},
         )
     import openpyxl
@@ -323,7 +323,7 @@ class XlsxAdapter(ArtifactAdapter):
     # ---- render ----------------------------------------------------
 
     def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
-        with tempfile.TemporaryDirectory(prefix="artifact-skill-xlsx-render-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="artifacts-skill-xlsx-render-") as tmp:
             pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf", limits=limits)
             return render_pdf_pages(pdf_path, out_dir)
 

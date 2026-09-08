@@ -36,7 +36,7 @@ def require_soffice_binary(capability_id: str) -> str:
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="No soffice/libreoffice binary found on PATH; cannot render to images.",
-            remediation="Install LibreOffice and re-run `artifact-skill doctor`.",
+            remediation="Install LibreOffice and re-run `artifacts-skill doctor`.",
             evidence={"capability_id": capability_id},
         )
     return binary
@@ -62,7 +62,7 @@ def convert_to_pdf(input_path: Path, pdf_out_dir: Path, *, limits: Limits = DEFA
     """
     soffice = require_soffice_binary("render")
     pdf_out_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="artifact-skill-soffice-profile-") as profile_dir:
+    with tempfile.TemporaryDirectory(prefix="artifacts-skill-soffice-profile-") as profile_dir:
         result = run_subprocess(
             [
                 soffice, "--headless", "--norestore", "--nolockcheck", "--nodefault",

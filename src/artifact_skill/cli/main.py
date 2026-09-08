@@ -1,4 +1,4 @@
-"""`artifact-skill` CLI — a thin, honest layer over core/engine.py.
+"""`artifacts-skill` CLI — a thin, honest layer over core/engine.py.
 
 Every subcommand here corresponds 1:1 to a `ToolContract` in
 `core/contract.py`. Two mechanical checks in
@@ -65,8 +65,8 @@ def _exit_for_status(status: CheckStatus) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="artifact-skill", description="Artifact production + verification engine.")
-    parser.add_argument("--version", action="version", version=f"artifact-skill {__version__}")
+    parser = argparse.ArgumentParser(prog="artifacts-skill", description="Artifact production + verification engine.")
+    parser.add_argument("--version", action="version", version=f"artifacts-skill {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     def common(p: argparse.ArgumentParser) -> None:
@@ -218,7 +218,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     if args.json:
         _emit(result, True)
         return EXIT_OK
-    lines = [f"artifact-skill doctor — tool_version {__version__}", ""]
+    lines = [f"artifacts-skill doctor — tool_version {__version__}", ""]
     for cap_id, cap in sorted(report.capabilities.items()):
         lines.append(f"  [{cap.status.value.upper():13}] {cap_id:28} {cap.detail}")
     print("\n".join(lines))

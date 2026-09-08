@@ -57,7 +57,7 @@ def _require_docx():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="python-docx is not installed; DOCX structural read/write is unavailable.",
-            remediation="Install with: pip install 'artifact-skill[docx]' (or `pip install python-docx`).",
+            remediation="Install with: pip install 'artifacts-skill[docx]' (or `pip install python-docx`).",
             evidence={"capability_id": "docx.structural"},
         )
     import docx
@@ -281,7 +281,7 @@ class DocxAdapter(ArtifactAdapter):
     # ---- render ----------------------------------------------------
 
     def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
-        with tempfile.TemporaryDirectory(prefix="artifact-skill-docx-render-") as tmp:
+        with tempfile.TemporaryDirectory(prefix="artifacts-skill-docx-render-") as tmp:
             pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf", limits=limits)
             return render_pdf_pages(pdf_path, out_dir)
 

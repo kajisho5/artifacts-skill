@@ -1,4 +1,4 @@
-"""Full-process integration tests: invokes the real `artifact-skill`
+"""Full-process integration tests: invokes the real `artifacts-skill`
 console script (installed by `pip install -e .`) via subprocess, exactly
 as an agent or a human would."""
 
@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-CLI = shutil.which("artifact-skill")
+CLI = shutil.which("artifacts-skill")
 
 
 def run_cli(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
@@ -526,7 +526,7 @@ def test_html_has_no_mutating_operations(good_html, tmp_path):
 
 def test_html_receipt_without_operation_gives_a_real_verify_only_receipt(good_html, tmp_path):
     """Issue #18: HTML has zero mutating operations, so before this feature
-    `artifact-skill receipt page.html` had no way to succeed at all - an
+    `artifacts-skill receipt page.html` had no way to succeed at all - an
     agent had to hand-assemble inspect/render/verify calls instead of using
     this project's own flagship 'get a Production Receipt' command."""
     proc = run_cli(["receipt", str(good_html), "--json"], cwd=tmp_path)
