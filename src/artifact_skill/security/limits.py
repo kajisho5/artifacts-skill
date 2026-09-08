@@ -21,7 +21,15 @@ class Limits:
     max_zip_compression_ratio: int = 200
     max_pages: int = 2000
     subprocess_timeout_seconds: int = 120
-    render_timeout_seconds: int = 180
+    # Governs rendering/chromium_render.py's Chromium navigation + screenshot
+    # calls (Issue #28 — this field used to be declared here but never
+    # actually read anywhere; Chromium had its own separate, disconnected
+    # hardcoded 30s timeout instead). 30s, not subprocess_timeout_seconds'
+    # 120s, because it's the value that was already empirically validated
+    # against a real hang case while building the SVG adapter (see
+    # chromium_render.py's module docstring) — wiring the field up for real
+    # shouldn't silently change existing runtime behavior along with it.
+    render_timeout_seconds: int = 30
     max_fix_iterations: int = 3
 
 

@@ -45,9 +45,10 @@ from artifact_skill.core.schema_validate import validate_against_schema
 from artifact_skill.doctor.detect import detect_environment
 from artifact_skill.policies import resolve_policy
 from artifact_skill.rendering.contact_sheet import build_before_after, build_contact_sheet
+from artifact_skill.security.subprocess_exec import treat_sigterm_as_interrupt
 
-SERVER_NAME = "artifact-skill"
-CAPABILITY_PREFIX = "artifact-skill"
+SERVER_NAME = "artifacts-skill"
+CAPABILITY_PREFIX = "artifacts-skill"
 PROTOCOL_VERSION = "2024-11-05"
 
 _VERSION_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -140,6 +141,14 @@ def call_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         return _text_result(result)
     except ArtifactError as exc:
         return _text_result({"error": exc.to_dict()}, is_error=True)
+    except Exception as exc:  # noqa: BLE001 - last-resort boundary: never let a tool call kill the stdio session
+        internal = ArtifactError(
+            code="ARTIFACT_MCP_TOOL_INTERNAL_ERROR",
+            category=ErrorCategory.INTERNAL,
+            message=f"Tool '{name}' raised an unexpected {type(exc).__name__}: {exc}",
+            remediation="This is likely a bug in artifacts-skill. Please report it with the input that triggered it.",
+        )
+        return _text_result({"error": internal.to_dict()}, is_error=True)
 
 
 def _h_doctor(_args: dict[str, Any]) -> dict[str, Any]:
@@ -282,6 +291,7 @@ def _handle_request(msg: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def serve(stdin=None, stdout=None) -> None:
+    treat_sigterm_as_interrupt()
     stdin = stdin or sys.stdin
     stdout = stdout or sys.stdout
     for line in stdin:
@@ -291,6 +301,8 @@ def serve(stdin=None, stdout=None) -> None:
         try:
             msg = json.loads(line)
         except json.JSONDecodeError:
+            stdout.write(json.dumps({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}}) + "\n")
+            stdout.flush()
             continue
         response = _handle_request(msg)
         if response is not None:

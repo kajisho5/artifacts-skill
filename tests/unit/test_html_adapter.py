@@ -210,3 +210,11 @@ def test_render_blocks_external_requests_when_backend_works(tmp_path, adapter):
     # ...but aborted, not fulfilled — verified functionally by
     # test_render_happy_path producing a broken-image render rather than
     # this test needing to inspect pixel data.
+
+
+def test_limitations_names_the_real_known_caveats(adapter):
+    """Issue #29: limitations() content had zero test coverage anywhere."""
+    text = " ".join(adapter.limitations())
+    assert "No mutating operations" in text
+    assert "JavaScript-driven content" in text
+    assert "External resources are never fetched" in text

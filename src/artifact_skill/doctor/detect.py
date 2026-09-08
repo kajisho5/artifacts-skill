@@ -1,4 +1,4 @@
-"""Capability / environment detection (`artifact-skill doctor`).
+"""Capability / environment detection (`artifacts-skill doctor`).
 
 Rule (spec #11): detection failure is never silently collapsed into MISSING.
 A probe that could not run at all (e.g. `subprocess` itself unavailable in

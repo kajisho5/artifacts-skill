@@ -1,13 +1,13 @@
 # Contract
 
-`artifact-skill contract --json` is the single source of truth for every
+`artifacts-skill contract --json` is the single source of truth for every
 tool this project exposes. `src/artifact_skill/core/contract.py` defines it
 as a plain Python list of `ToolContract` dataclasses (`TOOLS`); `cli/main.py`
 and `mcp/server.py` both read from it instead of hand-declaring schemas, and
 `tests/contract/test_cli_mcp_consistency.py` asserts the CLI subcommand set,
 the MCP `tools/list` set, and `TOOLS` never disagree.
 
-Run `artifact-skill contract --json` for the live, exact document; what
+Run `artifacts-skill contract --json` for the live, exact document; what
 follows is a guide to reading it, not a copy that can drift out of date.
 
 **Published JSON Schema** (Issue #16): [`schemas/artifact-contract-v1.schema.json`](../schemas/artifact-contract-v1.schema.json)
@@ -23,10 +23,10 @@ actually emits.
 ```json
 {
   "schema": "artifact-contract/v1",
-  "tool_name": "artifact-skill",
+  "tool_name": "artifacts-skill",
   "tool_version": "0.1.0",
   "description": "...",
-  "capability_id_prefix": "artifact-skill",
+  "capability_id_prefix": "artifacts-skill",
   "tools": [ /* ToolContract[] */ ],
   "exit_codes": { "ok": 0, "fail": 1, "input": 2, "capability": 3, "security": 4, "execution": 1, "verification": 1, "internal": 5 },
   "network_policy": "off_by_default",
@@ -102,8 +102,8 @@ contract entry without a second place to remember to update it.
 
 Per spec §40, the longer-term capability-id convention for cross-tool
 addressing (e.g. from an external orchestrator) is
-`artifact-skill.<tool>` for whole tools (see `mcp/server.py`'s
-`_mcp_tool_name`) and `artifact-skill.<format>.<capability>` for finer
+`artifacts-skill.<tool>` for whole tools (see `mcp/server.py`'s
+`_mcp_tool_name`) and `artifacts-skill.<format>.<capability>` for finer
 capability probing — the latter is not yet exposed as a separate lookup
 API beyond the `doctor` report, since nothing outside this repo consumes it
 yet; `docs/roadmap.md` tracks this under ecosystem integration.

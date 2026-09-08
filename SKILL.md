@@ -1,15 +1,15 @@
 ---
-name: artifact-skill
+name: artifacts-skill
 description: Local-first execution and verification engine for real-world artifacts (PDF, PPTX, DOCX, XLSX, PNG/JPEG/WebP, HTML, SVG). Use it whenever you create or modify a document-like file and need to prove it is actually correct before calling the job done — inspect what a file really is, plan a mutation before touching it, execute it without overwriting the original, render it to images, run structural checks, and get a machine-readable Production Receipt. Trigger on requests like "make sure this PDF is correct", "verify this document before I send it", "did the page count come out right", "check this file isn't corrupted", or any time you are about to say a generated artifact is "done" without having checked it.
 license: MIT
-compatibility: "Requires Python 3.10+. Install the `all` extra for every adapter, or a per-format extra (`pdf`, `pptx`, `docx`, `xlsx`, `image`, `html`, `svg`) for just what you need. PPTX/DOCX/XLSX rendering additionally needs a `soffice`/`libreoffice` binary on PATH; HTML/SVG rendering needs `playwright install chromium` after installing the `html`/`svg` extra. Run `artifact-skill doctor` to see real availability rather than assuming."
+compatibility: "Requires Python 3.10+. Install the `all` extra for every adapter, or a per-format extra (`pdf`, `pptx`, `docx`, `xlsx`, `image`, `html`, `svg`) for just what you need. PPTX/DOCX/XLSX rendering additionally needs a `soffice`/`libreoffice` binary on PATH; HTML/SVG rendering needs `playwright install chromium` after installing the `html`/`svg` extra. Run `artifacts-skill doctor` to see real availability rather than assuming."
 ---
 
 # Artifact Skill
 
 You (the agent) generate PDFs, slide decks, spreadsheets, and other real
 files. Generating a file is not the same as producing a correct one. This
-skill gives you a CLI (`artifact-skill`) that inspects, mutates safely,
+skill gives you a CLI (`artifacts-skill`) that inspects, mutates safely,
 renders to images, and verifies — and it never just tells you "done"
 without evidence.
 
@@ -139,11 +139,11 @@ way to get a Production Receipt at all for a format with zero mutating
 operations (HTML, SVG):
 
 ```bash
-artifact-skill doctor --json                                    # what's available on this machine
-artifact-skill receipt report.pdf --policy-preset print-a4       # a real submission gate, not the empty default
-artifact-skill receipt deck.pptx --policy-preset slides-16x9
-artifact-skill receipt page.html --policy-preset web-no-external # HTML has no operations — this still works
-artifact-skill look report.pdf --out-dir reports/rendered        # then actually look at the rendered evidence
+artifacts-skill doctor --json                                    # what's available on this machine
+artifacts-skill receipt report.pdf --policy-preset print-a4       # a real submission gate, not the empty default
+artifacts-skill receipt deck.pptx --policy-preset slides-16x9
+artifacts-skill receipt page.html --policy-preset web-no-external # HTML has no operations — this still works
+artifacts-skill look report.pdf --out-dir reports/rendered        # then actually look at the rendered evidence
 ```
 
 `--output` is invalid without `--operation` (nothing is written without a
@@ -155,15 +155,15 @@ etc.), pass `--operation` — `receipt` still runs the whole lifecycle
 (including the fix loop) in one call and still accepts `--policy-preset`:
 
 ```bash
-artifact-skill inspect report.pdf --json
-artifact-skill plan report.pdf --operation metadata_set --args '{"title":"Q3 Report"}'
-artifact-skill receipt report.pdf --operation metadata_set --args '{"title":"Q3 Report"}' \
+artifacts-skill inspect report.pdf --json
+artifacts-skill plan report.pdf --operation metadata_set --args '{"title":"Q3 Report"}'
+artifacts-skill receipt report.pdf --operation metadata_set --args '{"title":"Q3 Report"}' \
   --policy-preset print-a4
-artifact-skill render report_artifact_metadata_set.pdf --out-dir reports/rendered
-artifact-skill look report.pdf --compare-to report_artifact_metadata_set.pdf   # before/after contact sheet
+artifacts-skill render report_artifact_metadata_set.pdf --out-dir reports/rendered
+artifacts-skill look report.pdf --compare-to report_artifact_metadata_set.pdf   # before/after contact sheet
 
 # Same lifecycle works on PPTX — same commands, same verbs:
-artifact-skill receipt deck.pptx --operation metadata_set --args '{"title":"Q3 Deck"}' \
+artifacts-skill receipt deck.pptx --operation metadata_set --args '{"title":"Q3 Deck"}' \
   --policy-preset slides-16x9 --policy '{"require_slide_count":10}'
 ```
 
@@ -173,7 +173,7 @@ Supported PDF operations today: `metadata_set` (title/author/subject/keywords),
 and `strip_placeholders`. Supported DOCX and XLSX operations today:
 `metadata_set` (title/author/subject/keywords). Supported image (PNG/JPEG/
 WebP) operations today: `resize` and `convert_format`. Run
-`artifact-skill contract --json` for the exact, current, machine-readable
+`artifacts-skill contract --json` for the exact, current, machine-readable
 schema of every command — treat it as the source of truth over this prose
 if they ever disagree.
 
@@ -193,7 +193,7 @@ if they ever disagree.
 
 ## When capabilities are missing
 
-Run `artifact-skill doctor --json` first if a command fails with
+Run `artifacts-skill doctor --json` first if a command fails with
 `ARTIFACT_CAPABILITY_MISSING`. It tells you exactly what's
 AVAILABLE/MISSING/UNKNOWN/NOT_REQUIRED/NOT_IMPLEMENTED and how to fix it
 (usually `pip install -e ".[all]"` from the package root — a per-format
@@ -202,7 +202,7 @@ at a workaround — the remediation field in the error is authoritative.
 
 ## MCP
 
-The same nine commands are exposed as MCP tools (`artifact-skill.inspect`,
-`artifact-skill.plan`, ...) via `python -m artifact_skill.mcp.server`
+The same nine commands are exposed as MCP tools (`artifacts-skill.inspect`,
+`artifacts-skill.plan`, ...) via `python -m artifact_skill.mcp.server`
 (stdio). Tool schemas there are generated from the same contract as this
 CLI — see `docs/contract.md`.

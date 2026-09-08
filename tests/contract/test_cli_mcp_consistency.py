@@ -65,7 +65,7 @@ def test_contract_schema_and_exit_codes_present():
 # be a schema property, in both directions — see core/contract.py's module
 # docstring for why this test exists (unlike MCP's inputSchema, generated
 # straight from TOOLS, cli/main.py's flags are hand-declared).
-_CLI_ONLY_FLAGS = {"json", "verbose", "progress", "dry_run", "evidence_dir", "help"}
+_CLI_ONLY_FLAGS = {"json", "dry_run", "evidence_dir", "help"}
 
 
 def test_cli_flags_match_input_schema_properties_in_both_directions():

@@ -1,4 +1,4 @@
-"""`artifact-skill` CLI — a thin, honest layer over core/engine.py.
+"""`artifacts-skill` CLI — a thin, honest layer over core/engine.py.
 
 Every subcommand here corresponds 1:1 to a `ToolContract` in
 `core/contract.py`. Two mechanical checks in
@@ -35,6 +35,7 @@ from artifact_skill.doctor.detect import detect_environment
 from artifact_skill.policies import PRESETS as _PRESET_NAMES
 from artifact_skill.policies import resolve_policy
 from artifact_skill.rendering.contact_sheet import build_before_after, build_contact_sheet
+from artifact_skill.security.subprocess_exec import treat_sigterm_as_interrupt
 
 
 def _eprint(*a: Any, **kw: Any) -> None:
@@ -64,14 +65,12 @@ def _exit_for_status(status: CheckStatus) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="artifact-skill", description="Artifact production + verification engine.")
-    parser.add_argument("--version", action="version", version=f"artifact-skill {__version__}")
+    parser = argparse.ArgumentParser(prog="artifacts-skill", description="Artifact production + verification engine.")
+    parser.add_argument("--version", action="version", version=f"artifacts-skill {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     def common(p: argparse.ArgumentParser) -> None:
         p.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
-        p.add_argument("--verbose", action="store_true", help="Print progress to stderr.")
-        p.add_argument("--progress", action="store_true", help="Print lifecycle stage markers to stderr.")
 
     p_doctor = sub.add_parser("doctor", help="Detect local capabilities.")
     common(p_doctor)
@@ -178,6 +177,7 @@ def _resolve_policy_arg(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
+    treat_sigterm_as_interrupt()
     parser = build_parser()
     args = parser.parse_args(argv)
 
@@ -218,7 +218,7 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
     if args.json:
         _emit(result, True)
         return EXIT_OK
-    lines = [f"artifact-skill doctor — tool_version {__version__}", ""]
+    lines = [f"artifacts-skill doctor — tool_version {__version__}", ""]
     for cap_id, cap in sorted(report.capabilities.items()):
         lines.append(f"  [{cap.status.value.upper():13}] {cap_id:28} {cap.detail}")
     print("\n".join(lines))

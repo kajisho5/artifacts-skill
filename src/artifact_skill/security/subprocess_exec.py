@@ -15,6 +15,7 @@ from __future__ import annotations
 import ntpath
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -49,6 +50,37 @@ def _executable_basename(argv0: str) -> str:
     name = parser.basename(argv0)
     stem, ext = parser.splitext(name)
     return stem if ext.lower() in _STRIPPABLE_EXECUTABLE_EXTENSIONS else name
+
+
+def treat_sigterm_as_interrupt() -> None:
+    """Make SIGTERM raise KeyboardInterrupt, the same way SIGINT already
+    does by default (Issue #25).
+
+    `subprocess.run()` already kills its child on any Python-level
+    exception escaping `Popen.communicate()` — verified directly against
+    CPython's own `subprocess.py`, which wraps `communicate()` in
+    `except: process.kill(); raise` specifically to cover
+    `KeyboardInterrupt`. That means a real Ctrl-C (SIGINT) during a
+    LibreOffice/Chromium render already cannot orphan the child process.
+    SIGTERM is a different story: its default disposition terminates the
+    process immediately with no Python exception raised at all, so nothing
+    in `run()` — no matter how it's written — ever gets a chance to run,
+    and a `soffice`/chromium child spawned just before a SIGTERM (e.g. a
+    process supervisor's graceful-stop signal, or plain `kill <pid>`) is
+    silently left running.
+
+    Call once, early, from each real process entry point (`cli/main.py`,
+    `mcp/server.py`) — not from `run()` itself, since installing a signal
+    handler is a process-wide, one-time setup concern, not something to
+    repeat on every subprocess call. Only the main thread of the main
+    interpreter may set signal handlers; silently does nothing in any
+    other context (embedding, tests importing this module under a test
+    runner's own thread) rather than raising.
+    """
+    try:
+        signal.signal(signal.SIGTERM, signal.default_int_handler)
+    except (ValueError, OSError):
+        pass
 
 
 @dataclass
@@ -96,14 +128,14 @@ def run(
         raise ArtifactExecutionError(
             code="ARTIFACT_EXECUTABLE_NOT_FOUND",
             message=f"Executable '{argv[0]}' was not found on PATH.",
-            remediation="Run `artifact-skill doctor` to see which backends are installed.",
+            remediation="Run `artifacts-skill doctor` to see which backends are installed.",
             evidence={"executable": argv[0]},
         )
 
     effective_timeout = timeout if timeout is not None else limits.subprocess_timeout_seconds
     argv = [resolved, *argv[1:]]
 
-    with tempfile.TemporaryDirectory(prefix="artifact-skill-exec-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="artifacts-skill-exec-") as tmp:
         run_cwd = str(cwd) if cwd is not None else tmp
         try:
             # argv[0] was already resolved above and checked against the caller's

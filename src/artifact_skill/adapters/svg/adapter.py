@@ -26,6 +26,7 @@ from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
 from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.chromium_render import render_local_file
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import check_input_size
 from artifact_skill.security.xml_safety import reject_xml_entities_in_file
 
@@ -97,6 +98,9 @@ class SvgAdapter(ArtifactAdapter):
             "a standalone SVG document hangs Playwright's full-page screenshot; a very large SVG's evidence "
             "image may be cropped to the viewport rather than showing its entire content.",
         ]
+
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({"forbid_external_resources", "forbid_placeholder_text"})
 
     # ---- inspect ---------------------------------------------------
 
@@ -188,13 +192,13 @@ class SvgAdapter(ArtifactAdapter):
 
     # ---- render ----------------------------------------------------
 
-    def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
+    def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
         check_input_size(ref.path)
         reject_xml_entities_in_file(ref.path)
         # full_page=False: see rendering/chromium_render.py's docstring —
         # a standalone SVG document hangs Playwright's full-page screenshot.
         out_path = render_local_file(
-            ref.path, out_dir / "page-001.png", capability_id="svg.render", full_page=False
+            ref.path, out_dir / "page-001.png", capability_id="svg.render", full_page=False, limits=limits
         )
         return RenderResult(kind="page_images", files=[out_path], backend="playwright+chromium")
 

@@ -186,7 +186,7 @@ def test_capabilities_report_never_lies_about_probe_result(adapter):
 def test_render_propagates_backend_failure(good_xlsx, adapter, tmp_path, monkeypatch):
     import artifact_skill.adapters.xlsx.adapter as adapter_module
 
-    def _fake_convert(input_path, pdf_out_dir):
+    def _fake_convert(input_path, pdf_out_dir, **kwargs):
         raise ArtifactExecutionError(
             code="ARTIFACT_RENDER_BACKEND_FAILED", message="fake failure for testing",
             evidence={"stderr": "fake soffice failure for testing"},
@@ -207,3 +207,12 @@ def test_render_happy_path_when_backend_actually_works(good_xlsx, adapter, tmp_p
     result = adapter.render(ref, tmp_path / "rendered")
     assert len(result.files) >= 1
     assert all(f.exists() for f in result.files)
+
+
+def test_limitations_names_the_real_known_caveats(adapter):
+    """Issue #29: limitations() content had zero test coverage anywhere."""
+    text = " ".join(adapter.limitations())
+    assert "Formulas are never recalculated" in text
+    assert "Chart and embedded-drawing validity is not checked" in text
+    assert "Conditional formatting and data validation" in text
+    assert "LibreOffice install" in text

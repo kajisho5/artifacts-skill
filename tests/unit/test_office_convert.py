@@ -12,6 +12,7 @@ import pytest
 
 from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactExecutionError
 from artifact_skill.rendering import office_convert
+from artifact_skill.security.limits import Limits
 from artifact_skill.security.subprocess_exec import ExecResult
 
 
@@ -64,3 +65,26 @@ def test_convert_to_pdf_returns_produced_pdf_path(tmp_path, monkeypatch):
 
     result = office_convert.convert_to_pdf(tmp_path / "input.pptx", out_dir)
     assert result == out_dir / "input.pdf"
+
+
+def test_convert_to_pdf_forwards_a_custom_limits_to_the_subprocess_call(tmp_path, monkeypatch):
+    """Issue #28: a caller-supplied Limits override must actually reach
+    run_subprocess() (which reads limits.subprocess_timeout_seconds) -
+    previously convert_to_pdf() didn't accept a limits parameter at all,
+    so run_subprocess() always fell back to its own DEFAULT_LIMITS
+    regardless of what a caller further up the stack wanted."""
+    monkeypatch.setattr(office_convert, "soffice_binary", lambda: "/usr/bin/soffice")
+    out_dir = tmp_path / "out"
+    seen_kwargs = {}
+
+    def _fake_run(argv, **kwargs):
+        seen_kwargs.update(kwargs)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "input.pdf").write_bytes(b"%PDF-1.4 fake")
+        return ExecResult(argv=argv, returncode=0, stdout="", stderr="", timed_out=False)
+
+    monkeypatch.setattr(office_convert, "run_subprocess", _fake_run)
+
+    custom_limits = Limits(subprocess_timeout_seconds=7)
+    office_convert.convert_to_pdf(tmp_path / "input.pptx", out_dir, limits=custom_limits)
+    assert seen_kwargs["limits"] is custom_limits

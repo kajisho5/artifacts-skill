@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactExecutionError
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 
 if TYPE_CHECKING:
     # playwright is an optional dependency (see require_playwright() below) -
@@ -25,7 +26,6 @@ if TYPE_CHECKING:
     from playwright.sync_api import ViewportSize
 
 _VIEWPORT: ViewportSize = {"width": 1280, "height": 800}
-_NAV_TIMEOUT_MS = 30_000
 
 
 def require_playwright(capability_id: str) -> None:
@@ -35,13 +35,20 @@ def require_playwright(capability_id: str) -> None:
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="playwright is not installed; cannot render to an image.",
-            remediation="Install with: pip install 'artifact-skill[html]' (or `pip install playwright` "
+            remediation="Install with: pip install 'artifacts-skill[html]' (or `pip install playwright` "
             "then `playwright install chromium`).",
             evidence={"capability_id": capability_id},
         )
 
 
-def render_local_file(source_path: Path, out_path: Path, *, capability_id: str, full_page: bool = True) -> Path:
+def render_local_file(
+    source_path: Path,
+    out_path: Path,
+    *,
+    capability_id: str,
+    full_page: bool = True,
+    limits: Limits = DEFAULT_LIMITS,
+) -> Path:
     """Screenshot `source_path` (loaded via a `file://` URL) to `out_path`.
 
     Blocks every outgoing request that isn't `file://`/`data:`/`about:` —
@@ -55,11 +62,20 @@ def render_local_file(source_path: Path, out_path: Path, *, capability_id: str, 
     until timeout against it — confirmed directly while building the SVG
     adapter, not a hypothetical. A plain viewport screenshot works fine.
     The caller (an SVG adapter) is expected to pass `full_page=False`.
+
+    `limits.render_timeout_seconds` (Issue #28) governs both the page
+    navigation and the screenshot call — previously a hardcoded module
+    constant with no connection to `security/limits.py` at all, despite
+    `docs/security.md` claiming `Limits` was the single place these
+    numbers live. `Limits.subprocess_timeout_seconds` governs the
+    LibreOffice-backed render path instead (`rendering/office_convert.py`);
+    this is the equivalent knob for the Chromium-backed one.
     """
     require_playwright(capability_id)
     from playwright.sync_api import Error as PlaywrightError
     from playwright.sync_api import sync_playwright
 
+    nav_timeout_ms = limits.render_timeout_seconds * 1000
     out_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         with sync_playwright() as pw:
@@ -75,8 +91,8 @@ def render_local_file(source_path: Path, out_path: Path, *, capability_id: str, 
                         route.abort()
 
                 page.route("**/*", _block_external)
-                page.goto(f"file://{source_path.resolve()}", wait_until="load", timeout=_NAV_TIMEOUT_MS)
-                page.screenshot(path=str(out_path), full_page=full_page, timeout=_NAV_TIMEOUT_MS)
+                page.goto(f"file://{source_path.resolve()}", wait_until="load", timeout=nav_timeout_ms)
+                page.screenshot(path=str(out_path), full_page=full_page, timeout=nav_timeout_ms)
             finally:
                 browser.close()
     except PlaywrightError as exc:

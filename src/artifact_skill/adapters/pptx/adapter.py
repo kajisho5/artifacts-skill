@@ -34,6 +34,7 @@ from artifact_skill.core.verification import Check, CheckStatus, VerificationRes
 from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.office_convert import convert_to_pdf, soffice_binary
 from artifact_skill.rendering.pdf_pages import render_pdf_pages
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import atomic_copy, check_input_size
 
 _EMU_PER_INCH = 914400
@@ -48,7 +49,7 @@ def _require_pptx():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="python-pptx is not installed; PPTX structural read/write is unavailable.",
-            remediation="Install with: pip install 'artifact-skill[pptx]' (or `pip install python-pptx`).",
+            remediation="Install with: pip install 'artifacts-skill[pptx]' (or `pip install python-pptx`).",
             evidence={"capability_id": "pptx.structural"},
         )
     import pptx
@@ -156,6 +157,12 @@ class PptxAdapter(ArtifactAdapter):
             "Rendering depends on an external LibreOffice install; a present binary does not guarantee "
             "a specific document converts successfully (see this module's docstring).",
         ]
+
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({
+            "require_slide_count", "min_slides", "max_slides", "require_slide_aspect_ratio",
+            "aspect_ratio_tolerance", "forbid_placeholder_text", "max_empty_placeholders", "require_metadata",
+        })
 
     # ---- inspect ---------------------------------------------------
 
@@ -308,9 +315,9 @@ class PptxAdapter(ArtifactAdapter):
 
     # ---- render ----------------------------------------------------
 
-    def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
-        with tempfile.TemporaryDirectory(prefix="artifact-skill-pptx-render-") as tmp:
-            pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf")
+    def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
+        with tempfile.TemporaryDirectory(prefix="artifacts-skill-pptx-render-") as tmp:
+            pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf", limits=limits)
             # render_pdf_pages needs the intermediate PDF to survive past
             # this `with` block's cleanup, so render directly from it now
             # rather than returning a path that's about to be deleted.

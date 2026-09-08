@@ -1,4 +1,4 @@
-"""Full-process integration tests: invokes the real `artifact-skill`
+"""Full-process integration tests: invokes the real `artifacts-skill`
 console script (installed by `pip install -e .`) via subprocess, exactly
 as an agent or a human would."""
 
@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-CLI = shutil.which("artifact-skill")
+CLI = shutil.which("artifacts-skill")
 
 
 def run_cli(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
@@ -19,6 +19,22 @@ def run_cli(args: list[str], cwd: Path) -> subprocess.CompletedProcess:
     else:
         cmd = [sys.executable, "-m", "artifact_skill.cli.main", *args]
     return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=60)
+
+
+def test_verbose_and_progress_flags_were_removed_not_left_as_silent_no_ops(tmp_path):
+    """Issue #31: --verbose/--progress used to be declared on every
+    subcommand with help text implying real behavior, but nothing in the
+    codebase ever read args.verbose/args.progress - passing either flag
+    silently did nothing, with no indication to the caller. Removed
+    rather than implemented, per the project's minimalism stance; this
+    guards against either flag quietly coming back as another no-op."""
+    proc = run_cli(["doctor", "--verbose"], cwd=tmp_path)
+    assert proc.returncode != 0
+    assert "unrecognized arguments" in proc.stderr
+
+    proc = run_cli(["doctor", "--progress"], cwd=tmp_path)
+    assert proc.returncode != 0
+    assert "unrecognized arguments" in proc.stderr
 
 
 def test_doctor_json_is_valid_and_has_pdf_capabilities(tmp_path):
@@ -68,6 +84,98 @@ def test_execute_then_verify_pass(good_pdf, tmp_path):
     assert check_by_id["page_count_requirement"]["status"] == "pass"
     assert check_by_id["metadata_title"]["status"] == "pass"
     assert check_by_id["font_embedding"]["status"] == "pass"
+
+
+# --- plan subcommand (Issue #29: previously zero CLI e2e coverage) --------
+
+
+def test_plan_is_pure_and_writes_nothing(good_pdf, tmp_path):
+    proc = run_cli(
+        ["plan", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}', "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["operation"] == "pdf.metadata_set"
+    assert data["adapter"] == "pdf"
+    assert "output_path" in data
+    # Purely descriptive: no output file, no reports/ dir, from a plan call alone.
+    assert list(tmp_path.iterdir()) == [good_pdf]
+
+
+def test_plan_rejects_unknown_operation_with_input_exit_code(good_pdf, tmp_path):
+    proc = run_cli(
+        ["plan", str(good_pdf), "--operation", "not_a_real_operation", "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 2
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_OPERATION_UNKNOWN"
+
+
+def test_plan_rejects_args_that_violate_the_operations_schema(good_pdf, tmp_path):
+    proc = run_cli(
+        ["plan", str(good_pdf), "--operation", "fit_page_size", "--args", '{"width_pt": "not a number"}', "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 2
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_INVALID_ARGS"
+
+
+# --- render subcommand (Issue #29: previously zero CLI e2e coverage) ------
+
+
+def test_render_produces_one_page_image_per_page(good_pdf, tmp_path):
+    proc = run_cli(["render", str(good_pdf), "--out-dir", "rendered", "--json"], cwd=tmp_path)
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["kind"] == "page_images"
+    assert data["backend"] == "pypdfium2"
+    assert len(data["files"]) == 2  # good_2page.pdf
+    for f in data["files"]:
+        assert (tmp_path / f).exists()
+
+
+def test_render_dry_run_writes_nothing_and_reports_estimated_files(good_pdf, tmp_path):
+    proc = run_cli(["render", str(good_pdf), "--out-dir", "rendered", "--dry-run", "--json"], cwd=tmp_path)
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["dry_run"] is True
+    assert data["estimated_files"] == 2
+    assert not (tmp_path / "rendered").exists()
+
+
+# --- look subcommand (Issue #29: previously zero CLI e2e coverage) --------
+
+
+def test_look_builds_a_real_contact_sheet_png(good_pdf, tmp_path):
+    proc = run_cli(["look", str(good_pdf), "--out-dir", "look_out", "--json"], cwd=tmp_path)
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["source_pages"] == 2
+    sheet_path = tmp_path / data["contact_sheet"]
+    assert sheet_path.exists()
+    assert sheet_path.suffix == ".png"
+
+
+def test_look_compare_to_builds_a_before_after_png(good_pdf, tmp_path):
+    proc = run_cli(
+        ["look", str(good_pdf), "--compare-to", str(good_pdf), "--out-dir", "look_out", "--json"], cwd=tmp_path
+    )
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    sheet_path = tmp_path / data["contact_sheet"]
+    assert sheet_path.exists()
+    assert sheet_path.name == "before-after.png"
+
+
+def test_look_dry_run_writes_nothing(good_pdf, tmp_path):
+    proc = run_cli(["look", str(good_pdf), "--out-dir", "look_out", "--dry-run", "--json"], cwd=tmp_path)
+    assert proc.returncode == 0
+    data = json.loads(proc.stdout)
+    assert data["dry_run"] is True
+    assert not (tmp_path / "look_out").exists()
 
 
 def test_execute_gates_its_own_receipt_with_an_explicit_policy(good_pdf, tmp_path):
@@ -172,6 +280,16 @@ def test_verify_unknown_policy_preset_gives_clear_error(good_pdf, tmp_path):
     assert "not-a-real-preset" in proc.stderr
 
 
+def test_verify_misspelled_policy_key_gives_clear_error_not_a_silent_pass(good_pdf, tmp_path):
+    """Issue #24: --policy '{"min_pagess": 1}' (typo'd from min_pages) used
+    to be silently treated by every adapter as "not specified" and produce
+    a false PASS. It must now be rejected with a clear error naming the
+    unrecognized key, the same way an unknown --policy-preset name is."""
+    proc = run_cli(["verify", str(good_pdf), "--policy", '{"min_pagess": 1}'], cwd=tmp_path)
+    assert proc.returncode != 0
+    assert "min_pagess" in proc.stderr
+
+
 def test_input_not_found_gives_input_exit_code(tmp_path):
     proc = run_cli(["inspect", str(tmp_path / "nope.pdf"), "--json"], cwd=tmp_path)
     assert proc.returncode == 2
@@ -189,6 +307,21 @@ def test_unrecognized_content_gives_clear_type_unsupported_error(tmp_path):
     proc = run_cli(["inspect", str(unknown_like), "--json"], cwd=tmp_path)
     data = json.loads(proc.stdout)
     assert data["error"]["code"] == "ARTIFACT_TYPE_UNSUPPORTED"
+
+
+def test_password_protected_looking_ooxml_gives_a_specific_actionable_error(tmp_path):
+    """Issue #27: a .pptx/.docx/.xlsx saved with a password isn't a zip at
+    all - Office wraps it in a CFB/OLE2 container instead. That must not
+    collapse into the same generic "unrecognized file" error as content
+    matching no known format signature at all (the case above) - the CLI
+    should say specifically what's going on and what to do about it."""
+    cfb_magic = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+    looks_encrypted = tmp_path / "protected.pptx"
+    looks_encrypted.write_bytes(cfb_magic + b"\x00" * 512)
+    proc = run_cli(["inspect", str(looks_encrypted), "--json"], cwd=tmp_path)
+    data = json.loads(proc.stdout)
+    assert data["error"]["code"] == "ARTIFACT_OLE_COMPOUND_FILE_UNSUPPORTED"
+    assert "password" in data["error"]["remediation"].lower()
     assert proc.returncode == 3
 
 
@@ -393,7 +526,7 @@ def test_html_has_no_mutating_operations(good_html, tmp_path):
 
 def test_html_receipt_without_operation_gives_a_real_verify_only_receipt(good_html, tmp_path):
     """Issue #18: HTML has zero mutating operations, so before this feature
-    `artifact-skill receipt page.html` had no way to succeed at all - an
+    `artifacts-skill receipt page.html` had no way to succeed at all - an
     agent had to hand-assemble inspect/render/verify calls instead of using
     this project's own flagship 'get a Production Receipt' command."""
     proc = run_cli(["receipt", str(good_html), "--json"], cwd=tmp_path)

@@ -59,6 +59,7 @@ from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
 from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.chromium_render import render_local_file
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import check_input_size
 
 _RESOURCE_ATTRS = {"img": "src", "script": "src", "link": "href", "iframe": "src", "source": "src"}
@@ -161,6 +162,9 @@ class HtmlAdapter(ArtifactAdapter):
             "will render with those elements visibly missing/broken, by design.",
         ]
 
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({"require_title", "forbid_external_resources", "forbid_placeholder_text"})
+
     # ---- inspect ---------------------------------------------------
 
     def inspect(self, ref: ArtifactRef) -> InspectionReport:
@@ -241,8 +245,8 @@ class HtmlAdapter(ArtifactAdapter):
 
     # ---- render ----------------------------------------------------
 
-    def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
-        out_path = render_local_file(ref.path, out_dir / "page-001.png", capability_id="html.render")
+    def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
+        out_path = render_local_file(ref.path, out_dir / "page-001.png", capability_id="html.render", limits=limits)
         return RenderResult(kind="page_images", files=[out_path], backend="playwright+chromium")
 
     # ---- verify ------------------------------------------------------

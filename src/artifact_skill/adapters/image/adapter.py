@@ -27,6 +27,7 @@ from artifact_skill.core.capability import Capability, CapabilityStatus
 from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactInputError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import atomic_copy, check_input_size
 
 _IMAGE_TYPES = {ArtifactType.IMAGE_PNG, ArtifactType.IMAGE_JPEG, ArtifactType.IMAGE_WEBP}
@@ -50,7 +51,7 @@ def _require_pillow():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="Pillow is not installed; image inspect/verify/operations are unavailable.",
-            remediation="Install with: pip install 'artifact-skill[pdf]' (or `pip install Pillow`).",
+            remediation="Install with: pip install 'artifacts-skill[pdf]' (or `pip install Pillow`).",
             evidence={"capability_id": "image.structural"},
         )
     from PIL import Image
@@ -136,6 +137,12 @@ class ImageAdapter(ArtifactAdapter):
             "operations do not preserve additional frames.",
             "ICC color profiles are preserved on save where Pillow supports it, but not validated.",
         ]
+
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({
+            "require_width", "require_height", "min_width", "max_width", "min_height", "max_height",
+            "require_format",
+        })
 
     # ---- inspect ---------------------------------------------------
 
@@ -259,10 +266,14 @@ class ImageAdapter(ArtifactAdapter):
 
     # ---- render ----------------------------------------------------
 
-    def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
+    def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
         """An image is already visual — "rendering" here means producing a
         normalized, upright PNG preview (EXIF-transposed) for evidence,
         the same role render() plays for every other adapter."""
+        # Pillow runs in-process with no timeout-governed step - `limits` is
+        # accepted (not omitted) so every adapter's render() shares one real
+        # interface (see adapters/base.py), but unused here.
+        del limits
         Image = _require_pillow()
         from PIL import ImageOps
 

@@ -49,6 +49,7 @@ from artifact_skill.core.verification import Check, CheckStatus, VerificationRes
 from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.office_convert import convert_to_pdf, soffice_binary
 from artifact_skill.rendering.pdf_pages import render_pdf_pages
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import atomic_copy, check_input_size
 from artifact_skill.security.xml_safety import reject_xml_entities_in_zip
 
@@ -64,7 +65,7 @@ def _require_openpyxl():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="openpyxl is not installed; XLSX structural read/write is unavailable.",
-            remediation="Install with: pip install 'artifact-skill[xlsx]' (or `pip install openpyxl`).",
+            remediation="Install with: pip install 'artifacts-skill[xlsx]' (or `pip install openpyxl`).",
             evidence={"capability_id": "xlsx.structural"},
         )
     import openpyxl
@@ -174,6 +175,12 @@ class XlsxAdapter(ArtifactAdapter):
             "Rendering depends on an external LibreOffice install; a present binary does not guarantee "
             "a specific document converts successfully.",
         ]
+
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({
+            "require_sheet_count", "min_sheets", "max_sheets", "require_sheet_names", "forbid_placeholder_text",
+            "forbid_external_links", "require_metadata",
+        })
 
     # ---- inspect ---------------------------------------------------
 
@@ -315,9 +322,9 @@ class XlsxAdapter(ArtifactAdapter):
 
     # ---- render ----------------------------------------------------
 
-    def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
-        with tempfile.TemporaryDirectory(prefix="artifact-skill-xlsx-render-") as tmp:
-            pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf")
+    def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
+        with tempfile.TemporaryDirectory(prefix="artifacts-skill-xlsx-render-") as tmp:
+            pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf", limits=limits)
             return render_pdf_pages(pdf_path, out_dir)
 
     # ---- verify ------------------------------------------------------

@@ -17,6 +17,7 @@ from artifact_skill.core.artifact import ArtifactRef, ArtifactType, InspectionRe
 from artifact_skill.core.capability import Capability
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import VerificationResult
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,23 @@ class ArtifactAdapter(ABC):
     def limitations(self) -> list[str]:
         return []
 
+    def recognized_policy_keys(self) -> frozenset[str]:
+        """The verification-policy dict keys this adapter's `verify_structural()`
+        actually reads (Issue #24). Used only to build the *global* set of
+        every known policy key across every adapter (see `policies.py`), so a
+        misspelled key (e.g. `min_pagess`) can be rejected instead of being
+        silently treated as "not specified" and producing a false PASS.
+
+        Deliberately NOT used for per-adapter rejection: `policies.py`'s
+        presets are designed to be reused across adapters they weren't
+        written for (e.g. `web-no-external`'s `require_title` is inert for
+        SVG) — a key this adapter doesn't recognize but some other adapter
+        does must stay silently ignored here, exactly as before. Default:
+        no policy keys recognized (matches adapters with no
+        `verify_structural()` policy inputs at all).
+        """
+        return frozenset()
+
     @abstractmethod
     def inspect(self, ref: ArtifactRef) -> InspectionReport:
         """Read-only. Must never write to disk or spawn a mutating process."""
@@ -91,8 +109,15 @@ class ArtifactAdapter(ABC):
     ) -> ArtifactRef:
         """Perform `operation`, writing only to `output_path` (never to `ref.path`)."""
 
-    def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
+    def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
         """Produce a visual representation for Agent/human inspection.
+
+        `limits` governs whatever this adapter's render backend needs a
+        timeout for (Chromium for HTML/SVG, LibreOffice for PPTX/DOCX/XLSX
+        — see `security/limits.py::Limits.render_timeout_seconds`); an
+        adapter with no timeout-governed render step (PDF, Image) accepts
+        and ignores it rather than omitting the parameter, so every
+        override shares one real interface.
 
         Default: not implemented. Adapters that can render must override.
         """

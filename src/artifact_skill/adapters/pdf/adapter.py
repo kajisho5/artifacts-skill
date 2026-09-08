@@ -22,6 +22,7 @@ from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
 from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.pdf_pages import render_pdf_pages
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import atomic_write_bytes, check_input_size
 
 _PT_PER_INCH = 72.0
@@ -48,7 +49,7 @@ def _require_pypdf():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="pypdf is not installed; PDF structural read/write is unavailable.",
-            remediation="Install with: pip install 'artifact-skill[pdf]' (or `pip install pypdf`).",
+            remediation="Install with: pip install 'artifacts-skill[pdf]' (or `pip install pypdf`).",
             evidence={"capability_id": "pdf.structural"},
         )
     import pypdf
@@ -61,7 +62,7 @@ def _require_pypdfium2():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="pypdfium2 is not installed; PDF rendering is unavailable.",
-            remediation="Install with: pip install 'artifact-skill[pdf]' (or `pip install pypdfium2`).",
+            remediation="Install with: pip install 'artifacts-skill[pdf]' (or `pip install pypdfium2`).",
             evidence={"capability_id": "pdf.render"},
         )
     import pypdfium2
@@ -379,6 +380,13 @@ class PdfAdapter(ArtifactAdapter):
             "genuinely blank page.",
         ]
 
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({
+            "forbid_unembedded_fonts", "require_no_encryption", "require_page_count", "min_pages", "max_pages",
+            "allow_mixed_page_sizes", "require_page_size_pt", "page_size_tolerance_pt", "forbid_javascript",
+            "forbid_blank_pages", "forbid_placeholder_text", "require_metadata",
+        })
+
     # ---- inspect ---------------------------------------------------
 
     def inspect(self, ref: ArtifactRef) -> InspectionReport:
@@ -653,7 +661,11 @@ class PdfAdapter(ArtifactAdapter):
 
     # ---- render ----------------------------------------------------
 
-    def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
+    def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
+        # pypdfium2 renders in-process with no timeout-governed step —
+        # `limits` is accepted (not omitted) so every adapter's render()
+        # shares one real interface (see adapters/base.py), but unused here.
+        del limits
         return render_pdf_pages(ref.path, out_dir)
 
     # ---- verify ------------------------------------------------------

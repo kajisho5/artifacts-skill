@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "artifact-skill"
+name = "artifacts-skill"
 version = "0.1.0"
 description = "Local-first execution and verification engine for AI-generated artifacts (inspect -> plan -> execute -> render -> structural verify -> visual verify -> fix -> receipt)."
 readme = "README.md"
@@ -28,7 +28,7 @@ all = [
 dev = ["pytest>=8.0", "pytest-cov>=5.0", "reportlab>=4.0", "python-pptx>=1.0", "python-docx>=1.0", "openpyxl>=3.1", "playwright>=1.40", "ruff>=0.16", "mypy>=1.13"]
 
 [project.scripts]
-artifact-skill = "artifact_skill.cli.main:main"
+artifacts-skill = "artifact_skill.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/artifact_skill"]

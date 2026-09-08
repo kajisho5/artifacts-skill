@@ -129,6 +129,13 @@ Pass a `policy` object to `verify`/`receipt`:
 Unset keys simply don't add their corresponding check — they don't default
 to strict or lenient in a way that changes other checks' behavior.
 
+A key that's real for *some* format but not this one (see the named-preset
+cross-adapter-reuse note below) is likewise silently inert — but a key no
+adapter recognizes *at all* (e.g. `min_pagess`, misspelled from `min_pages`)
+is rejected with a clear error before verification runs, instead of being
+silently treated as "not specified" and producing a false PASS (Issue #24).
+This applies to `verify`/`execute`/`receipt` on both the CLI and MCP.
+
 ## Named policy presets (Issue #14)
 
 The default policy (`{}`) barely gates anything — with no policy, roughly

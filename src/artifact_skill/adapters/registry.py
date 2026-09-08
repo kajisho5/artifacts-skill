@@ -35,10 +35,37 @@ def registered_types() -> list[ArtifactType]:
     return list(_REGISTRY.keys())
 
 
+def all_adapter_classes() -> list[type[ArtifactAdapter]]:
+    """Every distinct registered adapter class, deduplicated (the image
+    adapter is registered under three ArtifactTypes but is one class) and
+    sorted by `id` for deterministic iteration order."""
+    return sorted(set(_REGISTRY.values()), key=lambda cls: cls.id)
+
+
 def get_adapter(artifact_type: ArtifactType) -> ArtifactAdapter:
     adapter_cls = _REGISTRY.get(artifact_type)
     if adapter_cls is not None:
         return adapter_cls()
+    if artifact_type == ArtifactType.OLE_COMPOUND_FILE:
+        # Issue #27: distinct from the generic ARTIFACT_TYPE_UNSUPPORTED
+        # below (which means "we don't know what this is at all") - this
+        # file *is* identified, by its CFB/OLE2 container signature, just
+        # not as anything this project can open. Most commonly a
+        # password-protected Office 2007+ file (.pptx/.docx/.xlsx saved
+        # with encryption gets wrapped in a CFB envelope, so it's no
+        # longer a zip at all) or a legacy pre-2007 binary Office file
+        # (.doc/.ppt/.xls). No CFB parser exists here to tell those apart
+        # (or to confirm the password-protected case for certain), so the
+        # message says "typically," not "is" - honest about the limits of
+        # a magic-bytes-only check.
+        raise ArtifactCapabilityError(
+            code="ARTIFACT_OLE_COMPOUND_FILE_UNSUPPORTED",
+            message="This file is a Compound File Binary (CFB/OLE2) container, which this tool cannot open.",
+            remediation="This is typically either a password-protected Office file (.pptx/.docx/.xlsx saved with "
+            "encryption) or a legacy pre-2007 binary Office file (.doc/.ppt/.xls). Remove the password and re-save "
+            "in the modern OOXML format, or convert a legacy file to .pptx/.docx/.xlsx, then retry.",
+            evidence={"artifact_type": artifact_type.value},
+        )
     planned = _PLANNED.get(artifact_type)
     if planned is not None:
         raise ArtifactCapabilityError(

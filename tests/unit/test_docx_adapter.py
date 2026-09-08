@@ -134,7 +134,7 @@ def test_capabilities_report_never_lies_about_probe_result(adapter):
 def test_render_propagates_backend_failure(good_docx, adapter, tmp_path, monkeypatch):
     import artifact_skill.adapters.docx.adapter as adapter_module
 
-    def _fake_convert(input_path, pdf_out_dir):
+    def _fake_convert(input_path, pdf_out_dir, **kwargs):
         raise ArtifactExecutionError(
             code="ARTIFACT_RENDER_BACKEND_FAILED", message="fake failure for testing",
             evidence={"stderr": "fake soffice failure for testing"},
@@ -219,3 +219,12 @@ def test_docx_receipt_measures_real_page_count_when_render_works(good_docx, adap
     check = next(c for c in structural["checks"] if c["id"] == "page_count")
     assert check["status"] == "pass"
     assert check["evidence"]["page_count"] >= 1
+
+
+def test_limitations_names_the_real_known_caveats(adapter):
+    """Issue #29: limitations() content had zero test coverage anywhere."""
+    text = " ".join(adapter.limitations())
+    assert "Page count cannot be determined structurally" in text
+    assert "Hyperlink validity" in text
+    assert "Numbering/list consistency" in text
+    assert "LibreOffice install" in text

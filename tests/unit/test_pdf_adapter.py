@@ -433,3 +433,14 @@ def test_capabilities_report_available_when_deps_installed(adapter):
 
     assert caps["pdf.structural"].status in (CapabilityStatus.AVAILABLE, CapabilityStatus.MISSING)
     assert caps["pdf.render"].status in (CapabilityStatus.AVAILABLE, CapabilityStatus.MISSING)
+
+
+def test_limitations_names_the_real_known_caveats(adapter):
+    """Issue #29: limitations() content had zero test coverage anywhere -
+    a regression that silently dropped a real caveat (or emptied the list
+    entirely) would have passed every other test. Checks specific,
+    known-true strings, not just "is a non-empty list"."""
+    text = " ".join(adapter.limitations())
+    assert "not decrypted automatically" in text
+    assert "JavaScript actions are detected but not executed" in text
+    assert "blank_pages" in text

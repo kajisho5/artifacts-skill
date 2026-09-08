@@ -2,7 +2,7 @@
 
 A `plan()` call must be pure: it inspects and reasons, but never writes to
 disk, never spawns a mutating subprocess. `OperationPlan` is the JSON that
-`artifact-skill plan` returns and that `execute()` re-derives internally
+`artifacts-skill plan` returns and that `execute()` re-derives internally
 before actually touching anything.
 """
 

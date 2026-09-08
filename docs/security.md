@@ -31,6 +31,33 @@ This module is the *only* place in the codebase allowed to call
   `LANG`, `LC_ALL`, `SYSTEMROOT` are forwarded — not the caller's full
   environment (proxies, tokens, unrelated config).
 
+**No orphaned children on interrupt (Issue #25).** A `soffice`/Chromium
+child killed mid-render must not outlive the parent CLI/MCP process.
+Verified directly against CPython's own `subprocess.py`, not assumed:
+`subprocess.run()` already kills its child on *any* Python-level exception
+escaping `communicate()` — including `KeyboardInterrupt`, which is exactly
+what SIGINT (a real Ctrl-C) raises by default, so that case was never
+actually broken. SIGTERM is different: its default disposition terminates
+the process immediately with no Python exception raised at all, so nothing
+downstream — no `finally`, no `except` clause anywhere in this codebase —
+ever gets a chance to run, silently orphaning the child. `cli/main.py`'s
+`main()` and `mcp/server.py`'s `serve()` — the two real process entry
+points — both call
+`security/subprocess_exec.py::treat_sigterm_as_interrupt()` on startup,
+which installs `signal.default_int_handler` for SIGTERM too, so it now
+raises the exact same `KeyboardInterrupt` SIGINT already did and gets the
+same, already-correct cleanup. `tests/security/test_subprocess_exec.py`
+proves both halves empirically (spawning a real child process and sending
+it a real SIGTERM), not just by reading the code: the bug is demonstrated
+first, then the fix is shown to prevent it.
+
+A `receipt.json` is the only evidence that verification actually ran to
+completion — an output *file* existing on disk after an interrupted
+`execute`/`receipt` call is not proof of anything: `execute`'s own atomic
+write (see "Filesystem" below) guarantees that file is never partially
+written, but says nothing about whether verification ever happened
+afterward. Treat a missing receipt exactly like a missing output: rerun.
+
 The PDF and Image adapters never need this module — `pypdf`, `pypdfium2`,
 and Pillow are pure-Python-callable. `rendering/office_convert.py` (used
 by PPTX/DOCX/XLSX for LibreOffice-backed rendering) is the module's actual
@@ -76,9 +103,15 @@ policy below in an actively-enforced way, not just a documented one.
 ## Filesystem — `security/paths.py`
 
 - **`resolve_within(base_dir, candidate)`** — resolves a path and asserts
-  it stays inside `base_dir`; used for every archive-member path and every
-  output path before it touches disk. Raises `ARTIFACT_PATH_ESCAPE` on
-  `..`, an absolute escape, or a symlink that resolves outside the base.
+  it stays inside `base_dir`. Raises `ARTIFACT_PATH_ESCAPE` on `..`, an
+  absolute escape, or a symlink that resolves outside the base. Its one
+  call site (Issue #30 — a prior version of this doc overclaimed "every
+  output path" too) is inside `safe_extract_zip()` below, guarding an
+  archive member's path — the untrusted-input case a hostile zip can
+  actually exploit. An output path supplied by the CLI/MCP caller
+  (`--output`/`output`) is not run through it: that path comes from the
+  tool's own invoker, a trusted boundary in this project's threat model,
+  not a hostile file being processed.
 - **`atomic_write_bytes` / `atomic_copy`** — write to a same-directory temp
   file, `fsync`, then `os.replace`. No partial file is ever left at the
   target path, including on a crash mid-write.
@@ -174,7 +207,19 @@ A single `Limits` dataclass (`DEFAULT_LIMITS`) is the only place any of
 these numbers live. No adapter hardcodes its own "too big" constant. A
 caller who genuinely needs to raise a limit does so by passing a different
 `Limits` instance explicitly (visible in code review), never by a hidden
-per-format exception.
+per-format exception. This claim used to be aspirational for one field:
+`render_timeout_seconds` was declared here but never actually read
+anywhere — `rendering/chromium_render.py` had its own separate, hardcoded
+30s module constant instead, completely disconnected from `Limits` (Issue
+#28). Fixed by threading `limits: Limits = DEFAULT_LIMITS` through
+`ArtifactAdapter.render()` and every override down to the two render
+backends that actually have a timeout to govern: `render_timeout_seconds`
+for the Chromium-backed path (HTML/SVG) and `subprocess_timeout_seconds`
+for the LibreOffice-backed one (PPTX/DOCX/XLSX, via
+`rendering/office_convert.py::convert_to_pdf()`). PDF and Image accept the
+same `limits` parameter for interface consistency (every `render()`
+override shares one real signature) but ignore it — neither backend
+(pypdfium2, Pillow) has a timeout-governed step to control.
 
 ## Network policy
 

@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from artifact_skill.policies import PRESETS, resolve_policy
+from artifact_skill.adapters.registry import all_adapter_classes
+from artifact_skill.policies import PRESETS, known_policy_keys, resolve_policy, unknown_policy_keys
 
 
 def test_every_preset_is_a_plain_dict():
@@ -90,3 +91,51 @@ def test_spreadsheet_preset_is_named_for_what_it_actually_promises():
     assert "spreadsheet-no-errors" not in PRESETS
     p = PRESETS["spreadsheet-no-cached-errors"]
     assert p["forbid_external_links"] is True
+
+
+# --- unknown/misspelled policy keys are rejected, not silently ignored -----
+# (Issue #24: policy.get("min_pagess") used to just look like "not specified"
+# and quietly PASS instead of erroring on the caller's typo.)
+
+
+def test_a_misspelled_policy_key_is_rejected():
+    with pytest.raises(KeyError) as exc_info:
+        resolve_policy(None, {"min_pagess": 1})
+    assert "min_pagess" in str(exc_info.value)
+
+
+def test_a_real_key_from_one_adapter_is_accepted_even_alone():
+    # min_pages is a PDF-only key; nothing else about the call says "PDF" -
+    # resolve_policy() has no artifact type to check against, only whether
+    # the key is real *somewhere*, so this must not raise.
+    assert resolve_policy(None, {"min_pages": 2}) == {"min_pages": 2}
+
+
+def test_every_named_preset_only_uses_real_policy_keys():
+    for name in PRESETS:
+        assert unknown_policy_keys(PRESETS[name]) == [], f"preset '{name}' references an unrecognized policy key"
+
+
+def test_a_key_valid_for_a_different_adapter_is_not_flagged_as_unknown():
+    """The documented cross-adapter-reuse case (policies.py's module
+    docstring): web-no-external's require_title is real (HTML), just inert
+    when applied to SVG - resolve_policy() must not reject it, only a key
+    that's not real for ANY adapter."""
+    result = resolve_policy("web-no-external", None)
+    assert unknown_policy_keys(result) == []
+
+
+def test_multiple_unknown_keys_are_all_named_in_the_error():
+    with pytest.raises(KeyError) as exc_info:
+        resolve_policy(None, {"min_pagess": 1, "totally_made_up": True})
+    message = str(exc_info.value)
+    assert "min_pagess" in message
+    assert "totally_made_up" in message
+
+
+def test_known_policy_keys_is_the_union_across_every_registered_adapter():
+    expected: set[str] = set()
+    for adapter_cls in all_adapter_classes():
+        expected |= adapter_cls().recognized_policy_keys()
+    assert known_policy_keys() == frozenset(expected)
+    assert "forbid_placeholder_text" in known_policy_keys()  # sanity: a real, widely-shared key is present

@@ -1,4 +1,4 @@
-# artifact-skill
+# artifacts-skill
 
 **A local-first verification and evidence-generation engine for
 AI-generated documents.**
@@ -6,7 +6,7 @@ AI-generated documents.**
 Your agent can already generate a PDF. It cannot tell you whether that PDF
 is actually correct — right page count, right page size, not encrypted,
 no leftover placeholder text, text that's actually extractable, and a
-rendering that looks right when you open it. `artifact-skill` closes that
+rendering that looks right when you open it. `artifacts-skill` closes that
 gap: **inspect → plan → execute → render → structural verify → visual
 verify → receipt**, run locally, with no cloud account and no API key.
 
@@ -18,7 +18,7 @@ document-generation or full-editing tool, and isn't trying to be one. See
 this project deliberately doesn't do.
 
 ```
-Input                     artifact-skill                    Output
+Input                     artifacts-skill                    Output
 proposal.pdf   -->   inspect -> plan -> execute   -->   proposal_final.pdf
                           |                    |
                         render               verify
@@ -44,16 +44,16 @@ Not yet published to PyPI/npm (tracked in Issue #9) — for now, clone and
 install locally (see **Install** below), then:
 
 ```bash
-artifact-skill doctor                     # what's available locally
-artifact-skill inspect report.pdf --json  # what is this file, really
-artifact-skill receipt report.pdf \
+artifacts-skill doctor                     # what's available locally
+artifacts-skill inspect report.pdf --json  # what is this file, really
+artifacts-skill receipt report.pdf \
   --operation metadata_set --args '{"title":"Q3 Report"}'
 ```
 
 The last command runs the full lifecycle and writes
 `reports/receipt.json` plus `reports/rendered/*.png` — the evidence, not
 just a claim. Once published, the same commands work as
-`npx artifact-skill ...` with no local install at all.
+`npx artifacts-skill ...` with no local install at all.
 
 ## What's implemented today
 
@@ -88,7 +88,7 @@ the Core/Adapter split makes adding a format additive, not a rewrite.
 - **Brain/Hands split.** This engine renders and structurally checks; it
   never decides whether a design "looks good." Visual evidence is produced
   for the agent (or a human) to actually look at and judge.
-- **Contract-first.** `artifact-skill contract --json` is the single
+- **Contract-first.** `artifacts-skill contract --json` is the single
   source of truth. The MCP server (`python -m artifact_skill.mcp.server`)
   builds its `tools/list` (including every `inputSchema`) directly from
   it at runtime. The CLI is hand-written, not generated from the same
@@ -100,17 +100,11 @@ the Core/Adapter split makes adding a format additive, not a rewrite.
 
 ## Install
 
-> **Note:** the GitHub repo is named `artifacts-skill` (plural) but the
-> package/CLI/binary is `artifact-skill` (singular) — a naming mismatch
-> tracked in Issue #22, not yet resolved. Once published (Issue #9),
-> `pip install artifact-skill`/`npx artifact-skill` will use the singular
-> name even though you cloned the plural repo below.
-
 ```bash
 git clone https://github.com/kajisho5/artifacts-skill
 cd artifacts-skill
 pip install -e ".[all]"   # every adapter (PDF/PPTX/DOCX/XLSX/Image/HTML/SVG)
-artifact-skill doctor
+artifacts-skill doctor
 ```
 
 Only need a subset? Install just what you use instead — `pip install -e
@@ -118,10 +112,10 @@ Only need a subset? Install just what you use instead — `pip install -e
 etc. (see `pyproject.toml`'s `[project.optional-dependencies]` for the
 full list). PPTX/DOCX/XLSX also need a `soffice`/`libreoffice` binary on
 `PATH` for rendering; HTML/SVG need `playwright install chromium` once
-after installing the `html`/`svg` extra. Run `artifact-skill doctor` to
+after installing the `html`/`svg` extra. Run `artifacts-skill doctor` to
 see exactly what's available and what's still missing — never assume.
 
-Or, once published: `npx artifact-skill doctor` (the npm package is a thin
+Or, once published: `npx artifacts-skill doctor` (the npm package is a thin
 wrapper that locates your Python 3 interpreter — the engine itself is
 Python, see `docs/architecture.md` for why).
 
@@ -137,7 +131,7 @@ operations, and how to read a `PASS`/`WARN`/`FAIL` result.
 python -m artifact_skill.mcp.server
 ```
 
-Exposes the same nine tools (`artifact-skill.inspect`, `.plan`, `.execute`,
+Exposes the same nine tools (`artifacts-skill.inspect`, `.plan`, `.execute`,
 `.render`, `.verify`, `.look`, `.receipt`, `.doctor`, `.contract`) over
 stdio, schema-identical to the CLI. Implements the legacy,
 `initialize`-handshake-based MCP protocol (`2024-11-05` through

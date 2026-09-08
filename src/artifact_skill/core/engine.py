@@ -29,6 +29,7 @@ from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactError, A
 from artifact_skill.core.operation import OperationPlan, OperationRecord
 from artifact_skill.core.schema_validate import validate_against_schema
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
+from artifact_skill.policies import unknown_policy_keys
 from artifact_skill.receipt.model import ProductionReceipt, ReceiptBuilder
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 
@@ -70,7 +71,7 @@ def _validate_operation_args(adapter: ArtifactAdapter, operation: str, args: dic
             code="ARTIFACT_INVALID_ARGS",
             message=f"Arguments for '{adapter.id}.{operation}' do not match its declared schema: "
             f"{'; '.join(errors)}",
-            remediation="Check `artifact-skill contract --json` for the expected shape of --args.",
+            remediation="Check `artifacts-skill contract --json` for the expected shape of --args.",
             evidence={"operation": f"{adapter.id}.{operation}", "errors": errors, "args": args},
         )
 
@@ -89,6 +90,15 @@ def run_lifecycle(
     limits: Limits = DEFAULT_LIMITS,
 ) -> LifecycleResult:
     policy = policy or {}
+    bad_keys = unknown_policy_keys(policy)
+    if bad_keys:
+        raise ArtifactInputError(
+            code="ARTIFACT_INVALID_ARGS",
+            message=f"Unknown policy key(s): {bad_keys}. No adapter recognizes "
+            f"{'this key' if len(bad_keys) == 1 else 'these keys'} — check for a typo.",
+            remediation="Run `artifacts-skill contract --json` or see docs/verification.md for valid policy keys.",
+            evidence={"unknown_keys": bad_keys},
+        )
     # None means "use the real default", not "run the fix loop once and stop" -
     # a bare int default here previously meant every caller that didn't pass
     # max_iterations explicitly silently disabled the fix loop entirely
@@ -107,7 +117,8 @@ def run_lifecycle(
         # all, rather than an agent hand-assembling one from separate
         # inspect/render/verify calls.
         return _run_verify_only_lifecycle(
-            input_path, policy=policy, evidence_dir=evidence_dir, dry_run=dry_run, capability_report=capability_report
+            input_path, policy=policy, evidence_dir=evidence_dir, dry_run=dry_run,
+            capability_report=capability_report, limits=limits,
         )
 
     if output_path is None:
@@ -133,7 +144,7 @@ def run_lifecycle(
             raise ArtifactCapabilityError(
                 code="ARTIFACT_CAPABILITY_MISSING",
                 message=f"Operation '{operation}' requires capability '{cap_id}' which is {cap.status.value}.",
-                remediation="Run `artifact-skill doctor --json` for install guidance.",
+                remediation="Run `artifacts-skill doctor --json` for install guidance.",
                 evidence={"capability_id": cap_id, "status": cap.status.value},
             )
 
@@ -180,6 +191,7 @@ def run_lifecycle(
         visual, rendered = _visual_evidence_result(
             adapter=adapter, ref=output_ref, evidence_dir=evidence_dir,
             capability_report=capability_report, spec_render_required=bool(spec and spec.render_required),
+            limits=limits,
         )
         if rendered is not None:
             render_result = rendered
@@ -244,6 +256,7 @@ def _run_verify_only_lifecycle(
     evidence_dir: Path,
     dry_run: bool,
     capability_report: CapabilityReport | None,
+    limits: Limits = DEFAULT_LIMITS,
 ) -> LifecycleResult:
     ref = ArtifactRef.from_path(input_path)
     adapter = adapter_for(ref)
@@ -279,7 +292,7 @@ def _run_verify_only_lifecycle(
     # geometry). A missing render capability reports SKIPPED, not UNKNOWN.
     visual, rendered = _visual_evidence_result(
         adapter=adapter, ref=ref, evidence_dir=evidence_dir,
-        capability_report=capability_report, spec_render_required=False,
+        capability_report=capability_report, spec_render_required=False, limits=limits,
     )
     structural = adapter.refine_structural_with_render(structural, rendered)
     builder.set_structural(structural)
@@ -302,6 +315,7 @@ def _visual_evidence_result(
     evidence_dir: Path,
     capability_report: CapabilityReport,
     spec_render_required: bool,
+    limits: Limits = DEFAULT_LIMITS,
 ) -> tuple[VerificationResult, RenderResult | None]:
     """Returns the visual VerificationResult plus the real RenderResult (or
     None if nothing was rendered) — the caller must use the latter's own
@@ -331,7 +345,7 @@ def _visual_evidence_result(
             None,
         )
     try:
-        rendered = adapter.render(ref, evidence_dir / "rendered")
+        rendered = adapter.render(ref, evidence_dir / "rendered", limits=limits)
     except ArtifactError as exc:
         return (
             VerificationResult(

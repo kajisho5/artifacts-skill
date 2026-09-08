@@ -44,6 +44,7 @@ from artifact_skill.core.verification import Check, CheckStatus, VerificationRes
 from artifact_skill.leftover_text import find_leftover_markers
 from artifact_skill.rendering.office_convert import convert_to_pdf, soffice_binary
 from artifact_skill.rendering.pdf_pages import render_pdf_pages
+from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import atomic_copy, check_input_size
 
 
@@ -56,7 +57,7 @@ def _require_docx():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="python-docx is not installed; DOCX structural read/write is unavailable.",
-            remediation="Install with: pip install 'artifact-skill[docx]' (or `pip install python-docx`).",
+            remediation="Install with: pip install 'artifacts-skill[docx]' (or `pip install python-docx`).",
             evidence={"capability_id": "docx.structural"},
         )
     import docx
@@ -148,6 +149,12 @@ class DocxAdapter(ArtifactAdapter):
             "Rendering depends on an external LibreOffice install; a present binary does not guarantee "
             "a specific document converts successfully.",
         ]
+
+    def recognized_policy_keys(self) -> frozenset[str]:
+        return frozenset({
+            "require_paragraph_count", "min_paragraphs", "max_paragraphs", "forbid_placeholder_text",
+            "require_metadata",
+        })
 
     # ---- inspect ---------------------------------------------------
 
@@ -273,9 +280,9 @@ class DocxAdapter(ArtifactAdapter):
 
     # ---- render ----------------------------------------------------
 
-    def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
-        with tempfile.TemporaryDirectory(prefix="artifact-skill-docx-render-") as tmp:
-            pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf")
+    def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
+        with tempfile.TemporaryDirectory(prefix="artifacts-skill-docx-render-") as tmp:
+            pdf_path = convert_to_pdf(ref.path, Path(tmp) / "pdf", limits=limits)
             return render_pdf_pages(pdf_path, out_dir)
 
     # ---- verify ------------------------------------------------------

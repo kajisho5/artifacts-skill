@@ -172,13 +172,13 @@ as broken," just not via a `Check`.
 **Ecosystem integration.** `examples/standalone_contract_consumer.py` is
 the dogfood proof the issue asked for: a script that imports nothing from
 `artifact_skill` and *discovers* which tool to call from
-`artifact-skill contract --json`'s own declared semantics
+`artifacts-skill contract --json`'s own declared semantics
 (`side_effects.mutates_input`/`writes_files`, `input_schema`) rather than
 hardcoding a tool name — proving an external, unfamiliar orchestrator
 (spec §40's "AI-video-production-OS" framing) really could drive this
 tool from the contract alone. Exercised on every CI run via
 `tests/integration/test_ecosystem_contract_consumer.py`, not just run
-once by hand. The finer-grained `artifact-skill.<format>.<capability>`
+once by hand. The finer-grained `artifacts-skill.<format>.<capability>`
 lookup convention `docs/contract.md` mentions was deliberately left
 unbuilt — nothing outside this repo consumes it yet, and speculatively
 building it now would be exactly the kind of premature abstraction
@@ -209,7 +209,7 @@ genuinely unverifiable without a real macOS/Windows run:
   behaves identically regardless of platform); `doctor/detect.py` and
   `rendering/office_convert.py` (both `shutil.which`-based, which already
   handles `PATHEXT` resolution on Windows); the npm wrapper
-  (`bin/artifact-skill.js`, which falls back through `artifact-skill` →
+  (`bin/artifacts-skill.js`, which falls back through `artifacts-skill` →
   `python3 -m` → `python -m`, using Node's own cross-platform
   `path.delimiter` for `PYTHONPATH`).
 - **Not verified, and said so rather than assumed**: the npm wrapper

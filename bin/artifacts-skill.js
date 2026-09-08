@@ -18,21 +18,21 @@ function run(cmd, cmdArgs, env) {
   return result.status;
 }
 
-// 1. Prefer an already-installed `artifact-skill` console script (pip install
+// 1. Prefer an already-installed `artifacts-skill` console script (pip install
 //    put it on PATH — this is the common case once the user has run pip
 //    install once, and avoids re-resolving the Python package path).
 //
 // Guarded by a re-entry env var: right after `npm install -g`/`npx`, PATH's
-// "artifact-skill" can resolve back to THIS SAME SCRIPT (npm's own bin shim
+// "artifacts-skill" can resolve back to THIS SAME SCRIPT (npm's own bin shim
 // for this package) rather than a real pip-installed console script — with
 // no pip install done yet (exactly the "try npx first" scenario this step
-// exists for), spawning "artifact-skill" would recurse into this file again
+// exists for), spawning "artifacts-skill" would recurse into this file again
 // forever instead of ever reaching the Python fallback below. The env var
 // lets a recursive invocation of this same script detect that it's already
 // inside this wrapper and skip straight to step 2.
-if (!process.env.__ARTIFACT_SKILL_JS_REENTRY) {
-  const childEnv = Object.assign({}, process.env, { __ARTIFACT_SKILL_JS_REENTRY: "1" });
-  let status = run("artifact-skill", args, childEnv);
+if (!process.env.__ARTIFACTS_SKILL_JS_REENTRY) {
+  const childEnv = Object.assign({}, process.env, { __ARTIFACTS_SKILL_JS_REENTRY: "1" });
+  let status = run("artifacts-skill", args, childEnv);
   if (status !== null) process.exit(status);
 }
 
@@ -48,7 +48,7 @@ for (const py of ["python3", "python"]) {
 }
 
 console.error(
-  "artifact-skill: no working Python 3 interpreter found on PATH.\n" +
+  "artifacts-skill: no working Python 3 interpreter found on PATH.\n" +
     "Install Python 3.10+ and its extras, then re-run:\n" +
     `  pip install -e "${pkgRoot}[all]"`
 );

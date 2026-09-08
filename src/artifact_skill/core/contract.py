@@ -411,12 +411,12 @@ def get_tool(name: str) -> ToolContract | None:
 def build_contract() -> dict[str, Any]:
     return {
         "schema": CONTRACT_SCHEMA,
-        "tool_name": "artifact-skill",
+        "tool_name": "artifacts-skill",
         "tool_version": __version__,
         "description": "Local-first execution and verification engine for AI-generated artifacts: "
         "inspect -> plan -> execute -> render -> structural verify -> visual verify -> fix -> "
         "re-verify -> receipt.",
-        "capability_id_prefix": "artifact-skill",
+        "capability_id_prefix": "artifacts-skill",
         "tools": [t.to_dict() for t in TOOLS],
         "exit_codes": {
             "ok": EXIT_OK,

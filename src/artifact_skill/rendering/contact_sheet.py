@@ -25,7 +25,7 @@ def _require_pillow():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="Pillow is not installed; contact sheet assembly is unavailable.",
-            remediation="Install with: pip install 'artifact-skill[pdf]' (or `pip install Pillow`).",
+            remediation="Install with: pip install 'artifacts-skill[pdf]' (or `pip install Pillow`).",
             evidence={"capability_id": "rendering.pillow"},
         ) from exc
     return Image, ImageDraw

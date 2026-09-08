@@ -23,6 +23,20 @@ the phase named) instead of a generic "unsupported type" — a caller and an
 agent reading the error can tell "we haven't built this yet" apart from
 "this isn't a real artifact type."
 
+**`ArtifactType.OLE_COMPOUND_FILE` (Issue #27)** is a third case, distinct
+from both of the above: `core/artifact.py::detect_type()` recognizes the
+fixed CFB/OLE2 container signature (`D0 CF 11 E0 A1 B1 1A E1`) that a
+password-protected Office 2007+ file (.pptx/.docx/.xlsx saved with
+encryption isn't a zip at all — Office wraps the whole encrypted package
+in a CFB envelope) and a legacy pre-2007 binary Office file (.doc/.ppt/.xls)
+both use. There is no adapter and none is planned — this project has no
+CFB/OLE2 parser and isn't adding one just to report "this is encrypted."
+`get_adapter()` raises `ARTIFACT_OLE_COMPOUND_FILE_UNSUPPORTED` with a
+remediation naming both likely causes, instead of collapsing this into the
+same generic `ARTIFACT_TYPE_UNSUPPORTED` a file matching no known format
+signature at all gets — a real .pptx that's simply password-protected
+deserves a more specific answer than "unrecognized file."
+
 ## Implemented: PDF (`adapters/pdf/adapter.py`)
 
 - **Backends**: `pypdf` (structural read/write/merge, BSD-3) + `pypdfium2`

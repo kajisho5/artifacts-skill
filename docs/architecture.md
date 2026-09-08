@@ -2,7 +2,7 @@
 
 ## What this is (and isn't)
 
-`artifact-skill` is not a document generator, not a video editor's cousin,
+`artifacts-skill` is not a document generator, not a video editor's cousin,
 and not a wrapper around one Office format. It is an **execution and
 verification engine**: given an artifact (a file that claims to be a
 PDF/DOCX/PPTX/XLSX/HTML/SVG/image) and a request, it inspects what the file

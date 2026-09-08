@@ -22,7 +22,7 @@ def require_pypdfium2():
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="pypdfium2 is not installed; PDF page rendering is unavailable.",
-            remediation="Install with: pip install 'artifact-skill[pdf]' (or `pip install pypdfium2`).",
+            remediation="Install with: pip install 'artifacts-skill[pdf]' (or `pip install pypdfium2`).",
             evidence={"capability_id": "pdf.render"},
         )
     import pypdfium2
@@ -42,7 +42,7 @@ def render_pdf_pages(pdf_path: Path, out_dir: Path, dpi: int = 150) -> RenderRes
         raise ArtifactCapabilityError(
             code="ARTIFACT_CAPABILITY_MISSING",
             message="pypdf is not installed; cannot pre-check the PDF before rendering.",
-            remediation="Install with: pip install 'artifact-skill[pdf]'.",
+            remediation="Install with: pip install 'artifacts-skill[pdf]'.",
             evidence={"capability_id": "pdf.structural"},
         )
     import pypdf
