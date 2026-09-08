@@ -180,9 +180,18 @@ def _h_execute(args: dict[str, Any]) -> dict[str, Any]:
     output_path = Path(args["output"]) if args.get("output") else default_output_path(input_path, operation)
     evidence_dir = output_path.parent / "reports"
     policy = _resolve_policy_arg(args)
+    # FIX_PROMPT P2-4: the contract advertises dry_run_supported=true for
+    # this tool, but until this fix the MCP input_schema had no "dry_run"
+    # property at all (additionalProperties: false meant a caller passing
+    # one got ARTIFACT_INVALID_ARGS, not a silent ignore) - mirrors
+    # cli/main.py::_cmd_execute's identical dry_run handling.
+    dry_run = bool(args.get("dry_run"))
     result = run_lifecycle(
-        input_path, operation, args.get("args", {}), output_path, policy=policy, evidence_dir=evidence_dir
+        input_path, operation, args.get("args", {}), output_path,
+        policy=policy, evidence_dir=evidence_dir, dry_run=dry_run,
     )
+    if dry_run:
+        return {"dry_run": True, "plan": result.plan.to_dict()}
     return {
         "output": result.output.to_dict() if result.output else None,
         "receipt": result.receipt.to_dict() if result.receipt else None,
@@ -193,6 +202,10 @@ def _h_render(args: dict[str, Any]) -> dict[str, Any]:
     ref = ArtifactRef.from_path(args["input"])
     adapter = adapter_for(ref)
     out_dir = Path(args["out_dir"]) if args.get("out_dir") else Path("reports") / "rendered"
+    if args.get("dry_run"):
+        report = adapter.inspect(ref)
+        page_count = report.details.get("page_count", "unknown")
+        return {"dry_run": True, "would_render_to": str(out_dir), "estimated_files": page_count}
     return adapter.render(ref, out_dir).to_dict()
 
 
@@ -207,6 +220,8 @@ def _h_look(args: dict[str, Any]) -> dict[str, Any]:
     ref = ArtifactRef.from_path(args["input"])
     adapter = adapter_for(ref)
     out_dir = Path(args["out_dir"]) if args.get("out_dir") else Path("reports")
+    if args.get("dry_run"):
+        return {"dry_run": True, "would_write_to": str(out_dir / "contact-sheet.png")}
     rendered = adapter.render(ref, out_dir / "rendered")
     if args.get("compare_to"):
         other_ref = ArtifactRef.from_path(args["compare_to"])
@@ -232,11 +247,14 @@ def _h_receipt(args: dict[str, Any]) -> dict[str, Any]:
         output_path = Path(args["output"]) if args.get("output") else default_output_path(input_path, operation)
     evidence_dir = Path(args.get("evidence_dir", "reports"))
     policy = _resolve_policy_arg(args)
+    dry_run = bool(args.get("dry_run"))
     result = run_lifecycle(
         input_path, operation, args.get("args", {}), output_path,
-        policy=policy, evidence_dir=evidence_dir,
+        policy=policy, evidence_dir=evidence_dir, dry_run=dry_run,
         max_iterations=args.get("max_iterations"),
     )
+    if dry_run:
+        return {"dry_run": True, "plan": result.plan.to_dict()}
     return result.receipt.to_dict() if result.receipt else {"status": "fail", "error": "execution did not complete"}
 
 

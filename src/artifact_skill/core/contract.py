@@ -246,6 +246,13 @@ TOOLS: list[ToolContract] = [
                     "description": "Named starting policy from policies.py (e.g. \"print-a4\", "
                     "\"web-no-external\"); 'policy' fields override it on conflict. See docs/verification.md.",
                 },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "Run the identical plan/validation path but perform no I/O and spawn "
+                    "no subprocess (FIX_PROMPT P2-4: dry_run_supported=true means this MCP tool actually "
+                    "accepts this field, not just the CLI's --dry-run). Returns the operation plan instead "
+                    "of a real output/receipt.",
+                },
             },
             "required": ["input", "operation"],
             "additionalProperties": False,
@@ -274,7 +281,15 @@ TOOLS: list[ToolContract] = [
         "output directory.",
         input_schema={
             "type": "object",
-            "properties": {**_INPUT_PATH_PROPERTY, "out_dir": {"type": "string"}},
+            "properties": {
+                **_INPUT_PATH_PROPERTY,
+                "out_dir": {"type": "string"},
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "Report where output would be written and an estimated file count "
+                    "without actually rendering (FIX_PROMPT P2-4).",
+                },
+            },
             "required": ["input"],
             "additionalProperties": False,
         },
@@ -338,6 +353,11 @@ TOOLS: list[ToolContract] = [
                 **_INPUT_PATH_PROPERTY,
                 "compare_to": {"type": "string"},
                 "out_dir": {"type": "string"},
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "Report where the contact sheet would be written without actually "
+                    "rendering (FIX_PROMPT P2-4).",
+                },
             },
             "required": ["input"],
             "additionalProperties": False,
@@ -379,6 +399,11 @@ TOOLS: list[ToolContract] = [
                     "description": "Fix-loop retry cap. Default (when omitted): Limits.max_fix_iterations "
                     "(currently 3) - omitting this does NOT mean 'don't retry.' Meaningless without "
                     "'operation' (there is no fix loop for a verify-only receipt).",
+                },
+                "dry_run": {
+                    "type": "boolean",
+                    "description": "Run the identical plan/validation path but perform no I/O and spawn "
+                    "no subprocess (FIX_PROMPT P2-4). Returns the operation plan instead of a real receipt.",
                 },
             },
             "required": ["input"],

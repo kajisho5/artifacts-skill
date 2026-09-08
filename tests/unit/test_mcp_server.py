@@ -79,6 +79,62 @@ def test_execute_rejects_operation_args_that_violate_operation_schema(good_pdf, 
     assert payload["error"]["code"] == "ARTIFACT_INVALID_ARGS"
 
 
+# --- dry_run parity with the CLI (FIX_PROMPT P2-4) -------------------------
+#
+# The contract advertises dry_run_supported=true for execute/render/look/
+# receipt, but until this fix the MCP input_schema had no "dry_run"
+# property at all - a caller passing one got ARTIFACT_INVALID_ARGS
+# (additionalProperties: false), not a silent ignore, confirmed by direct
+# reproduction before this fix.
+
+
+def test_execute_dry_run_is_accepted_and_performs_no_mutation(good_pdf, tmp_path):
+    out = tmp_path / "out.pdf"
+    result = call_tool(
+        f"{CAPABILITY_PREFIX}.execute",
+        {"input": str(good_pdf), "operation": "metadata_set", "args": {"title": "x"}, "output": str(out), "dry_run": True},
+    )
+    assert result["isError"] is False
+    payload = json.loads(result["content"][0]["text"])
+    assert payload["dry_run"] is True
+    assert "plan" in payload
+    assert not out.exists()
+
+
+def test_render_dry_run_is_accepted_and_performs_no_render(good_pdf, tmp_path):
+    out_dir = tmp_path / "rendered"
+    result = call_tool(
+        f"{CAPABILITY_PREFIX}.render", {"input": str(good_pdf), "out_dir": str(out_dir), "dry_run": True}
+    )
+    assert result["isError"] is False
+    payload = json.loads(result["content"][0]["text"])
+    assert payload["dry_run"] is True
+    assert payload["would_render_to"] == str(out_dir)
+    assert not out_dir.exists()
+
+
+def test_look_dry_run_is_accepted_and_performs_no_render(good_pdf, tmp_path):
+    out_dir = tmp_path / "look_out"
+    result = call_tool(f"{CAPABILITY_PREFIX}.look", {"input": str(good_pdf), "out_dir": str(out_dir), "dry_run": True})
+    assert result["isError"] is False
+    payload = json.loads(result["content"][0]["text"])
+    assert payload["dry_run"] is True
+    assert not out_dir.exists()
+
+
+def test_receipt_dry_run_is_accepted_and_performs_no_mutation(good_pdf, tmp_path):
+    out = tmp_path / "out.pdf"
+    result = call_tool(
+        f"{CAPABILITY_PREFIX}.receipt",
+        {"input": str(good_pdf), "operation": "metadata_set", "args": {"title": "x"}, "output": str(out), "dry_run": True},
+    )
+    assert result["isError"] is False
+    payload = json.loads(result["content"][0]["text"])
+    assert payload["dry_run"] is True
+    assert "plan" in payload
+    assert not out.exists()
+
+
 # --- protocol version negotiation (Issue #12) -----------------------------
 
 
