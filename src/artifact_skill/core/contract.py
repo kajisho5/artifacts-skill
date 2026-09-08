@@ -63,6 +63,26 @@ _ARTIFACT_REF_SCHEMA = {
     },
 }
 
+
+def _registered_type_values() -> list[str]:
+    """Which artifact types currently have a real adapter registered.
+
+    Computed from `adapters/registry.py` rather than hand-maintained here,
+    specifically so a new adapter landing (see docs/roadmap.md) can't leave
+    the contract silently out of date the way a hardcoded `["pdf"]` list
+    would — this bit Core once already during PPTX's own rollout.
+    """
+    from artifact_skill.adapters.registry import registered_types
+
+    return sorted(t.value for t in registered_types())
+
+
+def _capability_ids(suffix: str) -> list[str]:
+    """e.g. suffix='structural' -> ['pdf.structural', 'pptx.structural', ...]
+    across every currently-registered artifact type."""
+    return [f"{t}.{suffix}" for t in _registered_type_values()]
+
+
 _INPUT_PATH_PROPERTY = {"input": {"type": "string", "description": "Path to the input artifact."}}
 
 TOOLS: list[ToolContract] = [
@@ -112,8 +132,8 @@ TOOLS: list[ToolContract] = [
             "additionalProperties": False,
         },
         output_schema={"type": "object", "properties": {"artifact": _ARTIFACT_REF_SCHEMA, "details": {"type": "object"}}},
-        artifact_types=["pdf"],
-        capabilities=["pdf.structural"],
+        artifact_types=_registered_type_values(),
+        capabilities=_capability_ids("structural"),
         mutates_input=False,
         side_effects=False,
         dry_run_supported=True,
@@ -139,8 +159,8 @@ TOOLS: list[ToolContract] = [
             "additionalProperties": False,
         },
         output_schema={"type": "object", "properties": {"operation": {"type": "string"}, "risks": {"type": "array"}}},
-        artifact_types=["pdf"],
-        capabilities=["pdf.structural"],
+        artifact_types=_registered_type_values(),
+        capabilities=_capability_ids("structural"),
         mutates_input=False,
         side_effects=False,
         dry_run_supported=True,
@@ -166,8 +186,8 @@ TOOLS: list[ToolContract] = [
             "additionalProperties": False,
         },
         output_schema={"type": "object", "properties": {"output": _ARTIFACT_REF_SCHEMA, "operation": {"type": "object"}}},
-        artifact_types=["pdf"],
-        capabilities=["pdf.structural"],
+        artifact_types=_registered_type_values(),
+        capabilities=_capability_ids("structural"),
         mutates_input=False,
         side_effects=True,
         dry_run_supported=True,
@@ -193,8 +213,8 @@ TOOLS: list[ToolContract] = [
             "additionalProperties": False,
         },
         output_schema={"type": "object", "properties": {"files": {"type": "array"}, "backend": {"type": "string"}}},
-        artifact_types=["pdf"],
-        capabilities=["pdf.render"],
+        artifact_types=_registered_type_values(),
+        capabilities=_capability_ids("render"),
         mutates_input=False,
         side_effects=True,
         dry_run_supported=True,
@@ -217,8 +237,8 @@ TOOLS: list[ToolContract] = [
             "additionalProperties": False,
         },
         output_schema={"type": "object", "properties": {"status": {"type": "string"}, "checks": {"type": "array"}}},
-        artifact_types=["pdf"],
-        capabilities=["pdf.structural"],
+        artifact_types=_registered_type_values(),
+        capabilities=_capability_ids("structural"),
         mutates_input=False,
         side_effects=False,
         dry_run_supported=True,
@@ -244,8 +264,8 @@ TOOLS: list[ToolContract] = [
             "additionalProperties": False,
         },
         output_schema={"type": "object", "properties": {"contact_sheet": {"type": "string"}}},
-        artifact_types=["pdf"],
-        capabilities=["pdf.render"],
+        artifact_types=_registered_type_values(),
+        capabilities=_capability_ids("render"),
         mutates_input=False,
         side_effects=True,
         dry_run_supported=True,
@@ -273,8 +293,8 @@ TOOLS: list[ToolContract] = [
             "additionalProperties": False,
         },
         output_schema={"type": "object", "properties": {"schema": {"type": "string"}, "status": {"type": "string"}}},
-        artifact_types=["pdf"],
-        capabilities=["pdf.structural"],
+        artifact_types=_registered_type_values(),
+        capabilities=_capability_ids("structural"),
         mutates_input=False,
         side_effects=True,
         dry_run_supported=True,

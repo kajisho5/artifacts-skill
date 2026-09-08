@@ -14,7 +14,6 @@ from artifact_skill.core.errors import ArtifactCapabilityError
 
 _REGISTRY: dict[ArtifactType, type[ArtifactAdapter]] = {}
 _PLANNED: dict[ArtifactType, str] = {
-    ArtifactType.PPTX: "Phase 2 (see docs/roadmap.md)",
     ArtifactType.DOCX: "Phase 3 (see docs/roadmap.md)",
     ArtifactType.XLSX: "Phase 3 (see docs/roadmap.md)",
     ArtifactType.HTML: "Phase 6 (see docs/roadmap.md)",
@@ -61,8 +60,10 @@ def adapter_for(ref: ArtifactRef) -> ArtifactAdapter:
 
 def _register_builtin_adapters() -> None:
     from artifact_skill.adapters.pdf.adapter import PdfAdapter
+    from artifact_skill.adapters.pptx.adapter import PptxAdapter
 
     register(PdfAdapter)
+    register(PptxAdapter)
 
 
 _register_builtin_adapters()

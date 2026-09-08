@@ -1,9 +1,10 @@
 # Roadmap
 
-Phases per the original design brief. **Phase 0-1 and a working slice of
-Phase 2/4 (PDF end-to-end) are done as of this writing** — everything below
-"Now" is planned, not implemented, and nothing in this codebase claims
-otherwise (`doctor`/`registry.py` report unimplemented formats explicitly).
+Phases per the original design brief. **Phase 0-1, Phase 2 (PDF + PPTX),
+and a working slice of Phase 4/5 are done as of this writing** —
+everything below "Now" is planned, not implemented, and nothing in this
+codebase claims otherwise (`doctor`/`registry.py` report unimplemented
+formats explicitly).
 
 ## Done
 
@@ -11,24 +12,27 @@ otherwise (`doctor`/`registry.py` report unimplemented formats explicitly).
 - **Phase 1 — Core, CLI, contract, doctor, receipt, safe execution.**
   `core/`, `security/`, `cli/main.py`, `core/contract.py`,
   `doctor/detect.py`, `receipt/model.py`.
-- **Phase 2 (PDF slice) + Phase 4 (verification/rendering framework, PDF
-  only).** `adapters/pdf/adapter.py`: inspect, plan, execute
-  (`metadata_set`, `merge`), render, structural verify. The visual
-  "evidence vs. judgment" split from `docs/architecture.md` is implemented
-  and format-agnostic already — the next adapter gets it for free.
+- **Phase 2 (PDF) + Phase 4 (verification/rendering framework, PDF only).**
+  `adapters/pdf/adapter.py`: inspect, plan, execute (`metadata_set`,
+  `merge`), render, structural verify. The visual "evidence vs. judgment"
+  split from `docs/architecture.md` is implemented and format-agnostic
+  already.
+- **Phase 2 (PPTX).** `adapters/pptx/adapter.py`: inspect, plan, execute
+  (`metadata_set`), LibreOffice-backed render (reusing the PDF adapter's
+  page rasterizer via `rendering/pdf_pages.py`), structural verify. Proved
+  the "evidence vs. judgment" split and the shared PDF-rendering helper
+  both generalize cleanly to a second format with no Core changes — see
+  `docs/adapters.md`. Also surfaced a real environment gotcha (a
+  present-but-non-functional LibreOffice install) that shaped how
+  `pptx.render` failures are now reported; see that doc for the detail.
 - **Phase 5 (MCP) slice.** `mcp/server.py`, contract-derived `tools/list`,
-  9 tools, tested for CLI/MCP schema parity.
-
-PPTX from Phase 2 is not yet started — see "Now" below.
+  9 tools, tested for CLI/MCP schema parity. `core/contract.py`'s
+  `artifact_types`/`capabilities` per tool are now computed from the
+  adapter registry rather than hand-listed, so PPTX (and future formats)
+  appear in the contract automatically.
 
 ## Now / Next
 
-- **Phase 2 — PPTX.** `python-pptx` for structural inspect (slide count,
-  placeholder text detection, missing media, broken relationships) +
-  LibreOffice headless (already detected as `AVAILABLE` by `doctor` in this
-  dev environment) for `pptx -> pdf -> page PNG` rendering, reusing the PDF
-  adapter's render path where practical rather than reimplementing PNG
-  export.
 - **Phase 3 — DOCX, XLSX.** `python-docx` / `openpyxl` for structural
   inspect; LibreOffice headless for rendering. XLSX structural checks
   specifically need formula-error detection and recalculation-required

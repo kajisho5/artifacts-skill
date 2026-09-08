@@ -13,9 +13,9 @@ skill gives you a CLI (`artifact-skill`) that inspects, mutates safely,
 renders to images, and verifies — and it never just tells you "done"
 without evidence.
 
-**Currently implemented: PDF.** DOCX/PPTX/XLSX/HTML/SVG are designed for
-(see `docs/architecture.md`, `docs/roadmap.md`) but not yet built — running
-this skill against those formats returns a clear
+**Currently implemented: PDF and PPTX.** DOCX/XLSX/HTML/SVG are designed
+for (see `docs/architecture.md`, `docs/roadmap.md`) but not yet built —
+running this skill against those formats returns a clear
 `ARTIFACT_ADAPTER_NOT_IMPLEMENTED` error, never a silent no-op.
 
 ## The workflow
@@ -65,10 +65,15 @@ artifact-skill render report_artifact_metadata_set.pdf --out-dir reports/rendere
 artifact-skill verify report_artifact_metadata_set.pdf --policy '{"min_pages":1,"require_no_encryption":true}'
 artifact-skill look report.pdf --compare-to report_artifact_metadata_set.pdf   # before/after contact sheet
 artifact-skill receipt report.pdf --operation metadata_set --args '{"title":"Q3 Report"}'
+
+# Same lifecycle works on PPTX — same commands, same verbs:
+artifact-skill receipt deck.pptx --operation metadata_set --args '{"title":"Q3 Deck"}' \
+  --policy '{"require_slide_count":10,"max_empty_placeholders":0}'
 ```
 
 Supported PDF operations today: `metadata_set` (title/author/subject/keywords)
-and `merge` (append additional PDFs). Run
+and `merge` (append additional PDFs). Supported PPTX operations today:
+`metadata_set` (title/author/subject/keywords). Run
 `artifact-skill contract --json` for the exact, current, machine-readable
 schema of every command — treat it as the source of truth over this prose
 if they ever disagree.

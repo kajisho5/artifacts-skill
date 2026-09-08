@@ -34,8 +34,8 @@ follows is a guide to reading it, not a copy that can drift out of date.
   "description": "...",
   "input_schema": { "...": "JSON Schema" },
   "output_schema": { "...": "JSON Schema" },
-  "artifact_types": ["pdf"],
-  "capabilities": ["pdf.structural"],
+  "artifact_types": ["pdf", "pptx"],
+  "capabilities": ["pdf.structural", "pptx.structural"],
   "side_effects": {
     "mutates_input": false,
     "writes_files": true,
@@ -85,6 +85,12 @@ are the ids used in `required_capabilities` (plan/execute output),
 They are namespaced by format, not by tool — `pdf.structural` covers
 `inspect`, `verify`, `metadata_set`, and `merge` alike, because that is the
 actual dependency (pypdf), not an artificial per-tool split.
+
+`ToolContract.artifact_types` and `.capabilities` are computed at import
+time from `adapters/registry.py::registered_types()`, not hand-listed —
+see `core/contract.py::_registered_type_values()`. A new adapter landing
+(PPTX did, see `docs/roadmap.md`) automatically appears in every tool's
+contract entry without a second place to remember to update it.
 
 Per spec §40, the longer-term capability-id convention for cross-tool
 addressing (e.g. from an external orchestrator) is

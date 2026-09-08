@@ -41,6 +41,45 @@ agent reading the error can tell "we haven't built this yet" apart from
   encrypted PDFs are detected but not decrypted automatically; JavaScript
   is detected, not analyzed or executed.
 
+## Implemented: PPTX (`adapters/pptx/adapter.py`)
+
+- **Backends**: `python-pptx` (structural read/write, MIT, pure Python) +
+  LibreOffice headless (`soffice --convert-to pdf`) for rendering, reusing
+  the PDF adapter's `pypdfium2` page rasterizer via the shared
+  `rendering/pdf_pages.py` helper rather than a second PNG-export
+  implementation.
+- **Operations**: `metadata_set` (title/author/subject/keywords).
+- **Structural checks**: PPTX readability, slide count (+ optional exact/
+  range requirement), broken media references (unreadable image blobs),
+  leftover empty placeholders (heuristic, `WARN` by default — see
+  limitations), text presence, arbitrary metadata field matching, and
+  `chart_validity: UNKNOWN` when the deck contains a chart (`SKIPPED` when
+  it doesn't) — chart *presence* is detected, internal chart data
+  correctness is not.
+- **Render**: converts to PDF via LibreOffice headless through
+  `security/subprocess_exec.py` (argv-only, allowlisted `{soffice,
+  libreoffice}`, isolated per-call `UserInstallation` profile dir), then
+  rasterizes with the same code path as the PDF adapter.
+- **A real, load-bearing lesson from building this adapter**: `soffice`
+  being found on `PATH` does not guarantee it can convert a given document
+  — this project's own development sandbox has a LibreOffice install that
+  launches successfully but fails to load *any* input file
+  ("source file could not be loaded", exit 0, no output produced). Rather
+  than let that surface as a crash or a silently-empty render,
+  `PptxAdapter.render()` treats a missing output PDF as a hard failure and
+  raises `ARTIFACT_RENDER_BACKEND_FAILED` carrying soffice's actual stdout/
+  stderr in `evidence` — see the adapter module's docstring. `doctor` and
+  `capabilities()` still report `pptx.render` as `AVAILABLE` when the
+  binary is merely present on PATH (consistent with how `pdf.render`
+  reports on `pypdfium2` importing, not on every possible PDF rendering
+  correctly) — a present binary is a necessary, not sufficient, condition,
+  and the render-time error is where the gap actually gets caught.
+- **Known limitations** (surfaced via `adapter.limitations()`): chart
+  internal validity not checked; empty-placeholder detection is a
+  heuristic that can false-positive on intentionally blank section-header
+  slides; embedded font completeness not checked; rendering depends on an
+  external, sometimes-unreliable LibreOffice install.
+
 ## Planned, not implemented
 
 Registered in `_PLANNED` with the phase each is targeted for (see
@@ -48,7 +87,6 @@ Registered in `_PLANNED` with the phase each is targeted for (see
 
 | Type | Phase | Primary backend candidate |
 |---|---|---|
-| PPTX | 2 | `python-pptx` (structural) + LibreOffice headless (render) |
 | DOCX | 3 | `python-docx` (structural) + LibreOffice headless (render) |
 | XLSX | 3 | `openpyxl` (structural) + LibreOffice headless (render) |
 | HTML | 6 | Playwright/Chromium (already vendored in this dev environment) |

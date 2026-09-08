@@ -37,7 +37,12 @@ current PDF adapter, `verify_structural()` always includes a
 `font_embedding: UNKNOWN` check (font embedding completeness genuinely
 isn't checked yet) — and why that means **every** `artifact-skill verify`
 call on a real PDF today aggregates to `UNKNOWN` overall, not `PASS`, even
-when every other check passes.
+when every other check passes. The PPTX adapter has the same shape of
+check for a different gap: `chart_validity` is `UNKNOWN` on any deck that
+contains a chart (presence is detected, internal chart data correctness
+is not) and `SKIPPED` — not `PASS` — on a deck with no charts at all, so a
+chart-free deck's status is unaffected while a chart-bearing one honestly
+reflects the gap.
 
 This is intentional, not an oversight to "fix" by dropping the check. It is
 the direct, faithful expression of spec §43 ("Unknown is first-class") and

@@ -48,7 +48,8 @@ just a claim.
 | Format | Inspect | Structural verify | Render (visual evidence) | Mutating operations |
 |---|---|---|---|---|
 | PDF | ✅ | ✅ | ✅ (`pypdfium2`) | `metadata_set`, `merge` |
-| DOCX / PPTX / XLSX | planned | planned | planned | — |
+| PPTX | ✅ | ✅ | ✅ (LibreOffice + `pypdfium2`) | `metadata_set` |
+| DOCX / XLSX | planned | planned | planned | — |
 | HTML / SVG / Image | planned | planned | planned | — |
 
 Unimplemented formats fail loudly with `ARTIFACT_ADAPTER_NOT_IMPLEMENTED`

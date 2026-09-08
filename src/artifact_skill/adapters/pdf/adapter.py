@@ -20,6 +20,7 @@ from artifact_skill.core.capability import Capability, CapabilityStatus
 from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactExecutionError, ArtifactInputError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
+from artifact_skill.rendering.pdf_pages import render_pdf_pages
 from artifact_skill.security.paths import atomic_write_bytes, check_input_size
 
 _PT_PER_INCH = 72.0
@@ -332,34 +333,7 @@ class PdfAdapter(ArtifactAdapter):
     # ---- render ----------------------------------------------------
 
     def render(self, ref: ArtifactRef, out_dir: Path) -> RenderResult:
-        pdfium = _require_pypdfium2()
-        out_dir.mkdir(parents=True, exist_ok=True)
-
-        # A 0-page or encrypted PDF is valid input but pdfium itself refuses
-        # to load it at all (rather than loading with 0 usable pages), so
-        # check via the already-robust pypdf-based inspect() first instead
-        # of letting pdfium's own exception type leak out of this adapter.
-        report = self.inspect(ref)
-        if report.details["is_encrypted"]:
-            return RenderResult(
-                kind="page_images", files=[], backend="pypdfium2",
-                warnings=["Document is encrypted; rendering was skipped."],
-            )
-        if report.details["page_count"] == 0:
-            return RenderResult(kind="page_images", files=[], backend="pypdfium2", warnings=["0 pages to render."])
-
-        doc = pdfium.PdfDocument(str(ref.path))
-        try:
-            files: list[Path] = []
-            for i, page in enumerate(doc):
-                bitmap = page.render(scale=150 / 72)  # 150 DPI
-                pil_image = bitmap.to_pil()
-                out_path = out_dir / f"page-{i + 1:03d}.png"
-                pil_image.save(out_path)
-                files.append(out_path)
-            return RenderResult(kind="page_images", files=files, backend="pypdfium2")
-        finally:
-            doc.close()
+        return render_pdf_pages(ref.path, out_dir)
 
     # ---- verify ------------------------------------------------------
 
