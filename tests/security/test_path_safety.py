@@ -89,3 +89,36 @@ def test_check_input_size_rejects_oversized_file(tmp_path):
     with pytest.raises(ArtifactSecurityError) as exc_info:
         check_input_size(big, limits=Limits(max_input_bytes=100))
     assert exc_info.value.code == "ARTIFACT_INPUT_TOO_LARGE"
+
+
+def test_artifact_ref_from_path_checks_size_before_hashing(tmp_path, monkeypatch):
+    """Grok-review finding, verified by direct reproduction before this
+    fix: ArtifactRef.from_path() called sha256_of() (a full streaming
+    read of the entire file) unconditionally, with no size check
+    anywhere in the call chain - a maliciously huge input paid the full
+    hashing cost before any size-based rejection could happen. Proven
+    here by spying on sha256_of: it must never run once the (cheap,
+    stat()-only) size check has already rejected the file."""
+    import artifact_skill.core.artifact as artifact_module
+    from artifact_skill.core.artifact import ArtifactRef
+
+    small = tmp_path / "small.bin"
+    small.write_bytes(b"\x00" * 1000)
+
+    def _reject(path, limits=None):
+        raise ArtifactSecurityError(
+            code="ARTIFACT_INPUT_TOO_LARGE", message="rejected for this test", evidence={"path": str(path)}
+        )
+
+    monkeypatch.setattr("artifact_skill.security.paths.check_input_size", _reject)
+
+    hash_calls: list[Path] = []
+    real_sha256_of = artifact_module.sha256_of
+    monkeypatch.setattr(
+        artifact_module, "sha256_of", lambda p: hash_calls.append(p) or real_sha256_of(p)
+    )
+
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        ArtifactRef.from_path(small)
+    assert exc_info.value.code == "ARTIFACT_INPUT_TOO_LARGE"
+    assert hash_calls == []

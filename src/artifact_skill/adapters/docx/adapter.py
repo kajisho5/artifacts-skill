@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import importlib.util
 import tempfile
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -46,10 +47,29 @@ from artifact_skill.rendering.office_convert import convert_to_pdf, soffice_bina
 from artifact_skill.rendering.pdf_pages import render_pdf_pages
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import atomic_copy, check_input_size
+from artifact_skill.security.xml_safety import reject_xml_entities_in_zip
 
 
 def _has(module: str) -> bool:
     return importlib.util.find_spec(module) is not None
+
+
+def _reject_entities_before_opening(path: Path) -> None:
+    """Grok-review finding, verified against current code: `security/
+    xml_safety.py`'s own module docstring claims its zip-level DOCTYPE/
+    ENTITY pre-scan protects PPTX/DOCX "too (defense in depth, even
+    though they're not currently exposed)" - but `reject_xml_entities_
+    in_zip()` was only ever actually called from the XLSX adapter, never
+    wired into this one. python-docx is confirmed NOT vulnerable on its
+    own (see xml_safety.py's docstring: lxml with resolve_entities=False
+    everywhere it parses OOXML XML), so this closes a documentation-
+    reality gap rather than a live security hole - same call, same
+    BadZipFile-tolerant shape as XlsxAdapter's own helper of this name.
+    """
+    try:
+        reject_xml_entities_in_zip(path)
+    except zipfile.BadZipFile:
+        pass
 
 
 def _require_docx():
@@ -162,6 +182,7 @@ class DocxAdapter(ArtifactAdapter):
 
     def inspect(self, ref: ArtifactRef) -> InspectionReport:
         check_input_size(ref.path)
+        _reject_entities_before_opening(ref.path)
         docx = _require_docx()
         warnings: list[str] = []
         try:
@@ -274,6 +295,7 @@ class DocxAdapter(ArtifactAdapter):
                 message=f"DOCX adapter has no operation '{operation}'.",
                 evidence={"operation": operation},
             )
+        _reject_entities_before_opening(ref.path)
         document = docx.Document(str(ref.path))
         meta = document.core_properties
         if "title" in args:

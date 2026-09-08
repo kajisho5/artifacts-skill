@@ -362,6 +362,53 @@ def test_render_still_blocks_a_file_url_escaping_the_staged_archive(adapter, tmp
     assert len(result.files) == 1
 
 
+def test_render_skips_a_manifest_href_that_resolves_outside_the_archive(adapter, tmp_path):
+    """Grok-review finding, verified by direct reproduction before this
+    fix: a manifest item whose href traverses far enough
+    ("../../../../../../etc/passwd") makes resolve_href() return a path
+    that escapes extract_root - is_file() still returns True for it since
+    existence doesn't care about location, so it used to reach
+    render_local_files() as a real source_path. The Chromium-side
+    file:// containment check still blocked the navigation (confirmed:
+    no leak), but it did so by raising ARTIFACT_RENDER_BACKEND_FAILED for
+    the *whole* render() call, discarding every already-renderable spine
+    document with it. This is now caught before staging and skipped with
+    a warning, the same as an ordinary missing file - the legitimate
+    spine document must still render."""
+    container_xml = (
+        b'<?xml version="1.0"?>'
+        b'<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+        b'<rootfiles><rootfile full-path="OEBPS/content.opf" '
+        b'media-type="application/oebps-package+xml"/></rootfiles></container>'
+    )
+    opf = (
+        b'<?xml version="1.0"?>'
+        b'<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="id">'
+        b'<metadata xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>Traversal</dc:title></metadata>'
+        b"<manifest>"
+        b'<item id="ch1" href="text/ch1.xhtml" media-type="application/xhtml+xml"/>'
+        b'<item id="evil" href="../../../../../../../../../../etc/passwd" media-type="application/xhtml+xml"/>'
+        b"</manifest>"
+        b'<spine><itemref idref="ch1"/><itemref idref="evil"/></spine></package>'
+    )
+    ch1 = b"<html><body><h1>Legit chapter</h1></body></html>"
+    epub_path = tmp_path / "traversal.epub"
+    with zipfile.ZipFile(epub_path, "w") as zf:
+        zf.writestr(zipfile.ZipInfo("mimetype"), b"application/epub+zip", zipfile.ZIP_STORED)
+        zf.writestr("META-INF/container.xml", container_xml)
+        zf.writestr("OEBPS/content.opf", opf)
+        zf.writestr("OEBPS/text/ch1.xhtml", ch1)
+
+    ref = ArtifactRef.from_path(epub_path)
+    if not _probe_epub_render_works(adapter, ref, tmp_path):
+        pytest.skip("Playwright/Chromium in this environment cannot render (see adapter docstring)")
+
+    result = adapter.render(ref, tmp_path / "rendered")
+    assert len(result.files) == 1
+    assert result.files[0].name == "page-001.png"
+    assert any("outside the archive" in w for w in result.warnings)
+
+
 def test_render_rejects_more_spine_documents_than_max_pages(good_epub, adapter, tmp_path):
     from artifact_skill.security.limits import Limits
 

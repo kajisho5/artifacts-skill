@@ -307,6 +307,18 @@ class ArtifactRef:
                 remediation="Check the path and try again.",
                 evidence={"path": str(p)},
             )
+        # Grok-review finding, verified by direct reproduction: this used
+        # to call sha256_of(p) - a full streaming read of the entire file
+        # - before any size check ran anywhere in the usual call chain
+        # (from_path() is the near-universal first call for any
+        # inspect/plan/execute/render/verify path). check_input_size() is
+        # a cheap stat()-only check; running it first rejects an
+        # oversized/malicious input immediately instead of paying the
+        # full hashing cost first and only then discovering the file was
+        # too large to accept.
+        from artifact_skill.security.paths import check_input_size
+
+        check_input_size(p)
         return cls(
             path=p,
             type=detect_type(p),

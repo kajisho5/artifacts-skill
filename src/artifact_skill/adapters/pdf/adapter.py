@@ -818,7 +818,24 @@ class PdfAdapter(ArtifactAdapter):
             # page, not just the first, so this was purely a verification
             # gap, not a mismatch with what the fixer actually does.
             mismatched = [
-                {"page": i + 1, "width_pt": s["width_pt"], "height_pt": s["height_pt"]}
+                {
+                    "page": i + 1,
+                    "width_pt": s["width_pt"],
+                    "height_pt": s["height_pt"],
+                    # Diagnostic only (real-world data, Issue #40): a page
+                    # whose width/height are swapped relative to what's
+                    # required — e.g. 842x595 against a 595x842 requirement
+                    # — is still a genuine FAIL under this policy (PASS/FAIL
+                    # semantics are unchanged by this field), but "wrong
+                    # size" and "right size, rotated" are different problems
+                    # for whoever reads the receipt to act on, so this names
+                    # the swapped-and-within-tolerance case explicitly
+                    # instead of leaving it indistinguishable from any other
+                    # mismatch.
+                    "orientation_swapped": (
+                        abs(s["width_pt"] - expected_h) <= tolerance and abs(s["height_pt"] - expected_w) <= tolerance
+                    ),
+                }
                 for i, s in enumerate(details["page_sizes"])
                 if abs(s["width_pt"] - expected_w) > tolerance or abs(s["height_pt"] - expected_h) > tolerance
             ]
@@ -830,6 +847,14 @@ class PdfAdapter(ArtifactAdapter):
                     status=CheckStatus.FAIL if mismatched else CheckStatus.PASS,
                     message=f"expected every page at ({expected_w}, {expected_h})pt; "
                     f"{len(mismatched)}/{len(details['page_sizes'])} page(s) did not match."
+                    + (
+                        " Some mismatched page(s) are the requirement's width/height swapped (landscape vs. "
+                        "portrait) rather than a different size — if that orientation should be accepted, "
+                        "pass require_page_size_pt as (height, width) instead, or check both orientations "
+                        "explicitly; this policy does not infer that on its own (see docs/architecture.md)."
+                        if mismatched and any(m["orientation_swapped"] for m in mismatched)
+                        else ""
+                    )
                     if mismatched else f"All {len(details['page_sizes'])} page(s) match ({expected_w}, {expected_h})pt.",
                     # width_pt/height_pt here (not a nested pair) is what
                     # PdfAdapter.fix() reads to build corrected fit_page_size

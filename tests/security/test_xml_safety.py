@@ -117,6 +117,25 @@ def test_a_member_over_10mb_with_an_entity_declaration_is_still_caught(tmp_path)
     assert exc_info.value.code == "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED"
 
 
+def test_a_rels_member_with_an_entity_declaration_is_still_caught(tmp_path):
+    """Grok-review finding, verified by direct reproduction before this
+    fix: OPC package relationship files (`_rels/.rels`, `xl/_rels/
+    workbook.xml.rels`, etc. - every real OOXML package has at least one)
+    are named `*.rels`, not `*.xml`. The old `.endswith(".xml")` filter
+    silently skipped every one of them - confirmed exploitable end to
+    end: an entity declaration injected into a real XLSX's `xl/_rels/
+    workbook.xml.rels` was let through unmodified by this function, and
+    `openpyxl.load_workbook()` then parsed the file without raising."""
+    path = tmp_path / "hostile.xlsx"
+    payload = b'<?xml version="1.0"?><!DOCTYPE root [<!ENTITY xxe "pwned">]><Relationships/>'
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("xl/_rels/workbook.xml.rels", payload)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        reject_xml_entities_in_zip(path)
+    assert exc_info.value.code == "ARTIFACT_XML_ENTITY_DECLARATION_REJECTED"
+    assert "workbook.xml.rels" in exc_info.value.evidence["source"]
+
+
 def test_doctype_internal_subset_marker_far_from_the_doctype_keyword_is_still_caught(tmp_path):
     """The internal-subset '[' search previously only looked 2048 bytes
     past '<!DOCTYPE' - exercised here directly (rather than as an

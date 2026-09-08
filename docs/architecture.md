@@ -11,6 +11,40 @@ renders it to something an agent can look at, checks it structurally, and
 emits a machine-readable receipt. See `README.md` for the pitch and
 `docs/research.md` for why nothing else already does this combination.
 
+## This tool does not define "correct" — policy does, and policy is opt-in
+
+A deliberate design decision, not an oversight: `core/engine.py` never
+hardcodes what a valid PDF/PPTX/DOCX/... looks like. `verify_structural(ref,
+policy)` always takes a plain `policy: dict` and every adapter reads it via
+`.get(key)`/`"key" in policy` — never an assumption that a key is present or
+meaningful (see `policies.py`'s module docstring). The engine's job is
+running whatever policy it's handed against the artifact's real structure;
+deciding *what that policy should require* is the caller's job, because
+"correct" is use-case-dependent in a way this project cannot know in
+advance — A4 with embedded fonts and no encryption is "correct" for a print
+submission and irrelevant for a web page; a required `<title>` matters for
+an HTML deliverable and not for CSV data. Baking any of that into the
+engine itself would mean this tool silently deciding what's acceptable for
+every caller, for every format, forever — the opposite of the six-state
+verification model's whole point (`PASS`/`WARN`/`FAIL`/`UNKNOWN` come from
+checking a *stated* requirement against reality, not from this project's
+own opinion of what a document should look like).
+
+The practical consequence, stated plainly because it is easy to miss: the
+default policy (`{}`) barely gates anything — with no policy at all,
+roughly the only thing that reliably fails is a structural defect like
+zero pages (see `docs/verification.md`). `policies.py`'s named presets
+(`print-a4`, `web-no-external`, ...) exist as ready-made starting points
+precisely because assembling a real policy by hand, every time, is too
+easy to skip. `execute`/`receipt` completing without `--policy`/
+`--policy-preset` is not a false claim of correctness — it is an honest
+report against an empty requirement — but it is also a real, open UX gap
+(tracked in
+[Issue #37](https://github.com/kajisho5/artifacts-skill/issues/37)):
+nothing in the engine or CLI currently makes that omission visible to
+whoever is reading the result. SKILL.md tells an agent to always pass a
+policy; nothing enforces it.
+
 ## Layering
 
 ```
@@ -37,10 +71,10 @@ emits a machine-readable receipt. See `README.md` for the pitch and
        |              |              |
        +--------------+--------------+
                       |
-                  Adapters
-       +------+------+------+------+------+
-       |      |      |      |      |      |
-      PDF   PPTX   DOCX   XLSX   HTML   SVG
+                       Adapters
+       +------+------+------+------+------+------+------+------+------+
+       |      |      |      |      |      |      |      |      |      |
+      PDF   PPTX   DOCX   XLSX  Image  HTML   SVG   CSV    MD   EPUB
        |
        v
    Local Backends (pypdf, pypdfium2, ...)
