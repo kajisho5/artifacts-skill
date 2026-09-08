@@ -95,6 +95,21 @@ def test_negotiate_falls_back_on_garbage_input():
     assert _negotiate_protocol_version("") == PROTOCOL_VERSION
 
 
+def test_negotiate_falls_back_on_the_last_legacy_version():
+    assert _negotiate_protocol_version("2025-11-25") == "2025-11-25"
+
+
+def test_negotiate_does_not_echo_a_post_legacy_version():
+    """Regression guard for a real bug in the first version-negotiation fix:
+    matching only the YYYY-MM-DD *shape* let this server tell a modern
+    client "yes, let's talk 2026-07-28" (the server/discover-based
+    revision) when it only implements the initialize-handshake protocol -
+    a worse lie than always claiming its own fixed version, since the
+    client would now expect server/discover support that doesn't exist."""
+    assert _negotiate_protocol_version("2026-07-28") == PROTOCOL_VERSION
+    assert _negotiate_protocol_version("2099-01-01") == PROTOCOL_VERSION
+
+
 def test_initialize_response_echoes_the_requested_version():
     """Regression guard: initialize() used to always return the server's
     own fixed PROTOCOL_VERSION regardless of what the client actually
@@ -116,6 +131,25 @@ def test_initialize_response_falls_back_with_no_params_at_all():
 
 
 # --- policy presets over MCP (Issue #14) -----------------------------------
+
+
+def test_execute_gates_its_own_receipt_with_a_policy(good_pdf, tmp_path):
+    """Regression guard: _h_execute() used to call run_lifecycle() with no
+    policy at all, so execute's own receipt always verified against an
+    empty policy no matter what the caller wanted."""
+    output = str(tmp_path / "out.pdf")
+    result = call_tool(
+        f"{CAPABILITY_PREFIX}.execute",
+        {
+            "input": str(good_pdf), "operation": "metadata_set", "args": {"title": "x"},
+            "output": output, "policy": {"require_page_count": 999},
+        },
+    )
+    assert result["isError"] is False
+    payload = json.loads(result["content"][0]["text"])
+    checks = payload["receipt"]["verification"]["structural"]["checks"]
+    check = next(c for c in checks if c["id"] == "page_count_requirement")
+    assert check["status"] == "fail"
 
 
 def test_verify_accepts_a_policy_preset(good_pdf):

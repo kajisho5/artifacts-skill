@@ -43,6 +43,13 @@ def blank_page_pdf(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
+def leftover_placeholder_pdf(tmp_path: Path) -> Path:
+    dst = tmp_path / "leftover_placeholder.pdf"
+    shutil.copy(FIXTURES_DIR / "leftover_placeholder.pdf", dst)
+    return dst
+
+
+@pytest.fixture()
 def encrypted_pdf(tmp_path: Path) -> Path:
     dst = tmp_path / "encrypted.pdf"
     shutil.copy(FIXTURES_DIR / "encrypted.pdf", dst)
@@ -190,6 +197,13 @@ def mislabeled_pdf_as_xlsx(tmp_path: Path) -> Path:
 
 
 @pytest.fixture()
+def leftover_placeholder_xlsx(tmp_path: Path) -> Path:
+    dst = tmp_path / "leftover_placeholder.xlsx"
+    shutil.copy(XLSX_FIXTURES_DIR / "leftover_placeholder.xlsx", dst)
+    return dst
+
+
+@pytest.fixture()
 def good_png(tmp_path: Path) -> Path:
     dst = tmp_path / "good.png"
     shutil.copy(IMAGE_FIXTURES_DIR / "good.png", dst)
@@ -298,6 +312,13 @@ def external_resource_svg(tmp_path: Path) -> Path:
 def no_size_svg(tmp_path: Path) -> Path:
     dst = tmp_path / "no_size.svg"
     shutil.copy(SVG_FIXTURES_DIR / "no_size.svg", dst)
+    return dst
+
+
+@pytest.fixture()
+def leftover_placeholder_svg(tmp_path: Path) -> Path:
+    dst = tmp_path / "leftover_placeholder.svg"
+    shutil.copy(SVG_FIXTURES_DIR / "leftover_placeholder.svg", dst)
     return dst
 
 

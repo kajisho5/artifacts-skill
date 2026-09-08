@@ -84,11 +84,19 @@ def run_lifecycle(
     policy: dict[str, Any] | None = None,
     evidence_dir: Path,
     dry_run: bool = False,
-    max_iterations: int = 1,
+    max_iterations: int | None = None,
     capability_report: CapabilityReport | None = None,
     limits: Limits = DEFAULT_LIMITS,
 ) -> LifecycleResult:
     policy = policy or {}
+    # None means "use the real default", not "run the fix loop once and stop" -
+    # a bare int default here previously meant every caller that didn't pass
+    # max_iterations explicitly silently disabled the fix loop entirely
+    # (Limits.max_fix_iterations=3 was never reached). Deriving the default
+    # from limits keeps it in sync automatically instead of duplicating the
+    # literal 3 in the CLI and MCP callers too.
+    if max_iterations is None:
+        max_iterations = limits.max_fix_iterations
     max_iterations = max(1, min(max_iterations, limits.max_fix_iterations))
 
     ref, adapter, plan = build_plan(input_path, operation, args, output_path)

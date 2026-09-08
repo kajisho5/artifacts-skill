@@ -95,6 +95,28 @@ def test_fix_loop_actually_fixes_page_size_mismatch(good_pdf, tmp_path):
     assert not any("no automatic fixer" in lim for lim in result.receipt.limitations)
 
 
+def test_fix_loop_runs_by_default_without_max_iterations_passed(good_pdf, tmp_path):
+    """Regression guard: run_lifecycle() used to default max_iterations to
+    the literal 1, which silently disabled the fix loop for every caller
+    that didn't pass --max-iterations explicitly (CLI/MCP receipt both
+    used to default to 1 too) even though Limits.max_fix_iterations=3 -
+    the fixer registered for fit_page_size (Issue #8) never actually ran
+    on a default invocation. Omitting max_iterations entirely must now
+    behave the same as passing max_iterations=3 (Limits' own default),
+    not max_iterations=1."""
+    output_path = tmp_path / "out.pdf"
+    evidence_dir = tmp_path / "reports"
+
+    result = run_lifecycle(
+        good_pdf, "fit_page_size", {"width_pt": 100, "height_pt": 100}, output_path,
+        policy={"require_page_size_pt": (612, 792), "page_size_tolerance_pt": 1.0},
+        evidence_dir=evidence_dir, dry_run=False,
+    )
+
+    assert result.receipt.iterations == 2
+    assert result.receipt.status == CheckStatus.PASS
+
+
 def test_fix_loop_gives_up_honestly_when_max_iterations_too_low(good_pdf, tmp_path):
     """With only 1 iteration allowed, the loop must not attempt a fix at
     all — it reports the failure as-is rather than silently succeeding."""

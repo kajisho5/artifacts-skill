@@ -28,20 +28,31 @@ PRESETS: dict[str, dict[str, Any]] = {
         "require_page_size_pt": (595, 842),
         "page_size_tolerance_pt": 2.0,
         "forbid_unembedded_fonts": True,
+        "require_no_encryption": True,
+        "forbid_blank_pages": True,
+        "min_pages": 1,
+        "forbid_placeholder_text": True,
     },
     "print-letter": {
         "require_page_size_pt": (612, 792),
         "page_size_tolerance_pt": 2.0,
         "forbid_unembedded_fonts": True,
+        "require_no_encryption": True,
+        "forbid_blank_pages": True,
+        "min_pages": 1,
+        "forbid_placeholder_text": True,
     },
     "slides-16x9": {
         "require_slide_aspect_ratio": 16 / 9,
         "aspect_ratio_tolerance": 0.02,
+        "min_slides": 1,
+        "forbid_placeholder_text": True,
         # max_empty_placeholders isn't set here: PPTX's own default (0) is
         # already the strict behavior this preset wants.
     },
     "spreadsheet-no-errors": {
         "forbid_external_links": True,
+        "forbid_placeholder_text": True,
         # formula_cached_errors already FAILs on a cached error under the
         # default policy ({}) too - nothing to strengthen there. This
         # preset exists so an agent has a named thing to reach for, not
@@ -50,6 +61,7 @@ PRESETS: dict[str, dict[str, Any]] = {
     "web-no-external": {
         "forbid_external_resources": True,
         "require_title": True,  # HTML only; inert (harmlessly ignored) for SVG
+        "forbid_placeholder_text": True,
     },
 }
 

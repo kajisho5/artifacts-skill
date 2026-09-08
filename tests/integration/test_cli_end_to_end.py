@@ -70,6 +70,51 @@ def test_execute_then_verify_pass(good_pdf, tmp_path):
     assert check_by_id["font_embedding"]["status"] == "pass"
 
 
+def test_execute_gates_its_own_receipt_with_an_explicit_policy(good_pdf, tmp_path):
+    """Regression guard: execute() used to always verify against an empty
+    policy regardless of what the caller wanted, silently ignoring the
+    fact that a bad execute could be reported as a clean receipt.json.
+    A policy this input can't satisfy must now show up as a FAIL in
+    execute's own reports/receipt.json, not just a subsequent `verify`
+    call the caller has to remember to make."""
+    proc = run_cli(
+        ["execute", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}',
+         "--output", "out.pdf", "--policy", '{"require_page_count": 999}', "--json"],
+        cwd=tmp_path,
+    )
+    assert proc.returncode == 1
+    data = json.loads(proc.stdout)
+    check_by_id = {c["id"]: c for c in data["receipt"]["verification"]["structural"]["checks"]}
+    assert check_by_id["page_count_requirement"]["status"] == "fail"
+    assert data["receipt"]["status"] == "fail"
+
+
+def test_execute_accepts_policy_preset(good_pdf, tmp_path):
+    proc = run_cli(
+        ["execute", str(good_pdf), "--operation", "metadata_set", "--args", '{"title":"x"}',
+         "--output", "out.pdf", "--policy-preset", "print-a4", "--json"],
+        cwd=tmp_path,
+    )
+    data = json.loads(proc.stdout)
+    check_by_id = {c["id"]: c for c in data["receipt"]["verification"]["structural"]["checks"]}
+    # good_2page.pdf is US Letter, not A4 - print-a4's page-size requirement must fail.
+    assert check_by_id["page_size_requirement"]["status"] == "fail"
+
+
+def test_print_a4_preset_fails_leftover_placeholder_text_not_just_warns(leftover_placeholder_pdf, tmp_path):
+    """Regression guard for an external review's specific claim: none of
+    the original policy presets set forbid_placeholder_text, so a Lorem-
+    ipsum-filled PDF verified against `print-a4` would only ever WARN
+    (exit 0) on its leftover text, never actually block on it. The preset
+    must FAIL the leftover_placeholder_text check specifically, not just
+    fail overall for an unrelated reason like page size."""
+    proc = run_cli(["verify", str(leftover_placeholder_pdf), "--policy-preset", "print-a4", "--json"], cwd=tmp_path)
+    data = json.loads(proc.stdout)
+    check_by_id = {c["id"]: c for c in data["checks"]}
+    assert check_by_id["leftover_placeholder_text"]["status"] == "fail"
+    assert proc.returncode == 1
+
+
 def test_verify_fail_gives_nonzero_exit(empty_pdf, tmp_path):
     proc = run_cli(["verify", str(empty_pdf), "--json"], cwd=tmp_path)
     assert proc.returncode == 1

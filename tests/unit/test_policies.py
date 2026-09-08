@@ -53,3 +53,27 @@ def test_slides_preset_targets_16x9():
 
 def test_web_preset_forbids_external_resources():
     assert PRESETS["web-no-external"]["forbid_external_resources"] is True
+
+
+def test_every_preset_forbids_leftover_placeholder_text():
+    """An external review correctly caught that none of the original
+    presets set forbid_placeholder_text, so leftover generation artifacts
+    stayed a WARN (exit 0) even under a named preset - the single check
+    this whole marker list exists for never actually gated a submission.
+    Every preset now sets it; it's a harmless no-op for a format the
+    preset wasn't written for (each adapter's verify_structural() only
+    ever does policy.get(...), never assumes every key applies)."""
+    for name, p in PRESETS.items():
+        assert p.get("forbid_placeholder_text") is True, f"preset '{name}' doesn't forbid placeholder text"
+
+
+def test_print_presets_are_a_real_submission_gate_not_just_page_size():
+    for name in ("print-a4", "print-letter"):
+        p = PRESETS[name]
+        assert p["require_no_encryption"] is True
+        assert p["forbid_blank_pages"] is True
+        assert p["min_pages"] == 1
+
+
+def test_slides_preset_requires_at_least_one_slide():
+    assert PRESETS["slides-16x9"]["min_slides"] == 1

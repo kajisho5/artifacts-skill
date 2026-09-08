@@ -149,6 +149,22 @@ STRUCTURAL_DEFECT_CASES: list[StructuralDefectCase] = [
         "Filled-in placeholders containing 'Click to add title'/'Lorem ipsum'; leftover_placeholder_text "
         "(WARN by default) — a different case from empty_placeholder.pptx (placeholders left blank).",
     ),
+    StructuralDefectCase(
+        "pdf/leftover_placeholder.pdf", CheckStatus.WARN,
+        "Contains 'Click to add title'/'Lorem ipsum'/'TODO' in extracted page text; leftover_placeholder_text "
+        "(WARN by default) — unlike DOCX, PDF's page_count is never UNKNOWN, so this rolls up to WARN cleanly.",
+    ),
+    StructuralDefectCase(
+        "xlsx/leftover_placeholder.xlsx", CheckStatus.WARN,
+        "Contains 'Click to add title'/'TODO'/'Lorem ipsum' in cell text; leftover_placeholder_text (WARN by "
+        "default) — no formulas present, so formula_cached_errors/formula_recalculation are SKIPPED (not "
+        "UNKNOWN), unlike xlsx/external_link.xlsx below, so this rolls up to WARN cleanly.",
+    ),
+    StructuralDefectCase(
+        "svg/leftover_placeholder.svg", CheckStatus.WARN,
+        "Contains 'Click to add title'/'Lorem ipsum'/'TODO' across <text> elements; leftover_placeholder_text "
+        "(WARN by default).",
+    ),
     StructuralDefectCase("image/corrupt.png", CheckStatus.FAIL, "Truncated/garbage PNG; image_validity."),
     StructuralDefectCase("image/exif_rotated.jpg", CheckStatus.WARN, "EXIF orientation != 1; exif_orientation."),
     StructuralDefectCase(
