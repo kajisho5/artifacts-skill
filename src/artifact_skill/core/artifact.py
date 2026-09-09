@@ -40,12 +40,31 @@ _CFB_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 _EBML_MAGIC = b"\x1a\x45\xdf\xa3"
 
 # ISO Base Media File Format ("ftyp" box at byte offset 4) is shared by
-# MP4/MOV/M4A/3GP *and* HEIC/AVIF still images - this project has no HEIC/
-# AVIF adapter, so without excluding their major-brand values here, a HEIC
-# photo would be misdetected as MEDIA and then fail ffprobe's stream check
-# as if it were corrupt media, rather than being honestly UNKNOWN.
-_FTYP_NON_MEDIA_BRANDS = {
-    b"heic", b"heix", b"heim", b"heis", b"hevc", b"hevx", b"hevm", b"hevs", b"mif1", b"msf1", b"avif", b"avis",
+# MP4/MOV/M4A/3GP *and* HEIC/AVIF still images (this project has no HEIC/
+# AVIF adapter) and, in principle, any other ftyp-based format nobody has
+# thought to name yet.
+#
+# Security-review finding: this used to be a *denylist* of known non-media
+# brands (HEIC/AVIF) - fail-open, in the sense that any brand this project
+# hadn't already thought to exclude got routed to the Media adapter's
+# ffprobe/ffmpeg invocation by default, on the strength of nothing more
+# than "it wasn't on the exclusion list." Given ffmpeg/ffprobe's own
+# demuxer/decoder surface is large (and, per adapters/media/adapter.py's
+# Limits.max_video_pixels docstring, was directly reproducibly abusable
+# for a memory-exhaustion attack even through a *recognized* media brand),
+# routing an unrecognized ftyp profile there by default was the less safe
+# of the two designs. Flipped to an *allowlist* of known media major
+# brands instead: an unrecognized brand now fails closed to UNKNOWN
+# (an honest "don't know what this is," never a silent misdetection or a
+# free pass into ffprobe/ffmpeg) rather than being fed to that surface by
+# default. The cost is a real but modest one - an obscure, legitimate
+# ftyp-based media format not in this list falls through to UNKNOWN
+# instead of MEDIA - not a security problem, just a detection gap to
+# widen this list for if it's ever actually hit in practice.
+_FTYP_MEDIA_BRANDS = {
+    b"isom", b"iso2", b"iso3", b"iso4", b"iso5", b"iso6", b"mp41", b"mp42", b"avc1", b"dash",
+    b"M4A ", b"M4V ", b"M4P ", b"M4B ", b"qt  ",
+    b"3gp1", b"3gp2", b"3gp3", b"3gp4", b"3gp5", b"3gp6", b"3g2a", b"3g2b",
 }
 
 
@@ -277,7 +296,7 @@ def detect_type(path: Path) -> ArtifactType:
         return ArtifactType.MEDIA
     if head[:4] == _EBML_MAGIC:
         return ArtifactType.MEDIA
-    if head[4:8] == b"ftyp" and head[8:12] not in _FTYP_NON_MEDIA_BRANDS:
+    if head[4:8] == b"ftyp" and head[8:12] in _FTYP_MEDIA_BRANDS:
         return ArtifactType.MEDIA
     stripped = _strip_leading_markup_noise(head).lower()
     if stripped.startswith(b"<?xml") and b"<svg" in stripped[:2048]:

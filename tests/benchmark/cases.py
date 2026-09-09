@@ -259,6 +259,13 @@ EXCEPTION_CASES: list[ExceptionCase] = [
         "XML entity-expansion DoS payload in the OPF package document; rejected before ET.fromstring() "
         "is ever called, not reported as a Check.",
     ),
+    ExceptionCase(
+        "media/oversized_resolution.mp4",
+        "ARTIFACT_MEDIA_RESOLUTION_TOO_LARGE",
+        "9000x9000 declared frame size (a decompression-bomb shape — trivially compressible, ~16KB on "
+        "disk) — rejected in inspect() right after ffprobe returns, before render()'s much more "
+        "expensive frame decode ever runs, not reported as a Check.",
+    ),
 ]
 
 KNOWN_GOOD_CASES: list[KnownGoodCase] = [

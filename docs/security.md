@@ -280,6 +280,29 @@ the limit, threaded through from every one of the four adapters that call
 it (PDF directly; PPTX/DOCX/XLSX via their own already-`limits`-aware
 `render()`).
 
+`max_video_pixels` (default ~64 megapixels) is the Media adapter's
+equivalent of the zip-bomb ratio guard above, for pixels instead of bytes
+— a security-review finding, confirmed by direct reproduction: a video
+container can declare an enormous *decoded* frame size while compressing
+to almost nothing on disk (a solid-color frame is trivially compressible
+— a real 12000x12000 H.264 MP4 built this way is ~28KB on disk but made
+`ffprobe` alone peak at ~396MB RSS, and the adapter's full `render()`
+path peak at ~1.4GB RSS over ~16s). `check_input_size()` bounds the file
+on disk; nothing previously bounded the pixels ffmpeg/ffprobe would
+decode from it. `adapters/media/adapter.py::inspect()` now checks
+`width*height` against this limit immediately after `ffprobe` returns
+(before `render()`'s much more expensive frame decode ever runs),
+raising `ArtifactSecurityError(code="ARTIFACT_MEDIA_RESOLUTION_TOO_LARGE")`
+— which `verify_structural()` lets propagate uncaught, the same
+security-control-not-a-mere-Check precedent the SVG/XLSX/EPUB entity-bomb
+guards already established (see "XML entity expansion" above). The same
+review round also flipped `core/artifact.py`'s `ftyp`-brand check from a
+denylist of known non-media brands (fail-open: an unrecognized brand was
+routed to `ffprobe`/`ffmpeg` by default) to an allowlist of known media
+brands (fail-closed: an unrecognized brand is honestly `UNKNOWN` instead)
+— see `docs/adapters.md`'s Media section for the full account of both
+review rounds.
+
 ## Network policy
 
 Off by default, everywhere, with no per-tool opt-out in the current MVP.

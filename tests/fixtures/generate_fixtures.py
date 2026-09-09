@@ -885,6 +885,25 @@ def make_audio_with_cover_m4a() -> bool:
     ])
 
 
+def make_oversized_resolution_mp4() -> bool:
+    """Security-review finding, verified by direct reproduction: a
+    container can declare an enormous *decoded* frame size while
+    compressing to almost nothing on disk (a solid-color frame is
+    trivially compressible) - a 12000x12000 real H.264 MP4 built this way
+    made ffprobe alone peak at ~396MB RSS, and the adapter's full
+    render() path (probe + frame decode) peak at ~1.4GB RSS over ~16s,
+    from a ~28KB file. 9000x9000 (81 megapixels, still comfortably over
+    Limits.max_video_pixels' 64-megapixel default) is used here instead
+    of the full 12000x12000 repro to keep fixture generation itself
+    reasonably fast - see adapters/media/adapter.py's inspect() for the
+    width*height guard this fixture regression-tests."""
+    return _run_ffmpeg([
+        "-f", "lavfi", "-i", "color=c=red:s=9000x9000:d=1:r=1",
+        "-frames:v", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        str(MEDIA_OUT_DIR / "oversized_resolution.mp4"),
+    ])
+
+
 def make_single_frame_mp4() -> bool:
     """Adversarial-review finding: a short/single-frame-ish clip can
     genuinely have no frame at render()'s computed midpoint seek time
@@ -1029,6 +1048,7 @@ if __name__ == "__main__":
     make_leftover_placeholder_wav()
     make_audio_with_cover_m4a()
     make_single_frame_mp4()
+    make_oversized_resolution_mp4()
     make_mislabeled_pdf_as_mp4()
 
     print(f"Wrote PDF fixtures to {PDF_OUT_DIR}")

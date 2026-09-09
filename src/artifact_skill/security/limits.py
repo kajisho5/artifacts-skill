@@ -31,6 +31,23 @@ class Limits:
     # shouldn't silently change existing runtime behavior along with it.
     render_timeout_seconds: int = 30
     max_fix_iterations: int = 3
+    # Security-review finding, verified by direct reproduction: a video
+    # container can declare an enormous *decoded* frame size while
+    # compressing to almost nothing (a solid-color frame is trivially
+    # compressible) - a 12000x12000 H.264 MP4 built this way is ~28KB on
+    # disk (well under max_input_bytes) but made ffprobe alone peak at
+    # ~396MB RSS, and the adapter's full render() path (probe + frame
+    # decode) peak at ~1.4GB RSS and take ~16s — a decompression-bomb
+    # shape analogous to the zip-bomb guard above, just for pixels
+    # instead of bytes. adapters/media/adapter.py checks width*height
+    # against this immediately after ffprobe returns, in inspect() (so
+    # verify_structural() and render() both inherit the guard, not just
+    # render()'s own more expensive decode step). Default (~64 megapixels)
+    # comfortably covers real-world video up to 8K UHD (7680x4320 =
+    # ~33 megapixels) with headroom, while still rejecting the reproduced
+    # bomb shape (144 megapixels) well before ffmpeg/ffprobe pay the cost
+    # of decoding it.
+    max_video_pixels: int = 64_000_000
 
 
 DEFAULT_LIMITS = Limits()

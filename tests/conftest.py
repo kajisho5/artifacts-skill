@@ -564,3 +564,10 @@ def single_frame_mp4(tmp_path: Path) -> Path:
     dst = tmp_path / "single_frame.mp4"
     shutil.copy(MEDIA_FIXTURES_DIR / "single_frame.mp4", dst)
     return dst
+
+
+@pytest.fixture()
+def oversized_resolution_mp4(tmp_path: Path) -> Path:
+    dst = tmp_path / "oversized_resolution.mp4"
+    shutil.copy(MEDIA_FIXTURES_DIR / "oversized_resolution.mp4", dst)
+    return dst

@@ -6,7 +6,7 @@ import pytest
 
 from artifact_skill.adapters.media.adapter import MediaAdapter
 from artifact_skill.core.artifact import ArtifactRef, ArtifactType
-from artifact_skill.core.errors import ArtifactInputError
+from artifact_skill.core.errors import ArtifactInputError, ArtifactSecurityError
 from artifact_skill.core.verification import CheckStatus
 
 
@@ -40,14 +40,27 @@ def test_type_detection_webm_and_wav(good_webm, good_wav):
 
 
 def test_type_detection_does_not_misclassify_a_heic_ftyp_brand(tmp_path):
-    """core/artifact.py's _FTYP_NON_MEDIA_BRANDS finding: HEIC/AVIF still
-    images also use the ISO-BMFF 'ftyp' box - without excluding their
-    major-brand values, a HEIC photo would be misdetected as MEDIA and
+    """core/artifact.py's _FTYP_MEDIA_BRANDS finding: HEIC/AVIF still
+    images also use the ISO-BMFF 'ftyp' box - without an allowlist of
+    known media brands, a HEIC photo would be misdetected as MEDIA and
     then fail ffprobe's stream check as if it were corrupt media, rather
     than being honestly UNKNOWN (this project has no HEIC/AVIF adapter)."""
     path = tmp_path / "photo.heic"
     # Real ISO-BMFF layout: 4-byte box size, "ftyp", then the major brand.
     path.write_bytes(b"\x00\x00\x00\x18ftypheic" + b"\x00" * 16)
+    assert ArtifactRef.from_path(path).type == ArtifactType.UNKNOWN
+
+
+def test_type_detection_fails_closed_on_an_unrecognized_ftyp_brand(tmp_path):
+    """Security-review finding: this used to be a denylist of known
+    non-media brands (fail-open — anything not already excluded reached
+    the Media adapter's ffprobe/ffmpeg invocation by default). Flipped to
+    an allowlist of known media brands, verified here by direct
+    reproduction: a made-up, unrecognized major brand must fail closed to
+    UNKNOWN, not be handed to ffprobe/ffmpeg on the strength of merely
+    not being on an exclusion list."""
+    path = tmp_path / "unknownbrand.mp4"
+    path.write_bytes(b"\x00\x00\x00\x18ftypzzzz" + b"\x00" * 16)
     assert ArtifactRef.from_path(path).type == ArtifactType.UNKNOWN
 
 
@@ -140,6 +153,27 @@ def test_render_single_frame_short_video_falls_back_to_t_zero(single_frame_mp4, 
     result = adapter.render(ref, tmp_path / "rendered")
     assert len(result.files) == 1
     assert result.files[0].exists() and result.files[0].stat().st_size > 0
+
+
+def test_inspect_rejects_an_oversized_declared_resolution(oversized_resolution_mp4, adapter):
+    """Security-review finding, verified by direct reproduction before
+    this fix: a container can declare an enormous *decoded* frame size
+    while compressing to almost nothing on disk (a solid-color frame is
+    trivially compressible) - a 12000x12000 real MP4 built this way made
+    ffprobe alone peak at ~396MB RSS and the full render() path peak at
+    ~1.4GB RSS over ~16s, from a ~28KB file - a decompression-bomb shape
+    analogous to the zip-bomb guard other adapters already have. Checked
+    in inspect() (not just render()) so verify_structural() inherits the
+    guard too, and propagates uncaught (a security control, not a mere
+    FAIL Check), matching the SVG/XLSX/EPUB precedent for this class of
+    risk."""
+    ref = ArtifactRef.from_path(oversized_resolution_mp4)
+    with pytest.raises(ArtifactSecurityError) as exc_info:
+        adapter.inspect(ref)
+    assert exc_info.value.code == "ARTIFACT_MEDIA_RESOLUTION_TOO_LARGE"
+
+    with pytest.raises(ArtifactSecurityError):
+        adapter.verify_structural(ref, {})
 
 
 def test_inspect_corrupt_truncated_mp4_raises(corrupt_truncated_mp4, adapter):

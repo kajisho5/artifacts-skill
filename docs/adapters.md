@@ -542,10 +542,12 @@ deserves a more specific answer than "unrecognized file."
   `ftyp` box, WebM/Matroska via the EBML header, WAV via RIFF/WAVE) —
   telling audio-only from video apart needs an actual stream probe,
   which is exactly what `inspect()` does (`details["has_video"]`/
-  `details["has_audio"]`). HEIC/AVIF still images also use `ftyp`; their
-  major-brand values are excluded from the magic-byte check so a HEIC
-  photo (a format this project has no adapter for) stays honestly
-  `UNKNOWN` instead of being misdetected as broken media.
+  `details["has_audio"]`). The `ftyp` check is an **allowlist of known
+  media major brands**, not a denylist of known non-media ones
+  (security-review finding — see below): an unrecognized brand (HEIC/
+  AVIF still images also use `ftyp`, and so would any other ftyp-based
+  format nobody has thought to name yet) fails closed to `UNKNOWN`
+  rather than being routed to `ffprobe`/`ffmpeg` by default.
 - **No mutating operations, by design, not by omission**: this project
   is a verification/evidence-generation engine, not a video editor (see
   "What this is (and isn't)" in `docs/architecture.md`). Producing or
@@ -595,6 +597,36 @@ deserves a more specific answer than "unrecognized file."
   Fixed by resolving the path before use in both places, the same
   `.resolve()` `rendering/chromium_render.py::render_local_files()`
   already does for its own `source_path`.
+- **Independent adversarial review, round 1 (correctness)**: a fresh-
+  context review agent found two real bugs, both reproduced directly
+  before being trusted. (1) `_first_stream()` matched an mjpeg
+  attached-picture (cover art) stream as if it were real video — any
+  audio file with embedded cover art (iTunes/Apple Music/podcast-tool
+  M4A, a genuinely common case) got `has_video: True`, and `render()`
+  then crashed trying to seek to a frame the attached-pic stream doesn't
+  have. Fixed by excluding `disposition.attached_pic` streams. (2)
+  `render()`'s frame-extraction seek time (`min(2.0, duration/2)`)
+  assumed any nonzero seek point lands on a real frame — false for a
+  genuine, non-corrupt short/single-frame-ish clip (confirmed with a
+  real 0.01s H.264 MP4 whose only frame is at t=0). Fixed by retrying at
+  t=0 on failure before giving up.
+- **Independent adversarial review, round 2 (security)**: a second
+  fresh-context pass found a real decompression-bomb-shaped resource-
+  exhaustion issue, confirmed by direct reproduction: a container can
+  declare an enormous *decoded* frame size while compressing to almost
+  nothing on disk (a solid-color frame is trivially compressible) — a
+  real 12000x12000 H.264 MP4 built this way is ~28KB on disk but made
+  `ffprobe` alone peak at ~396MB RSS, and the adapter's full `render()`
+  path (probe + frame decode) peak at ~1.4GB RSS over ~16s. `inspect()`
+  now checks `width*height` against `Limits.max_video_pixels` (default
+  ~64 megapixels, comfortably covering real 8K UHD content) immediately
+  after `ffprobe` returns and before anything more expensive runs,
+  raising `ArtifactSecurityError` — so `verify_structural()` inherits
+  the guard too (and lets it propagate uncaught, the same security-
+  control-not-a-mere-Check precedent SVG/XLSX/EPUB already established),
+  not just `render()`'s own costlier decode step. The same review's
+  fail-open `ftyp`-brand denylist finding is the allowlist change
+  described above.
 
 ## Planned, not implemented
 

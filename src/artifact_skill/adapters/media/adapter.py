@@ -37,7 +37,7 @@ from typing import Any
 from artifact_skill.adapters.base import ArtifactAdapter, OperationSpec, RenderResult
 from artifact_skill.core.artifact import ArtifactRef, ArtifactType, InspectionReport
 from artifact_skill.core.capability import Capability, CapabilityStatus
-from artifact_skill.core.errors import ArtifactExecutionError, ArtifactInputError
+from artifact_skill.core.errors import ArtifactExecutionError, ArtifactInputError, ArtifactSecurityError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
 from artifact_skill.leftover_text import find_leftover_markers
@@ -153,6 +153,26 @@ class MediaAdapter(ArtifactAdapter):
 
         video = _first_stream(streams, "video")
         audio = _first_stream(streams, "audio")
+
+        if video is not None:
+            width, height = video.get("width"), video.get("height")
+            if isinstance(width, int) and isinstance(height, int) and width * height > DEFAULT_LIMITS.max_video_pixels:
+                # Security-review finding, verified by direct reproduction:
+                # a container can declare an enormous *decoded* frame size
+                # while compressing to almost nothing on disk (a solid-color
+                # frame is trivially compressible) - checked here, right
+                # after ffprobe returns and before anything more expensive
+                # (render()'s actual frame decode) runs, so both
+                # verify_structural() and render() inherit the guard via
+                # this shared inspect() rather than each needing their own.
+                raise ArtifactSecurityError(
+                    code="ARTIFACT_MEDIA_RESOLUTION_TOO_LARGE",
+                    message=f"'{ref.path}' declares a {width}x{height} video frame "
+                    f"({width * height} pixels), exceeding the limit of {DEFAULT_LIMITS.max_video_pixels}.",
+                    remediation="Not decoded; this may be a decompression-bomb-shaped file. Increase "
+                    "Limits.max_video_pixels if this resolution is legitimately expected.",
+                    evidence={"path": str(ref.path), "width": width, "height": height},
+                )
 
         duration_raw = fmt.get("duration")
         try:
