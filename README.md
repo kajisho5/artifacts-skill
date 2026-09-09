@@ -15,21 +15,10 @@ gap: **inspect → plan → execute → render → structural verify → visual
 verify → receipt**, run locally, with no cloud account and no API key.
 
 Verification is the point of this project, not an afterthought bolted onto
-a bigger editing tool. The mutating-operation catalog (see the table
-below) is intentionally small and still growing — this is not a
-document-generation or full-editing tool, and isn't trying to be one. See
+a bigger editing tool — this is not a document-generation or full-editing
+tool, and isn't trying to be one. See
 [**"What this is not"**](SKILL.md#what-this-is-not) in `SKILL.md` for what
 this project deliberately doesn't do.
-
-> **SPEC** (Self-Producing Execution Contract), coined by this project's
-> author [kajisho5](https://github.com/kajisho5) for
-> [`ffmpeg-skill`](https://github.com/kajisho5/ffmpeg-skill): derive a
-> tool's schema from the one thing that actually has to be correct — its
-> own parser — instead of hand-authoring a second copy beside the code.
-> `artifacts-skill` doesn't fully reach that (its CLI subcommands take
-> generic `--args`/`--policy` JSON blobs, not a per-operation parser SPEC
-> could introspect) — it gets SPEC's actual goal, no schema drift, a
-> different way. → [full explanation](#what-is-spec)
 
 ```
 Input                     artifacts-skill                    Output
@@ -42,15 +31,25 @@ proposal.pdf   -->   inspect -> plan -> execute   -->   proposal_final.pdf
                            reports/receipt.json   (artifact-receipt/v1)
 ```
 
+**11 formats, one contract** — PDF, PPTX, DOCX, XLSX, Image, HTML, SVG,
+CSV, Markdown, EPUB, Media. [See it run for real](#demos), no staged
+output.
+
+## Contents
+
+[Why](#why) · [Quickstart](#quickstart) · [Demos](#demos) ·
+[What's implemented](#whats-implemented-today) ·
+[Design principles](#design-principles) · [Install](#install) ·
+[Use from an agent](#use-from-an-agent) · [Use as MCP](#use-as-mcp) ·
+[Documentation](#documentation)
+
 ## Why
 
-Agents fail silently on document artifacts constantly: text overflowing a
-page, a PDF that opens to the wrong size, a merge that silently drops a
-page, metadata nobody asked for. "I created the file" and "the file is
-correct" are different claims. This project keeps them separate and makes
-the second one provable — every run ends in a **PASS / WARN / FAIL /
-UNKNOWN** verdict per check, backed by a machine-readable receipt, never a
-guess.
+"I created the file" and "the file is correct" are different claims —
+agents fail silently on document artifacts constantly, and this project
+keeps the two claims separate. Every run ends in a machine-readable
+**PASS / WARN / FAIL / UNKNOWN** verdict per check, backed by a receipt,
+never a guess.
 
 ## Quickstart
 
