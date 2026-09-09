@@ -627,6 +627,83 @@ deserves a more specific answer than "unrecognized file."
   not just `render()`'s own costlier decode step. The same review's
   fail-open `ftyp`-brand denylist finding is the allowlist change
   described above.
+- **Independent adversarial review, round 3 (CLI/MCP surface, contract,
+  docs)**: a third fresh-context pass, deliberately scoped away from the
+  two axes above, actually drove the CLI end-to-end (`doctor`, `inspect`,
+  `render`, `verify` with a Media policy, `receipt`, `contract --json`)
+  against real ffmpeg-generated fixtures rather than reading code. Found
+  one real bug: `render()`'s zero-file audio-only path returned before
+  `out_dir.mkdir(...)`, so `--out-dir` was silently never created — unlike
+  every other adapter's "skip and say why" render path (EPUB's included),
+  which creates the directory unconditionally before deciding whether
+  anything renderable exists. Fixed by moving the `mkdir` above the
+  `has_video` check. The same pass also flagged a real but pre-existing,
+  Media-independent issue: the generic "unknown policy key" error's
+  remediation text pointed callers at `docs/verification.md` and `contract
+  --json` for the list of valid per-format policy keys, but neither
+  actually contains it (that list lives here, in this file). Fixed by
+  pointing the remediation at `docs/adapters.md` instead
+  (`core/engine.py`, `policies.py`). Everything else checked — `doctor`
+  capability rows, `inspect`/`render` output on real fixtures including
+  the round-1 cover-art fix and the round-2 resolution guard, policy
+  array-to-tuple handling for `require_min_resolution`, the generated
+  `contract --json` surface, MCP server dispatch (confirmed
+  format-agnostic, no Media-specific branching), and every doc file's
+  accuracy against current behavior — came back clean.
+- **Independent adversarial review, round 4 (three parallel hostile
+  passes — argument injection, malformed-container fuzzing, concurrency/
+  policy edge cases)**: three fresh-context agents ran in parallel, each
+  deliberately trying to break the adapter rather than just reading it,
+  all against real ffmpeg-generated fixtures. Confirmed, fixed bugs:
+  (1) `verify_structural()`'s raw unpacks/type coercions on
+  `require_min_resolution`, `require_video_codec`/`require_audio_codec`,
+  and `min_duration_seconds`/`max_duration_seconds` crashed with
+  unhandled `ValueError`/`TypeError` on a malformed policy value (wrong-
+  length list, wrong type, non-iterable) instead of a clean
+  `ArtifactInputError` — including from the real CLI. Fixed with shape/
+  type validation before use (the identical `require_page_size_pt` shape
+  in the PDF adapter had the same bug; fixed there too). (2) `inspect()`
+  crashed on ffprobe's real `"N/A"` sentinel for `sample_rate` — the
+  adjacent `duration`/`bit_rate` fields already guarded this exact case,
+  `sample_rate` was missed. (3) `render()`'s zero-file path mislabeled a
+  genuinely stream-less (not just audio-only) file as "audio-only".
+  (4) `render(limits=...)` accepted a custom `Limits` but called
+  `self.inspect(ref)` with no way to forward it, so a caller-supplied
+  `max_video_pixels` or subprocess timeout silently never reached the
+  probe step — only `extract_frame()`'s own ffmpeg call honored custom
+  limits. Fixed by giving `inspect()` its own optional `limits` parameter
+  (additive to the base `ArtifactAdapter` signature) and having
+  `render()` pass its `limits` through. (5) `require_video_codec`/
+  `require_audio_codec` matched case-sensitively — ffprobe always reports
+  codec names lowercase, so a reasonable-looking policy value like
+  `"H264"` silently always FAILed; matching is now case-insensitive.
+  (6) An over-long `--input` path (`ENAMETOOLONG`) made
+  `ArtifactRef.from_path()`'s `is_file()` raise a bare `OSError` that
+  escaped the CLI's `ArtifactError`-only top-level handler as a raw
+  Python traceback instead of the tool's structured error contract — not
+  Media-specific (every adapter's CLI path goes through `from_path()`),
+  found and fixed via this adapter's own CLI surface. Also hardened as
+  defense-in-depth (not a live bug — both call sites already `.resolve()`
+  the path before building argv): added an explicit `--` before the
+  positional path/output arguments in `ffmpeg_probe.py`'s ffprobe/ffmpeg
+  invocations, so a future refactor that lost that ordering couldn't
+  reopen an argument-confusion class of bug. Checked and came back
+  clean: shell/command injection via filename, dash-prefixed filenames,
+  symlinks (including a loop and links outside the working directory),
+  `PATH`-based allowlist bypass, `check_input_size()` ordering (rejects
+  an oversized file before ever invoking ffprobe), and NaN-policy
+  injection (a `NaN` duration bound conservatively FAILs rather than
+  silently bypassing the check). One finding was surfaced but
+  deliberately **not** fixed in this pass: concurrent CLI/MCP calls that
+  both default to the same `reports/` evidence directory can overwrite
+  each other's rendered evidence file, so a receipt's `evidence` can
+  point at a PNG a different, concurrent invocation actually wrote —
+  reproduced with a 50% collision rate across 50 concurrent `receipt`
+  calls. This isn't Media-specific (every adapter's `receipt`/`render`
+  CLI/MCP path shares the same default), and fixing it means picking a
+  new default-uniqueness scheme across the whole tool, not a Media-only
+  change — flagged for a deliberate design decision rather than fixed
+  as a drive-by (filed as Issue #47).
 
 ## Planned, not implemented
 

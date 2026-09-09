@@ -150,6 +150,16 @@ paragraph to stay current forever.
 Nothing tracked here is currently blocking; see GitHub issue #2 for
 whatever's been filed since this section was last updated.
 
+**Issue #47 (filed, needs owner design decision): CLI/MCP default
+`evidence_dir` ("reports/") collides under concurrent invocations.** Found
+via a round-4 adversarial review of the Media adapter (see
+`docs/adapters.md`), reproduced with a 50% collision rate across 50
+concurrent `receipt` calls sharing the default output directory — not
+Media-specific, every adapter's `receipt`/`render` path shares the same
+default. Not fixed as a drive-by: the fix is a new default-uniqueness
+scheme across the whole CLI + MCP surface, which changes default on-disk
+output layout for every existing caller/doc/test.
+
 **CAD and 3D assets (DWG/DXF/STEP, glTF/OBJ/STL, …) are not planned.**
 Considered directly when broadening beyond CSV/Markdown/EPUB (Phase 8):
 neither has a rendering backend that fits this project's local-first,

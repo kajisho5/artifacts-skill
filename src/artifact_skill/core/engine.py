@@ -98,7 +98,7 @@ def run_lifecycle(
             code="ARTIFACT_INVALID_ARGS",
             message=f"Unknown policy key(s): {bad_keys}. No adapter recognizes "
             f"{'this key' if len(bad_keys) == 1 else 'these keys'} — check for a typo.",
-            remediation="Run `artifacts-skill contract --json` or see docs/verification.md for valid policy keys.",
+            remediation="See docs/adapters.md for the valid policy keys per format.",
             evidence={"unknown_keys": bad_keys},
         )
     # None means "use the real default", not "run the fix loop once and stop" -

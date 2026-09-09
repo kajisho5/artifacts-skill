@@ -69,6 +69,37 @@ The last command runs the full lifecycle and writes
 just a claim. Once published, the same commands work as
 `npx artifacts-skill ...` with no local install at all.
 
+## Demos
+
+Real terminal recordings — every command below actually ran against the
+fixture files in `tests/fixtures/`, nothing staged or faked.
+
+**PDF** — inspect, then rotate pages and gate the result on a policy in
+one `receipt` call:
+
+![PDF demo](docs/demos/pdf.gif)
+
+**PPTX / DOCX / XLSX** — the same `verify` shape across three different
+office formats, plus a look at individual check results:
+
+![Office documents demo](docs/demos/office.gif)
+
+**Image** — inspect, then resize and gate on the result's dimensions:
+
+![Image demo](docs/demos/image.gif)
+
+**HTML / SVG / CSV / Markdown / EPUB** — one command, five unrelated
+formats, including a real `WARN` (an external link this tool won't fetch
+by default — see [Design principles](#design-principles)):
+
+![HTML/SVG/CSV/Markdown/EPUB demo](docs/demos/web-text.gif)
+
+**Media (video/audio)** — inspect a clip's real duration/codecs/streams,
+gate it on a policy, extract a representative frame as evidence, and get
+a receipt — all via `ffmpeg`/`ffprobe`:
+
+![Media demo](docs/demos/media.gif)
+
 ## What's implemented today
 
 | Format | Inspect | Structural verify | Render (visual evidence) | Mutating operations |

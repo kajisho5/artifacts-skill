@@ -75,7 +75,12 @@ def probe_media(path: Path, *, limits: Limits = DEFAULT_LIMITS) -> dict[str, Any
     path = path.resolve()
     result = run_subprocess(
         [
-            ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", str(path),
+            # Argument-injection review finding: `path` is always .resolve()d
+            # above so it can never start with "-", but the explicit "--"
+            # removes the dependency on that ordering ever holding — a bare
+            # positional path argument is otherwise always at risk of being
+            # misread as an option by ffprobe's own arg parser.
+            ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", "--", str(path),
         ],
         allowlist=FFMPEG_ALLOWLIST,
         limits=limits,
@@ -117,8 +122,13 @@ def extract_frame(path: Path, out_path: Path, *, at_seconds: float, limits: Limi
     out_path.parent.mkdir(parents=True, exist_ok=True)
     result = run_subprocess(
         [
+            # `path` is the value of an explicit -i flag (never a bare
+            # positional), and `out_path` is always a hardcoded
+            # "frame-001.png" basename resolved to absolute — neither can
+            # currently start with "-", but the "--" removes the dependency
+            # on that ordering ever holding for the output path.
             ffmpeg, "-y", "-ss", f"{max(at_seconds, 0.0):.3f}", "-i", str(path),
-            "-frames:v", "1", "-f", "image2", str(out_path),
+            "-frames:v", "1", "-f", "image2", "--", str(out_path),
         ],
         allowlist=FFMPEG_ALLOWLIST,
         limits=limits,

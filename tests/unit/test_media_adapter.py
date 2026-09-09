@@ -273,6 +273,87 @@ def test_verify_forbid_placeholder_text_escalates_to_fail(leftover_placeholder_w
     assert next(c for c in fail_result.checks if c.id == "leftover_placeholder_text").status == CheckStatus.FAIL
 
 
+def test_verify_require_video_codec_matches_case_insensitively(good_mp4, adapter):
+    # Adversarial-review finding, verified by direct reproduction: ffprobe
+    # always reports codec names lowercase, so a reasonable-looking policy
+    # value like "H264" used to always FAIL with no hint it was a casing issue.
+    ref = ArtifactRef.from_path(good_mp4)
+    result = adapter.verify_structural(ref, {"require_video_codec": "H264"})
+    assert next(c for c in result.checks if c.id == "video_codec").status == CheckStatus.PASS
+
+
+@pytest.mark.parametrize(
+    "bad_value",
+    [[100], [100, 100, 100], [], "100x100", {"w": 1, "h": 1}, ["a", "b"]],
+)
+def test_verify_require_min_resolution_rejects_malformed_policy_value(good_mp4, adapter, bad_value):
+    # Adversarial-review finding, verified by direct reproduction: a raw
+    # `min_w, min_h = policy[...]` unpack crashed with an unhandled
+    # ValueError/TypeError instead of a clean ArtifactInputError.
+    ref = ArtifactRef.from_path(good_mp4)
+    with pytest.raises(ArtifactInputError) as exc_info:
+        adapter.verify_structural(ref, {"require_min_resolution": bad_value})
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+
+
+@pytest.mark.parametrize("bad_value", [123, None])
+def test_verify_require_video_codec_rejects_non_string_non_iterable(good_mp4, adapter, bad_value):
+    # Adversarial-review finding, verified by direct reproduction: `set(123)`/
+    # `set(None)` crashed with an unhandled TypeError instead of a clean
+    # ArtifactInputError.
+    ref = ArtifactRef.from_path(good_mp4)
+    with pytest.raises(ArtifactInputError) as exc_info:
+        adapter.verify_structural(ref, {"require_video_codec": bad_value})
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+
+
+def test_verify_duration_policy_rejects_non_numeric_value(good_mp4, adapter):
+    # Adversarial-review finding, verified by direct reproduction: a quoted
+    # number ("5" instead of 5) — an easy, realistic policy-authoring
+    # mistake — crashed `duration >= lo` with an unhandled TypeError.
+    ref = ArtifactRef.from_path(good_mp4)
+    with pytest.raises(ArtifactInputError) as exc_info:
+        adapter.verify_structural(ref, {"min_duration_seconds": "5"})
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+
+
+def test_inspect_tolerates_non_numeric_sample_rate_from_ffprobe(monkeypatch, good_mp4, adapter):
+    # Adversarial-review finding, verified by direct reproduction: ffprobe's
+    # real "N/A" sentinel for numeric fields (already guarded for duration/
+    # bit_rate) was missed for sample_rate and raised an unhandled ValueError.
+    import artifact_skill.adapters.media.adapter as adapter_module
+
+    ref = ArtifactRef.from_path(good_mp4)
+    real_probe_media = adapter_module.probe_media
+
+    def fake_probe_media(path, **kwargs):
+        probe = real_probe_media(path, **kwargs)
+        for stream in probe.get("streams", []):
+            if stream.get("codec_type") == "audio":
+                stream["sample_rate"] = "N/A"
+        return probe
+
+    monkeypatch.setattr(adapter_module, "probe_media", fake_probe_media)
+    report = adapter.inspect(ref)
+    assert report.details["audio"]["sample_rate"] is None
+
+
+def test_render_forwards_limits_to_the_probe_step(good_mp4, adapter, tmp_path):
+    # Adversarial-review finding, verified by direct reproduction: render()
+    # accepted a `limits` parameter but used to call `self.inspect(ref)`
+    # with no way to forward it, so a caller-supplied max_video_pixels
+    # never reached the resolution-bomb check inspect() performs — a custom,
+    # stricter limit was silently ignored and every file passed regardless.
+    # good_mp4's real resolution is well above 1 pixel, so a forwarded
+    # max_video_pixels=1 must reject it; before the fix, this always
+    # succeeded because the hardcoded default (64,000,000) was used instead.
+    from artifact_skill.security.limits import Limits
+
+    ref = ArtifactRef.from_path(good_mp4)
+    with pytest.raises(ArtifactSecurityError):
+        adapter.render(ref, tmp_path / "rendered", limits=Limits(max_video_pixels=1))
+
+
 # ---- render ------------------------------------------------------
 
 
@@ -287,9 +368,14 @@ def test_render_extracts_one_frame_from_good_mp4(good_mp4, adapter, tmp_path):
 
 def test_render_audio_only_produces_no_files_with_a_warning(good_wav, adapter, tmp_path):
     ref = ArtifactRef.from_path(good_wav)
-    result = adapter.render(ref, tmp_path / "rendered")
+    out_dir = tmp_path / "rendered"
+    result = adapter.render(ref, out_dir)
     assert result.files == []
     assert any("audio-only" in w for w in result.warnings)
+    # Round-3 adversarial-review finding, verified by direct reproduction:
+    # the zero-file path used to return before out_dir.mkdir(), unlike every
+    # other adapter's "skip and say why" render path (e.g. EPUB's).
+    assert out_dir.exists()
 
 
 def test_render_rejects_corrupt_input(corrupt_truncated_mp4, adapter, tmp_path):

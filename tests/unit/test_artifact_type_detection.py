@@ -31,6 +31,23 @@ def test_missing_file_raises_input_error(tmp_path):
         ArtifactRef.from_path(tmp_path / "does_not_exist.pdf")
 
 
+def test_path_too_long_for_the_os_raises_input_error_not_a_bare_os_error(tmp_path):
+    # Adversarial-review finding, verified by direct reproduction: a path
+    # component the OS rejects outright (ENAMETOOLONG) made is_file()'s
+    # underlying os.stat() raise a bare OSError instead of returning False,
+    # which propagated uncaught past the CLI's own error-mapping (it only
+    # catches ArtifactError) as a raw Python traceback and non-category
+    # exit code instead of the tool's structured error contract.
+    import pytest
+
+    from artifact_skill.core.errors import ArtifactInputError
+
+    too_long = tmp_path / ("x" * 5000) / "does_not_exist.mp4"
+    with pytest.raises(ArtifactInputError) as exc_info:
+        ArtifactRef.from_path(too_long)
+    assert exc_info.value.code == "ARTIFACT_INPUT_NOT_FOUND"
+
+
 def test_hash_is_stable_for_same_content(good_pdf):
     ref1 = ArtifactRef.from_path(good_pdf)
     ref2 = ArtifactRef.from_path(good_pdf)
