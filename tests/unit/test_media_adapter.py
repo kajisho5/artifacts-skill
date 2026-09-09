@@ -287,9 +287,14 @@ def test_render_extracts_one_frame_from_good_mp4(good_mp4, adapter, tmp_path):
 
 def test_render_audio_only_produces_no_files_with_a_warning(good_wav, adapter, tmp_path):
     ref = ArtifactRef.from_path(good_wav)
-    result = adapter.render(ref, tmp_path / "rendered")
+    out_dir = tmp_path / "rendered"
+    result = adapter.render(ref, out_dir)
     assert result.files == []
     assert any("audio-only" in w for w in result.warnings)
+    # Round-3 adversarial-review finding, verified by direct reproduction:
+    # the zero-file path used to return before out_dir.mkdir(), unlike every
+    # other adapter's "skip and say why" render path (e.g. EPUB's).
+    assert out_dir.exists()
 
 
 def test_render_rejects_corrupt_input(corrupt_truncated_mp4, adapter, tmp_path):

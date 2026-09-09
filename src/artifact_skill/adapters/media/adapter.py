@@ -242,6 +242,8 @@ class MediaAdapter(ArtifactAdapter):
         report = self.inspect(ref)
         details = report.details
 
+        out_dir.mkdir(parents=True, exist_ok=True)
+
         if not details["has_video"]:
             return RenderResult(
                 kind="page_images", files=[], backend="ffmpeg",
@@ -251,7 +253,6 @@ class MediaAdapter(ArtifactAdapter):
         duration = details["duration_seconds"]
         at_seconds = min(2.0, duration / 2) if duration and duration > 0 else 0.0
 
-        out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / "frame-001.png"
         try:
             extract_frame(ref.path, out_path, at_seconds=at_seconds, limits=limits)

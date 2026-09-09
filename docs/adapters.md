@@ -627,6 +627,29 @@ deserves a more specific answer than "unrecognized file."
   not just `render()`'s own costlier decode step. The same review's
   fail-open `ftyp`-brand denylist finding is the allowlist change
   described above.
+- **Independent adversarial review, round 3 (CLI/MCP surface, contract,
+  docs)**: a third fresh-context pass, deliberately scoped away from the
+  two axes above, actually drove the CLI end-to-end (`doctor`, `inspect`,
+  `render`, `verify` with a Media policy, `receipt`, `contract --json`)
+  against real ffmpeg-generated fixtures rather than reading code. Found
+  one real bug: `render()`'s zero-file audio-only path returned before
+  `out_dir.mkdir(...)`, so `--out-dir` was silently never created — unlike
+  every other adapter's "skip and say why" render path (EPUB's included),
+  which creates the directory unconditionally before deciding whether
+  anything renderable exists. Fixed by moving the `mkdir` above the
+  `has_video` check. The same pass also flagged a real but pre-existing,
+  Media-independent issue: the generic "unknown policy key" error's
+  remediation text pointed callers at `docs/verification.md` and `contract
+  --json` for the list of valid per-format policy keys, but neither
+  actually contains it (that list lives here, in this file). Fixed by
+  pointing the remediation at `docs/adapters.md` instead
+  (`core/engine.py`, `policies.py`). Everything else checked — `doctor`
+  capability rows, `inspect`/`render` output on real fixtures including
+  the round-1 cover-art fix and the round-2 resolution guard, policy
+  array-to-tuple handling for `require_min_resolution`, the generated
+  `contract --json` surface, MCP server dispatch (confirmed
+  format-agnostic, no Media-specific branching), and every doc file's
+  accuracy against current behavior — came back clean.
 
 ## Planned, not implemented
 
