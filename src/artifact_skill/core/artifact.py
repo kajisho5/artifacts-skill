@@ -34,6 +34,20 @@ _CHUNK = 1024 * 1024
 # generic "unknown type" one.
 _CFB_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
+# EBML header (fixed by the Matroska/WebM spec) - the container format
+# both use; ffprobe (adapters/media/adapter.py) tells them apart from the
+# same file, so type detection only needs to recognize "this is EBML."
+_EBML_MAGIC = b"\x1a\x45\xdf\xa3"
+
+# ISO Base Media File Format ("ftyp" box at byte offset 4) is shared by
+# MP4/MOV/M4A/3GP *and* HEIC/AVIF still images - this project has no HEIC/
+# AVIF adapter, so without excluding their major-brand values here, a HEIC
+# photo would be misdetected as MEDIA and then fail ffprobe's stream check
+# as if it were corrupt media, rather than being honestly UNKNOWN.
+_FTYP_NON_MEDIA_BRANDS = {
+    b"heic", b"heix", b"heim", b"heis", b"hevc", b"hevx", b"hevm", b"hevs", b"mif1", b"msf1", b"avif", b"avis",
+}
+
 
 class ArtifactType(str, enum.Enum):
     PDF = "pdf"
@@ -50,6 +64,7 @@ class ArtifactType(str, enum.Enum):
     CSV = "csv"
     MARKDOWN = "markdown"
     EPUB = "epub"
+    MEDIA = "media"
     UNKNOWN = "unknown"
 
 
@@ -258,6 +273,12 @@ def detect_type(path: Path) -> ArtifactType:
         return ArtifactType.IMAGE_JPEG
     if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
         return ArtifactType.IMAGE_WEBP
+    if head[:4] == b"RIFF" and head[8:12] == b"WAVE":
+        return ArtifactType.MEDIA
+    if head[:4] == _EBML_MAGIC:
+        return ArtifactType.MEDIA
+    if head[4:8] == b"ftyp" and head[8:12] not in _FTYP_NON_MEDIA_BRANDS:
+        return ArtifactType.MEDIA
     stripped = _strip_leading_markup_noise(head).lower()
     if stripped.startswith(b"<?xml") and b"<svg" in stripped[:2048]:
         return ArtifactType.SVG

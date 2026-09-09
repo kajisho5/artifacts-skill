@@ -15,6 +15,7 @@ SVG_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "svg"
 CSV_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "csv"
 MARKDOWN_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "markdown"
 EPUB_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "epub"
+MEDIA_FIXTURES_DIR = Path(__file__).parent / "fixtures" / "media"
 
 
 @pytest.fixture()
@@ -492,4 +493,60 @@ def missing_container_epub(tmp_path: Path) -> Path:
 def mislabeled_pdf_as_epub(tmp_path: Path) -> Path:
     dst = tmp_path / "mislabeled_pdf.epub"
     shutil.copy(EPUB_FIXTURES_DIR / "mislabeled_pdf.epub", dst)
+    return dst
+
+
+@pytest.fixture()
+def good_mp4(tmp_path: Path) -> Path:
+    dst = tmp_path / "good.mp4"
+    shutil.copy(MEDIA_FIXTURES_DIR / "good.mp4", dst)
+    return dst
+
+
+@pytest.fixture()
+def good_webm(tmp_path: Path) -> Path:
+    dst = tmp_path / "good.webm"
+    shutil.copy(MEDIA_FIXTURES_DIR / "good.webm", dst)
+    return dst
+
+
+@pytest.fixture()
+def good_wav(tmp_path: Path) -> Path:
+    dst = tmp_path / "good.wav"
+    shutil.copy(MEDIA_FIXTURES_DIR / "good.wav", dst)
+    return dst
+
+
+@pytest.fixture()
+def audio_only_mp4(tmp_path: Path) -> Path:
+    dst = tmp_path / "audio_only.mp4"
+    shutil.copy(MEDIA_FIXTURES_DIR / "audio_only.mp4", dst)
+    return dst
+
+
+@pytest.fixture()
+def leftover_placeholder_wav(tmp_path: Path) -> Path:
+    dst = tmp_path / "leftover_placeholder.wav"
+    shutil.copy(MEDIA_FIXTURES_DIR / "leftover_placeholder.wav", dst)
+    return dst
+
+
+@pytest.fixture()
+def corrupt_truncated_mp4(tmp_path: Path) -> Path:
+    dst = tmp_path / "corrupt_truncated.mp4"
+    shutil.copy(MEDIA_FIXTURES_DIR / "corrupt_truncated.mp4", dst)
+    return dst
+
+
+@pytest.fixture()
+def garbage_too_short_mp4(tmp_path: Path) -> Path:
+    dst = tmp_path / "garbage_too_short.mp4"
+    shutil.copy(MEDIA_FIXTURES_DIR / "garbage_too_short.mp4", dst)
+    return dst
+
+
+@pytest.fixture()
+def mislabeled_pdf_as_mp4(tmp_path: Path) -> Path:
+    dst = tmp_path / "mislabeled_pdf.mp4"
+    shutil.copy(MEDIA_FIXTURES_DIR / "mislabeled_pdf.mp4", dst)
     return dst

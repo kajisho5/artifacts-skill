@@ -133,6 +133,8 @@ def detect_environment() -> CapabilityReport:
     report.add(_binary_capability("backend.poppler_pdftotext", ["pdftotext"]))
     report.add(_binary_capability("backend.qpdf", ["qpdf"]))
     report.add(_binary_capability("backend.imagemagick", ["magick", "convert"]))
+    report.add(_binary_capability("backend.ffmpeg", ["ffmpeg"]))
+    report.add(_binary_capability("backend.ffprobe", ["ffprobe"]))
     report.add(_chromium_capability())
 
     # Adapter-facing libraries. `required=True` only for what the currently

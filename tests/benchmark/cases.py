@@ -225,6 +225,20 @@ STRUCTURAL_DEFECT_CASES: list[StructuralDefectCase] = [
         "No META-INF/container.xml at all; epub_validity — caught as ArtifactInputError, not a security "
         "control, so (unlike entity_bomb.epub below) this is a Check, not an exception.",
     ),
+    StructuralDefectCase(
+        "media/leftover_placeholder.wav", CheckStatus.WARN,
+        "Container metadata title tag contains 'TODO'; leftover_placeholder_text (WARN by default).",
+    ),
+    StructuralDefectCase(
+        "media/corrupt_truncated.mp4", CheckStatus.FAIL,
+        "A real MP4 truncated mid-stream; media_readable — ffprobe refuses it, caught as ArtifactInputError "
+        "and reported as a Check, same shape as epub/missing_container.epub above.",
+    ),
+    StructuralDefectCase(
+        "media/garbage_too_short.mp4", CheckStatus.FAIL,
+        "Only the first 20 bytes of a real MP4 (still enough to match the 'ftyp' magic-byte check at the "
+        "type-detection layer); media_readable — ffprobe has nowhere near enough data to read anything.",
+    ),
 ]
 
 EXCEPTION_CASES: list[ExceptionCase] = [
@@ -272,6 +286,14 @@ KNOWN_GOOD_CASES: list[KnownGoodCase] = [
         "leftover-text scan (code, not document text) — proves the exclusion works, not just that clean text passes.",
     ),
     KnownGoodCase("epub/good.epub", CheckStatus.PASS, "Clean EPUB: one spine chapter, valid manifest, mimetype first and stored."),
+    KnownGoodCase("media/good.mp4", CheckStatus.PASS, "Clean MP4: H.264 video + AAC audio, both streams readable."),
+    KnownGoodCase("media/good.webm", CheckStatus.PASS, "Clean WebM: VP9 video, no audio track."),
+    KnownGoodCase("media/good.wav", CheckStatus.PASS, "Clean WAV: audio-only, no video stream at all."),
+    KnownGoodCase(
+        "media/audio_only.mp4", CheckStatus.PASS,
+        "An MP4/M4A-family container that is genuinely audio-only — proves has_video/has_audio come from "
+        "the real probed streams, not assumed from the container family.",
+    ),
 ]
 
 TYPE_DETECTION_CASES: list[TypeDetectionCase] = [
@@ -285,4 +307,5 @@ TYPE_DETECTION_CASES: list[TypeDetectionCase] = [
     TypeDetectionCase("csv/mislabeled_pdf.csv", ArtifactType.PDF, "Real PDF content, misleading .csv extension."),
     TypeDetectionCase("markdown/mislabeled_pdf.md", ArtifactType.PDF, "Real PDF content, misleading .md extension."),
     TypeDetectionCase("epub/mislabeled_pdf.epub", ArtifactType.PDF, "Real PDF content, misleading .epub extension."),
+    TypeDetectionCase("media/mislabeled_pdf.mp4", ArtifactType.PDF, "Real PDF content, misleading .mp4 extension."),
 ]

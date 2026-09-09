@@ -528,13 +528,82 @@ deserves a more specific answer than "unrecognized file."
   root's own tag, not hardcoded) as the default prefix before
   serializing.
 
+## Implemented: Media — video/audio (`adapters/media/adapter.py`)
+
+- **Backend**: shells out to `ffprobe`/`ffmpeg` (`rendering/ffmpeg_probe.py`)
+  — neither is a Python package this project can bundle, so
+  `media.structural`/`media.render` report `AVAILABLE` only when the
+  corresponding binary is found on `PATH`, the same present-binary-is-
+  not-a-guarantee posture the PPTX/DOCX/XLSX adapters document for
+  LibreOffice.
+- **`ArtifactType.MEDIA` covers both audio and video** rather than
+  splitting into separate types: type detection can only recognize the
+  *container* from magic bytes (MP4/MOV/M4A-family via the ISO-BMFF
+  `ftyp` box, WebM/Matroska via the EBML header, WAV via RIFF/WAVE) —
+  telling audio-only from video apart needs an actual stream probe,
+  which is exactly what `inspect()` does (`details["has_video"]`/
+  `details["has_audio"]`). HEIC/AVIF still images also use `ftyp`; their
+  major-brand values are excluded from the magic-byte check so a HEIC
+  photo (a format this project has no adapter for) stays honestly
+  `UNKNOWN` instead of being misdetected as broken media.
+- **No mutating operations, by design, not by omission**: this project
+  is a verification/evidence-generation engine, not a video editor (see
+  "What this is (and isn't)" in `docs/architecture.md`). Producing or
+  editing media is squarely another tool's job — this adapter's contract
+  is the same one HTML/SVG/CSV/Markdown already have: inspect/render/
+  verify, never execute.
+- **Structural checks**: readability (`media_readable`, `FAIL` if
+  `ffprobe` can't open the file — a truncated/corrupt file can still
+  match a container's magic bytes at the type-detection layer),
+  `has_stream` (`FAIL` if ffprobe opens the file but finds zero audio/
+  video streams at all), `duration_known` (`UNKNOWN` if ffprobe reports
+  no duration, `FAIL` if it's zero/negative, `PASS` otherwise), optional
+  `min_duration_seconds`/`max_duration_seconds` range, optional
+  `require_has_video`/`require_has_audio`, optional
+  `require_min_resolution` (video only — `FAIL` with no video stream at
+  all), optional `require_video_codec`/`require_audio_codec` (a string or
+  a list of acceptable codec names), and leftover generation-artifact
+  text scanned across `ffprobe`'s own container metadata tag *values*
+  (title/comment/artist/etc. under `format.tags`) — not anything burned
+  into the video frames themselves, which no OCR step here reads.
+- **Render: one extracted frame, not a full playback check** — the same
+  "give an agent something it can actually look at" contract every other
+  adapter's `render()` honors, applied to video's natural analogue of "a
+  page." Extracted at `min(2.0, duration/2)` seconds via
+  `ffmpeg -ss <t> -frames:v 1`. An audio-only file (no video stream) has
+  nothing to extract a frame from — `render()` returns zero files with a
+  warning, not an error, the same "skip and say why" shape EPUB's
+  `render()` uses for a spine item it can't render.
+- **Known limitations**: MP3 (no reliable magic-byte signature without
+  deeper frame parsing) and other containers beyond MP4/MOV/M4A-family,
+  WebM/Matroska, and WAV are not recognized as `MEDIA`; corruption
+  detection relies entirely on `ffprobe`'s own exit code and JSON output
+  — a file `ffprobe` can open but that plays back incorrectly elsewhere
+  is not detected; one extracted frame says nothing about motion, audio
+  content, or frame-to-frame consistency.
+- **Self-audit finding, fixed before any external review saw it**: both
+  `office_convert.py::convert_to_pdf()` (pre-existing, affecting PPTX/
+  DOCX/XLSX render()) and this adapter's own `ffmpeg_probe.py` passed a
+  possibly-*relative* input path straight into the subprocess call —
+  `security/subprocess_exec.py::run()` executes every call inside a
+  fresh temporary working directory unrelated to the caller's own cwd,
+  so a relative path (exactly what `ArtifactRef.from_path()` produces
+  for a relative CLI argument, since it never resolves the path itself)
+  silently failed to be found. Every existing test happened to use
+  pytest's `tmp_path` fixture (always absolute), which is exactly why
+  this went unnoticed until reproduced directly with a relative path.
+  Fixed by resolving the path before use in both places, the same
+  `.resolve()` `rendering/chromium_render.py::render_local_files()`
+  already does for its own `source_path`.
+
 ## Planned, not implemented
 
 Every currently-known `ArtifactType` now has a real adapter — `_PLANNED`
-is empty. See `docs/roadmap.md`'s "Later" section for what's out of scope
-for the near term entirely (CAD, 3D assets, audio, video — considered and
-rejected when broadening to CSV/Markdown/EPUB above) rather than "planned
-but not started."
+is empty. See `docs/roadmap.md`'s "Later" section for what's still out of
+scope entirely (CAD, 3D assets — considered and rejected when broadening
+beyond Tier 1/2) rather than "planned but not started." Audio/video used
+to be listed there too; see `docs/roadmap.md`'s Phase 9 for why that
+call was revisited and the Media adapter above for what shipped.
 
 `doctor` reports backend libraries' import/PATH availability
 informationally (so a contributor or user can see what to install ahead

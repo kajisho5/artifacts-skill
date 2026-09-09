@@ -6,8 +6,8 @@ A type with no registered adapter but a known future one is named in
 coming, rather than the generic `ARTIFACT_TYPE_UNSUPPORTED` for a type
 this project has no plan for at all — never silently absent and never a
 fake pass-through either way. `_PLANNED` is empty today: every format
-from the original design brief's Tier 1/2, plus CSV/Markdown/EPUB added
-beyond it, is implemented (see docs/roadmap.md).
+from the original design brief's Tier 1/2, plus CSV/Markdown/EPUB/Media
+added beyond it, is implemented (see docs/roadmap.md).
 """
 
 from __future__ import annotations
@@ -98,6 +98,7 @@ def _register_builtin_adapters() -> None:
     from artifact_skill.adapters.html.adapter import HtmlAdapter
     from artifact_skill.adapters.image.adapter import ImageAdapter
     from artifact_skill.adapters.markdown.adapter import MarkdownAdapter
+    from artifact_skill.adapters.media.adapter import MediaAdapter
     from artifact_skill.adapters.pdf.adapter import PdfAdapter
     from artifact_skill.adapters.pptx.adapter import PptxAdapter
     from artifact_skill.adapters.svg.adapter import SvgAdapter
@@ -112,6 +113,7 @@ def _register_builtin_adapters() -> None:
     register(CsvAdapter)
     register(MarkdownAdapter)
     register(EpubAdapter)
+    register(MediaAdapter)
     register_for_types(
         ImageAdapter, [ArtifactType.IMAGE_PNG, ArtifactType.IMAGE_JPEG, ArtifactType.IMAGE_WEBP]
     )

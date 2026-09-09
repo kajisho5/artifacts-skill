@@ -83,9 +83,10 @@ just a claim. Once published, the same commands work as
 | CSV | ✅ | ✅ | ✅ (Playwright + Chromium) | — (inspect/render/verify only, by design) |
 | Markdown | ✅ | ✅ | ✅ (`markdown-it-py` + Playwright + Chromium) | — (inspect/render/verify only, by design) |
 | EPUB | ✅ | ✅ | ✅ (Playwright + Chromium) | `metadata_set` |
+| Media (MP4/MOV/WebM/WAV, video or audio) | ✅ | ✅ | ✅ (`ffmpeg`/`ffprobe`, one representative frame) | — (inspect/render/verify only, by design — see below) |
 
 All formats from the original design brief's Tier 1 and Tier 2, plus CSV/
-Markdown/EPUB added beyond it, are now implemented. A genuinely
+Markdown/EPUB/Media added beyond it, are now implemented. A genuinely
 unrecognized file fails loudly with `ARTIFACT_TYPE_UNSUPPORTED`; a
 recognized-but-not-yet-built format would fail with
 `ARTIFACT_ADAPTER_NOT_IMPLEMENTED` — never a silent no-op. See
@@ -167,7 +168,7 @@ same honest comparison this section summarizes.
 ```bash
 git clone https://github.com/kajisho5/artifacts-skill
 cd artifacts-skill
-pip install -e ".[all]"   # every adapter (PDF/PPTX/DOCX/XLSX/Image/HTML/SVG/CSV/Markdown/EPUB)
+pip install -e ".[all]"   # every adapter (PDF/PPTX/DOCX/XLSX/Image/HTML/SVG/CSV/Markdown/EPUB/Media)
 artifacts-skill doctor
 ```
 
@@ -178,7 +179,9 @@ full list). PPTX/DOCX/XLSX also need a `soffice`/`libreoffice` binary on
 `PATH` for rendering; HTML/SVG/CSV/Markdown need `playwright install
 chromium` once after installing their extra (Markdown also needs
 `markdown-it-py`, pulled in by `.[markdown]`). EPUB needs nothing beyond
-the standard library. Run `artifacts-skill doctor` to see exactly what's
+the standard library. Media needs `ffmpeg`/`ffprobe` on `PATH` (no pip
+package — `.[media]` is an intentionally empty extra, see
+`pyproject.toml`). Run `artifacts-skill doctor` to see exactly what's
 available and what's still missing — never assume.
 
 Or, once published: `npx artifacts-skill doctor` (the npm package is a thin

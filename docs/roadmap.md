@@ -1,27 +1,27 @@
 # Roadmap
 
-> **Status for a new contributor (2026-09-08):** all format adapters —
-> now including CSV, Markdown, and EPUB (Phase 8) alongside the original
-> PDF/PPTX/DOCX/XLSX/Image/HTML/SVG set — the fix loop, MCP protocol
-> negotiation, JSON Schema files, verification policy presets, an expanded
-> mutation-operation catalog, and real LibreOffice/Chromium/macOS CI
-> coverage are done — see GitHub issue #2 (the roadmap tracker) for the
-> authoritative, currently-open-vs-closed list, since this file reads
-> chronologically (what happened, in what order) rather than as a live
-> checklist. As of this writing the only items still open are Issue #9
-> (publish to PyPI/npm — deliberately not started without the repo
-> owner's explicit go-ahead, since it's an external, irreversible action)
-> and anything filed after this note.
+> **Status for a new contributor (2026-09-09):** all format adapters —
+> now including CSV, Markdown, and EPUB (Phase 8), and video/audio media
+> (Phase 9) alongside the original PDF/PPTX/DOCX/XLSX/Image/HTML/SVG set —
+> the fix loop, MCP protocol negotiation, JSON Schema files, verification
+> policy presets, an expanded mutation-operation catalog, and real
+> LibreOffice/Chromium/ffmpeg/macOS CI coverage are done — see GitHub
+> issue #2 (the roadmap tracker) for the authoritative, currently-open-
+> vs-closed list, since this file reads chronologically (what happened,
+> in what order) rather than as a live checklist. Issue #9 (publish to
+> PyPI/npm) is done: `artifacts-skill` v0.1.0 is published on npm. Any
+> remaining open items are whatever was filed after this note.
 
 Phases per the original design brief. **Phase 0-1, Phase 2 (PDF + PPTX),
 Phase 3 (DOCX + XLSX), a working slice of Phase 4/5, all of Phase 6
-(Image + HTML + SVG), and Phase 8 (CSV + Markdown + EPUB, added beyond
-the original brief) are done as of this writing** — everything below
-"Now" is planned, not implemented, and nothing in this codebase claims
-otherwise (`doctor`/`registry.py` report unimplemented formats
-explicitly). All four Tier 1 formats from the original design brief
-(PDF/PPTX/DOCX/XLSX) are now implemented, plus PNG/JPEG/WebP, HTML, and
-SVG from Tier 2, plus CSV/Markdown/EPUB from Phase 8 —
+(Image + HTML + SVG), Phase 8 (CSV + Markdown + EPUB, added beyond the
+original brief), and Phase 9 (Media/video/audio, also added beyond the
+original brief) are done as of this writing** — everything below "Now" is
+planned, not implemented, and nothing in this codebase claims otherwise
+(`doctor`/`registry.py` report unimplemented formats explicitly). All four
+Tier 1 formats from the original design brief (PDF/PPTX/DOCX/XLSX) are now
+implemented, plus PNG/JPEG/WebP, HTML, and SVG from Tier 2, plus
+CSV/Markdown/EPUB from Phase 8 and Media from Phase 9 —
 `adapters/registry.py`'s `_PLANNED` dict is now empty, meaning every
 `ArtifactType` this project currently knows about has a real adapter.
 
@@ -136,19 +136,19 @@ SVG from Tier 2, plus CSV/Markdown/EPUB from Phase 8 —
 
 All four Tier 1 formats (PDF, PPTX, DOCX, XLSX) are implemented, the PDF
 font-embedding gap flagged since the MVP is closed, all of Phase 6
-(Image, HTML, SVG) is done, Phase 8 (CSV, Markdown, EPUB) is done, and
-Issue #8's fix loop now has one real, tested fixer (`pdf.fit_page_size`,
-see the "Fix-loop honesty note" above) — see `docs/adapters.md` for the
-full per-adapter writeups. Remaining candidates: Issue #9 (PyPI/npm
-distribution — requires explicit confirmation before executing, since
-publishing is an external, irreversible action). Issue #10 is resolved
-(see below) — the only open item on the roadmap tracker is Issue #9.
+(Image, HTML, SVG) is done, Phase 8 (CSV, Markdown, EPUB) is done, Phase 9
+(Media/video/audio) is done, and Issue #8's fix loop now has one real,
+tested fixer (`pdf.fit_page_size`, see the "Fix-loop honesty note" above)
+— see `docs/adapters.md` for the full per-adapter writeups. Issue #9
+(PyPI/npm distribution) is also done: `artifacts-skill` v0.1.0 is
+published on npm. Issue #10 is resolved (see below). See GitHub issue #2
+(the roadmap tracker) for whatever is open now, rather than trusting this
+paragraph to stay current forever.
 
 ## Later
 
-Issue #9 (PyPI/npm publishing) is the only tracker item left, and it
-requires explicit user confirmation before executing since publishing is
-an external, irreversible action.
+Nothing tracked here is currently blocking; see GitHub issue #2 for
+whatever's been filed since this section was last updated.
 
 **CAD and 3D assets (DWG/DXF/STEP, glTF/OBJ/STL, …) are not planned.**
 Considered directly when broadening beyond CSV/Markdown/EPUB (Phase 8):
@@ -159,14 +159,22 @@ assets need a full engine (e.g. a headless Blender) just to produce a
 single preview image. Both would mean a heavyweight new dependency class
 for one format each, a poor trade the existing adapters don't ask for.
 
-**Audio and video are not planned here.** The verification model this
-project is built around — structural checks plus a rendered page/frame as
-visual evidence — doesn't transfer to time-based media at all; a real
-audio/video adapter needs a different verification paradigm entirely
-(waveform/frame analysis, duration/codec checks), not a render() variant.
-That's also squarely `kajisho5/ffmpeg-skill`'s own domain (see "What is
-SPEC?" in `README.md`) — building it here would duplicate, not
-complement, a sibling project already built for exactly this.
+**Audio and video, revisited — now Phase 9, done.** This section used to
+say audio/video weren't planned, on two grounds: the structural-checks-
+plus-rendered-visual-evidence model "doesn't transfer to time-based
+media," and it would duplicate `kajisho5/ffmpeg-skill`'s own domain
+rather than complement it. Revisited directly (not by just deleting the
+paragraph): the model transfers fine once "structural checks" means
+`ffprobe`-reported facts (duration, codec, resolution, stream presence)
+instead of `pypdf`-reported ones, and "rendered visual evidence" means
+one `ffmpeg`-extracted frame instead of one rendered page — the same
+verify/render split, different backend, not a different paradigm. And
+the duplication concern doesn't apply to what actually got built:
+`ffmpeg-skill` (or any tool) *generates or edits* media; this project
+only verifies whatever it produced, exactly the same generation/
+verification split every other format already has (this project was
+never going to generate PDFs or slide decks either, just verify them).
+See Phase 9 above and `docs/adapters.md`'s Media section for what shipped.
 
 ## Phase 7 — Ecosystem integration + scored benchmark (Issue #10 — resolved)
 
@@ -296,6 +304,40 @@ planned" below for the formats considered and rejected in the same pass.
   references (a chapter under `text/` pulling an image from a sibling
   `images/`) resolve correctly without reopening the P0-2 `file://`
   containment hole.
+
+## Phase 9 — Media (video/audio) adapter
+
+Added on request as a natural companion to a separate ffmpeg-driven
+generation/editing tool: that tool's job is producing or editing media,
+this project's job (unchanged from every other format) is verifying
+whatever it produced — the same generation/verification split
+`docs/architecture.md`'s "What this is (and isn't)" section describes,
+just applied to a new domain rather than a new document format.
+
+- **Media** (`adapters/media/adapter.py`). Shells out to `ffprobe`/
+  `ffmpeg` via a new `rendering/ffmpeg_probe.py` (the same
+  shell-out-through-`security/subprocess_exec.py` shape
+  `rendering/office_convert.py` established for LibreOffice) since
+  neither is a Python package this project can bundle — `doctor` probes
+  both binaries the same way it probes `soffice`/Chromium. One
+  `ArtifactType.MEDIA` covers MP4/MOV/M4A-family (ISO-BMFF `ftyp`),
+  WebM/Matroska (EBML), and WAV (RIFF/WAVE) — type detection can only
+  recognize the *container* from magic bytes; telling audio-only from
+  video apart needs `inspect()`'s real stream probe. No mutating
+  operations, by design: producing/editing media is the generation
+  tool's job, not this one's — the same inspect/render/verify-only
+  contract HTML/SVG/CSV/Markdown already have. `render()` extracts one
+  representative frame via `ffmpeg -frames:v 1`, the same "give an agent
+  something to look at" contract every other adapter's render() honors;
+  an audio-only file reports zero files with a warning, not an error.
+  **Self-audit finding, fixed in the same pass**: both this adapter's own
+  `ffmpeg_probe.py` and the pre-existing `office_convert.py` passed a
+  possibly-relative input path straight into a subprocess call that runs
+  inside its own fresh temp cwd — silently failing to find a relative
+  path that resolved correctly from the *caller's* cwd. Every existing
+  test used pytest's `tmp_path` (always absolute), which is exactly why
+  this went unnoticed until reproduced directly; see
+  `docs/adapters.md`'s Media section for the full account.
 
 ## Explicitly not planned (see spec §62)
 

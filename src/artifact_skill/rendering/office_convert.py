@@ -61,6 +61,18 @@ def convert_to_pdf(input_path: Path, pdf_out_dir: Path, *, limits: Limits = DEFA
     the real instance of this that shaped this function's error handling.
     """
     soffice = require_soffice_binary("render")
+    # Self-audit finding, verified by direct reproduction: run_subprocess()
+    # runs soffice inside a fresh temp directory (its own cwd, unrelated to
+    # the caller's), so a relative `input_path` - exactly what
+    # ArtifactRef.from_path() produces for a relative CLI argument, since
+    # it never resolves the path itself - silently failed to be found by
+    # soffice ("source file could not be loaded" or no PDF output at all),
+    # even though the file genuinely exists relative to the *caller's* cwd.
+    # Every existing test happened to use pytest's tmp_path (always
+    # absolute), which is exactly why this went unnoticed until reproduced
+    # directly with a relative path. chromium_render.py's render_local_files()
+    # already resolves its own source_path for the identical reason.
+    input_path = input_path.resolve()
     pdf_out_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="artifacts-skill-soffice-profile-") as profile_dir:
         # Path.as_uri() (self-audit finding, FIX_PROMPT P1-3): naive

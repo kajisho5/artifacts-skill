@@ -62,7 +62,9 @@ The PDF and Image adapters never need this module — `pypdf`, `pypdfium2`,
 and Pillow are pure-Python-callable. `rendering/office_convert.py` (used
 by PPTX/DOCX/XLSX for LibreOffice-backed rendering) is the module's actual
 consumer, going through `run()` with an explicit `{"soffice",
-"libreoffice"}` allowlist for every invocation.
+"libreoffice"}` allowlist for every invocation. `rendering/ffmpeg_probe.py`
+(the media adapter's `ffprobe`/`ffmpeg` calls) follows the identical
+pattern with its own `{"ffmpeg", "ffprobe"}` allowlist.
 
 **Cross-platform allowlist matching.** Adapters write allowlists using
 platform-neutral executable names (`"soffice"`), but the resolved,

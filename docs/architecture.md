@@ -71,10 +71,10 @@ policy; nothing enforces it.
        |              |              |
        +--------------+--------------+
                       |
-                       Adapters
-       +------+------+------+------+------+------+------+------+------+
-       |      |      |      |      |      |      |      |      |      |
-      PDF   PPTX   DOCX   XLSX  Image  HTML   SVG   CSV    MD   EPUB
+                            Adapters
+       +------+------+------+------+------+------+------+------+------+------+
+       |      |      |      |      |      |      |      |      |      |      |
+      PDF   PPTX   DOCX   XLSX  Image  HTML   SVG   CSV    MD   EPUB  Media
        |
        v
    Local Backends (pypdf, pypdfium2, ...)
@@ -143,8 +143,8 @@ happen; `core/engine.py` only calls it with whatever `RenderResult` (or
 Adding a format means implementing this interface under `adapters/<format>/`
 and registering it in `adapters/registry.py`. Nothing in `core/`, `cli/`, or
 `mcp/` changes. Every `ArtifactType` this project currently knows about
-(PDF, PPTX, DOCX, XLSX, PNG/JPEG/WebP, HTML, SVG) has a real adapter as of
-`docs/roadmap.md`'s Phase 6 — `registry.py`'s `_PLANNED` map is empty. It
+(PDF, PPTX, DOCX, XLSX, PNG/JPEG/WebP, HTML, SVG, CSV, Markdown, EPUB,
+Media) has a real adapter — `registry.py`'s `_PLANNED` map is empty. It
 still exists, and still matters: a future format added there before its
 adapter lands makes `get_adapter()` raise a clear
 `ARTIFACT_ADAPTER_NOT_IMPLEMENTED` instead of `KeyError` or, worse, a

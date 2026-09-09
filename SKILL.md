@@ -1,8 +1,8 @@
 ---
 name: artifacts-skill
-description: Local-first execution and verification engine for real-world artifacts (PDF, PPTX, DOCX, XLSX, PNG/JPEG/WebP, HTML, SVG, CSV, Markdown, EPUB). Use it whenever you create or modify a document-like file and need to prove it is actually correct before calling the job done — inspect what a file really is, plan a mutation before touching it, execute it without overwriting the original, render it to images, run structural checks, and get a machine-readable Production Receipt. Trigger on requests like "make sure this PDF is correct", "verify this document before I send it", "did the page count come out right", "check this file isn't corrupted", or any time you are about to say a generated artifact is "done" without having checked it.
+description: Local-first execution and verification engine for real-world artifacts (PDF, PPTX, DOCX, XLSX, PNG/JPEG/WebP, HTML, SVG, CSV, Markdown, EPUB, video/audio media). Use it whenever you create or modify a document-like file and need to prove it is actually correct before calling the job done — inspect what a file really is, plan a mutation before touching it, execute it without overwriting the original, render it to images, run structural checks, and get a machine-readable Production Receipt. Trigger on requests like "make sure this PDF is correct", "verify this document before I send it", "did the page count come out right", "check this file isn't corrupted", or any time you are about to say a generated artifact is "done" without having checked it.
 license: MIT
-compatibility: "Requires Python 3.10+. Install the `all` extra for every adapter, or a per-format extra (`pdf`, `pptx`, `docx`, `xlsx`, `image`, `html`, `svg`, `csv`, `markdown`, `epub`) for just what you need. PPTX/DOCX/XLSX rendering additionally needs a `soffice`/`libreoffice` binary on PATH; HTML/SVG/CSV rendering needs `playwright install chromium` after installing the relevant extra, and Markdown rendering additionally needs `markdown-it-py` (pulled in by `.[markdown]`). EPUB structural verification needs nothing beyond the standard library; EPUB rendering needs `playwright install chromium` after installing the `epub` extra, same as HTML/SVG/CSV/Markdown. Run `artifacts-skill doctor` to see real availability rather than assuming."
+compatibility: "Requires Python 3.10+. Install the `all` extra for every adapter, or a per-format extra (`pdf`, `pptx`, `docx`, `xlsx`, `image`, `html`, `svg`, `csv`, `markdown`, `epub`, `media`) for just what you need. PPTX/DOCX/XLSX rendering additionally needs a `soffice`/`libreoffice` binary on PATH; HTML/SVG/CSV rendering needs `playwright install chromium` after installing the relevant extra, and Markdown rendering additionally needs `markdown-it-py` (pulled in by `.[markdown]`). EPUB structural verification needs nothing beyond the standard library; EPUB rendering needs `playwright install chromium` after installing the `epub` extra, same as HTML/SVG/CSV/Markdown. Media (video/audio) needs `ffmpeg`/`ffprobe` on PATH — no pip package, `.[media]` is an intentionally empty extra. Run `artifacts-skill doctor` to see real availability rather than assuming."
 ---
 
 # Artifact Skill
@@ -14,16 +14,17 @@ renders to images, and verifies — and it never just tells you "done"
 without evidence.
 
 **Currently implemented: PDF, PPTX, DOCX, XLSX** (all four Tier 1 formats),
-**PNG/JPEG/WebP, HTML, SVG, CSV, Markdown, and EPUB.** Every format from
-the original design brief's Tier 1 and Tier 2 is built, plus CSV/Markdown/
-EPUB added beyond it. A genuinely unrecognized file returns a clear
-`ARTIFACT_TYPE_UNSUPPORTED` error, never a silent no-op. HTML, SVG, CSV,
-and Markdown have no mutating operations by design (inspect/render/verify
-only — their natural "edit" is markup/prose/cell values, i.e. source-
-content editing, not a property-set operation this skill owns). EPUB has
-one operation (`metadata_set`, title/author only) and renders one PNG per
-spine document via Playwright/Chromium (needs `playwright install
-chromium`) — see `docs/adapters.md` for details.
+**PNG/JPEG/WebP, HTML, SVG, CSV, Markdown, EPUB, and video/audio media
+(MP4/MOV/WebM/WAV).** Every format from the original design brief's Tier 1
+and Tier 2 is built, plus CSV/Markdown/EPUB/Media added beyond it. A
+genuinely unrecognized file returns a clear `ARTIFACT_TYPE_UNSUPPORTED`
+error, never a silent no-op. HTML, SVG, CSV, Markdown, and Media have no
+mutating operations by design (inspect/render/verify only — editing/
+generating media is squarely another tool's job, not this skill's). EPUB
+has one operation (`metadata_set`, title/author only) and renders one PNG
+per spine document via Playwright/Chromium (needs `playwright install
+chromium`); Media renders one representative frame via `ffmpeg`/`ffprobe`
+(needs both on PATH) — see `docs/adapters.md` for details.
 
 ## What this is not
 
@@ -178,7 +179,9 @@ and `strip_placeholders`. Supported DOCX and XLSX operations today:
 `metadata_set` (title/author/subject/keywords). Supported image (PNG/JPEG/
 WebP) operations today: `resize` and `convert_format`. Supported EPUB
 operations today: `metadata_set` (title/author only). CSV and Markdown
-have no mutating operations, same as HTML/SVG. Run
+have no mutating operations, same as HTML/SVG. Media (video/audio) also
+has no mutating operations — editing/transcoding media is another tool's
+job, not this skill's. Run
 `artifacts-skill contract --json` for the exact, current, machine-readable
 schema of every command — treat it as the source of truth over this prose
 if they ever disagree.
