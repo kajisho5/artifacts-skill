@@ -37,7 +37,7 @@ from typing import Any
 from artifact_skill.adapters.base import ArtifactAdapter, OperationSpec, RenderResult
 from artifact_skill.core.artifact import ArtifactRef, ArtifactType, InspectionReport
 from artifact_skill.core.capability import Capability, CapabilityStatus
-from artifact_skill.core.errors import ArtifactInputError
+from artifact_skill.core.errors import ArtifactExecutionError, ArtifactInputError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
 from artifact_skill.leftover_text import find_leftover_markers
@@ -63,7 +63,21 @@ def _parse_frame_rate(value: str | None) -> float | None:
 
 
 def _first_stream(streams: list[dict[str, Any]], codec_type: str) -> dict[str, Any] | None:
-    return next((s for s in streams if s.get("codec_type") == codec_type), None)
+    """Adversarial-review finding, verified by direct reproduction: an
+    audio file with embedded cover art (extremely common — iTunes/Apple
+    Music/podcast-tool M4A, ripped MP3/M4A with album art) has an mjpeg
+    "video" stream ffprobe reports alongside the real audio stream. Its
+    `disposition.attached_pic == 1` marks it as a still image attached to
+    the file, not real video content — without excluding it here, such a
+    file was misreported as `has_video: True` (a `require_has_video`
+    policy false-PASSed), and render() then tried to seek to a mid-file
+    timestamp the attached-pic stream has no frame at, crashing with
+    `ARTIFACT_RENDER_BACKEND_FAILED` instead of taking the ordinary
+    audio-only "zero files, one warning" path."""
+    return next(
+        (s for s in streams if s.get("codec_type") == codec_type and not s.get("disposition", {}).get("attached_pic")),
+        None,
+    )
 
 
 class MediaAdapter(ArtifactAdapter):
@@ -219,7 +233,28 @@ class MediaAdapter(ArtifactAdapter):
 
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / "frame-001.png"
-        extract_frame(ref.path, out_path, at_seconds=at_seconds, limits=limits)
+        try:
+            extract_frame(ref.path, out_path, at_seconds=at_seconds, limits=limits)
+        except ArtifactExecutionError:
+            # Adversarial-review finding, verified by direct reproduction:
+            # a short/single-frame-ish clip can genuinely have no frame at
+            # the computed midpoint (e.g. a real frame only at t=0), so
+            # ffmpeg exits 0 with no output there even though the file is
+            # not corrupt. Retry at t=0 (skipped above if that's already
+            # what was tried) before giving up - real content, just seeked
+            # to a timestamp that doesn't land on a frame.
+            if at_seconds == 0.0:
+                return RenderResult(
+                    kind="page_images", files=[], backend="ffmpeg",
+                    warnings=["ffmpeg could not extract a frame from this video (no frame found at t=0)."],
+                )
+            try:
+                extract_frame(ref.path, out_path, at_seconds=0.0, limits=limits)
+            except ArtifactExecutionError:
+                return RenderResult(
+                    kind="page_images", files=[], backend="ffmpeg",
+                    warnings=["ffmpeg could not extract a frame from this video at the midpoint or at t=0."],
+                )
         return RenderResult(kind="page_images", files=[out_path], backend="ffmpeg")
 
     # ---- verify ------------------------------------------------------

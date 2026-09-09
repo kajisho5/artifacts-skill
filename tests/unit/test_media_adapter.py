@@ -96,6 +96,52 @@ def test_inspect_audio_only_mp4_has_no_video_stream(audio_only_mp4, adapter):
     assert details["has_audio"] is True
 
 
+def test_inspect_audio_with_cover_art_is_not_reported_as_having_video(audio_with_cover_m4a, adapter):
+    """Adversarial-review finding, verified by direct reproduction before
+    this fix: an audio file with embedded cover art (extremely common -
+    iTunes/Apple Music/podcast-tool M4A, ripped MP3/M4A with album art)
+    gets an mjpeg "video" stream from ffprobe alongside the real audio
+    stream, marked disposition.attached_pic=1. Without excluding it,
+    this file was misreported as has_video=True."""
+    ref = ArtifactRef.from_path(audio_with_cover_m4a)
+    details = adapter.inspect(ref).details
+    assert details["has_video"] is False
+    assert details["has_audio"] is True
+    assert details["video"] is None
+
+
+def test_verify_require_has_video_fails_for_cover_art_only(audio_with_cover_m4a, adapter):
+    ref = ArtifactRef.from_path(audio_with_cover_m4a)
+    result = adapter.verify_structural(ref, {"require_has_video": True})
+    check = next(c for c in result.checks if c.id == "has_video")
+    assert check.status == CheckStatus.FAIL
+
+
+def test_render_audio_with_cover_art_takes_the_audio_only_path_not_a_crash(audio_with_cover_m4a, adapter, tmp_path):
+    """Before the _first_stream() fix, render() tried to seek to a
+    mid-file timestamp the attached-pic stream has no real frame at,
+    raising ArtifactExecutionError for a perfectly ordinary, valid audio
+    file instead of taking the graceful audio-only path."""
+    ref = ArtifactRef.from_path(audio_with_cover_m4a)
+    result = adapter.render(ref, tmp_path / "rendered")
+    assert result.files == []
+    assert any("audio-only" in w for w in result.warnings)
+
+
+def test_render_single_frame_short_video_falls_back_to_t_zero(single_frame_mp4, adapter, tmp_path):
+    """Adversarial-review finding, verified by direct reproduction before
+    this fix: a short/single-frame-ish clip can genuinely have no frame
+    at render()'s computed midpoint seek time (only a real frame at
+    t=0), so ffmpeg exits 0 with no output there even though the file
+    is not corrupt. render() must retry at t=0 rather than raising."""
+    ref = ArtifactRef.from_path(single_frame_mp4)
+    if not _probe_media_render_works(adapter, ref, tmp_path):
+        pytest.skip("ffmpeg in this environment cannot render (see adapter module docstring)")
+    result = adapter.render(ref, tmp_path / "rendered")
+    assert len(result.files) == 1
+    assert result.files[0].exists() and result.files[0].stat().st_size > 0
+
+
 def test_inspect_corrupt_truncated_mp4_raises(corrupt_truncated_mp4, adapter):
     ref = ArtifactRef.from_path(corrupt_truncated_mp4)
     with pytest.raises(ArtifactInputError) as exc_info:

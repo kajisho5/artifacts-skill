@@ -294,6 +294,18 @@ KNOWN_GOOD_CASES: list[KnownGoodCase] = [
         "An MP4/M4A-family container that is genuinely audio-only — proves has_video/has_audio come from "
         "the real probed streams, not assumed from the container family.",
     ),
+    KnownGoodCase(
+        "media/audio_with_cover.m4a", CheckStatus.PASS,
+        "Audio + an mjpeg attached-picture (cover art) stream — proves has_video correctly excludes "
+        "disposition.attached_pic streams rather than treating cover art as real video content "
+        "(adversarial-review finding, verified by direct reproduction).",
+    ),
+    KnownGoodCase(
+        "media/single_frame.mp4", CheckStatus.PASS,
+        "A 0.01s single-frame clip with a real frame only at t=0 — proves render() falls back to seeking "
+        "t=0 when the computed midpoint has no frame, instead of raising (adversarial-review finding, "
+        "verified by direct reproduction).",
+    ),
 ]
 
 TYPE_DETECTION_CASES: list[TypeDetectionCase] = [

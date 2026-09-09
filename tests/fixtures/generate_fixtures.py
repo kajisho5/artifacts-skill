@@ -868,6 +868,36 @@ def make_leftover_placeholder_wav() -> bool:
     ])
 
 
+def make_audio_with_cover_m4a() -> bool:
+    """Adversarial-review finding: an audio file with embedded cover art
+    (extremely common - iTunes/Apple Music/podcast-tool M4A, ripped MP3/
+    M4A with album art) gets an mjpeg "video" stream from ffprobe
+    alongside the real audio stream, marked `disposition.attached_pic=1`.
+    Without excluding it, this used to be misreported as has_video=True
+    and crashed render() (no real frame to seek to) instead of taking the
+    ordinary audio-only path - see adapters/media/adapter.py's
+    _first_stream() for the fix this fixture regression-tests."""
+    return _run_ffmpeg([
+        "-f", "lavfi", "-i", "sine=frequency=1000:duration=2",
+        "-f", "lavfi", "-i", "color=c=blue:s=64x64:d=1",
+        "-map", "0:a", "-map", "1:v", "-c:a", "aac", "-c:v", "mjpeg", "-disposition:v", "attached_pic",
+        str(MEDIA_OUT_DIR / "audio_with_cover.m4a"),
+    ])
+
+
+def make_single_frame_mp4() -> bool:
+    """Adversarial-review finding: a short/single-frame-ish clip can
+    genuinely have no frame at render()'s computed midpoint seek time
+    (only a real frame at t=0), so ffmpeg exits 0 with no output there
+    even though the file is not corrupt - see adapters/media/adapter.py's
+    render() for the retry-at-t=0 fallback this fixture regression-tests."""
+    return _run_ffmpeg([
+        "-f", "lavfi", "-i", "color=c=red:s=64x64:d=0.01:r=25",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-frames:v", "1",
+        str(MEDIA_OUT_DIR / "single_frame.mp4"),
+    ])
+
+
 def make_corrupt_truncated_mp4() -> bool:
     """A real MP4 truncated mid-stream - large enough to still look like a
     plausible file, but ffprobe should still refuse it as unreadable."""
@@ -997,6 +1027,8 @@ if __name__ == "__main__":
     make_good_wav()
     make_audio_only_mp4()
     make_leftover_placeholder_wav()
+    make_audio_with_cover_m4a()
+    make_single_frame_mp4()
     make_mislabeled_pdf_as_mp4()
 
     print(f"Wrote PDF fixtures to {PDF_OUT_DIR}")

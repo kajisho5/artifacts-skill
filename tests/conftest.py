@@ -550,3 +550,17 @@ def mislabeled_pdf_as_mp4(tmp_path: Path) -> Path:
     dst = tmp_path / "mislabeled_pdf.mp4"
     shutil.copy(MEDIA_FIXTURES_DIR / "mislabeled_pdf.mp4", dst)
     return dst
+
+
+@pytest.fixture()
+def audio_with_cover_m4a(tmp_path: Path) -> Path:
+    dst = tmp_path / "audio_with_cover.m4a"
+    shutil.copy(MEDIA_FIXTURES_DIR / "audio_with_cover.m4a", dst)
+    return dst
+
+
+@pytest.fixture()
+def single_frame_mp4(tmp_path: Path) -> Path:
+    dst = tmp_path / "single_frame.mp4"
+    shutil.copy(MEDIA_FIXTURES_DIR / "single_frame.mp4", dst)
+    return dst
