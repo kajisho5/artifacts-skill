@@ -456,6 +456,21 @@ def test_verify_page_size_requirement_carries_fixer_evidence(good_pdf, adapter, 
     assert check.evidence["actual_width_pt"] == pytest.approx(612, abs=0.5)
 
 
+@pytest.mark.parametrize(
+    "bad_value",
+    [[300], [300, 300, 300], [], "300x300", {"w": 300, "h": 300}],
+)
+def test_verify_require_page_size_pt_rejects_malformed_policy_value(good_pdf, adapter, bad_value):
+    # Cross-adapter adversarial-review finding (identical shape found in the
+    # Media adapter's require_min_resolution, verified by direct
+    # reproduction here too): a raw `expected_w, expected_h = policy[...]`
+    # unpack crashed with an unhandled ValueError/TypeError.
+    ref = ArtifactRef.from_path(good_pdf)
+    with pytest.raises(ArtifactInputError) as exc_info:
+        adapter.verify_structural(ref, {"require_page_size_pt": bad_value})
+    assert exc_info.value.code == "ARTIFACT_INVALID_ARGS"
+
+
 def test_verify_page_size_requirement_checks_every_page_not_just_the_first(adapter, tmp_path):
     """External-review finding (verified by direct reproduction before
     this fix): only page_sizes[0] was checked - a document whose first

@@ -337,10 +337,27 @@ class ArtifactRef:
 
     @classmethod
     def from_path(cls, path: Path | str) -> ArtifactRef:
-        p = Path(path)
-        if not p.is_file():
-            from artifact_skill.core.errors import ArtifactInputError
+        from artifact_skill.core.errors import ArtifactInputError
 
+        p = Path(path)
+        try:
+            is_file = p.is_file()
+        except OSError as exc:
+            # Adversarial-review finding, verified by direct reproduction:
+            # a path the OS itself rejects outright (e.g. ENAMETOOLONG for
+            # a component/path exceeding PATH_MAX) makes is_file()'s
+            # underlying os.stat() raise a bare OSError instead of
+            # returning False. cli/main.py's top-level handler only
+            # catches ArtifactError, so this used to crash the CLI with a
+            # raw Python traceback and a non-category exit code instead of
+            # the tool's own structured error contract.
+            raise ArtifactInputError(
+                code="ARTIFACT_INPUT_NOT_FOUND",
+                message=f"Input path is not usable: {p} ({exc}).",
+                remediation="Check the path and try again.",
+                evidence={"path": str(p), "os_error": str(exc)},
+            ) from exc
+        if not is_file:
             raise ArtifactInputError(
                 code="ARTIFACT_INPUT_NOT_FOUND",
                 message=f"Input file does not exist or is not a regular file: {p}",

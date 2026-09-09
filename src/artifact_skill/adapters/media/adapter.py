@@ -62,6 +62,26 @@ def _parse_frame_rate(value: str | None) -> float | None:
     return num_f / den_f
 
 
+def _validate_codec_policy(allowed: Any, policy_key: str) -> set[str]:
+    """Normalize a `require_video_codec`/`require_audio_codec` policy value
+    to a set of strings, or raise a clean ArtifactInputError.
+
+    Fuzzing-review finding, verified by direct reproduction: the old
+    `{allowed} if isinstance(allowed, str) else set(allowed)` crashed with
+    an unhandled TypeError on a non-string, non-iterable value (e.g. an
+    int or None)."""
+    if isinstance(allowed, str):
+        return {allowed}
+    if isinstance(allowed, (list, tuple, set)) and all(isinstance(v, str) for v in allowed):
+        return set(allowed)
+    raise ArtifactInputError(
+        code="ARTIFACT_INVALID_ARGS",
+        message=f"'{policy_key}' must be a string or a list of strings, got {allowed!r}.",
+        remediation="Pass e.g. \"h264\" or [\"h264\", \"hevc\"].",
+        evidence={policy_key: allowed},
+    )
+
+
 def _first_stream(streams: list[dict[str, Any]], codec_type: str) -> dict[str, Any] | None:
     """Adversarial-review finding, verified by direct reproduction: an
     audio file with embedded cover art (extremely common — iTunes/Apple
@@ -145,9 +165,18 @@ class MediaAdapter(ArtifactAdapter):
 
     # ---- inspect ---------------------------------------------------
 
-    def inspect(self, ref: ArtifactRef) -> InspectionReport:
-        check_input_size(ref.path)
-        probe = probe_media(ref.path)
+    def inspect(self, ref: ArtifactRef, *, limits: Limits = DEFAULT_LIMITS) -> InspectionReport:
+        # `limits` is an addition beyond the base ArtifactAdapter.inspect()
+        # signature (a keyword-only default, so every existing caller that
+        # calls plain `adapter.inspect(ref)` is unaffected). Round-3-plus
+        # adversarial-review finding, verified by direct reproduction:
+        # render() already accepts `limits`, but used to call `self.inspect(ref)`
+        # with no way to forward it, so a caller-supplied `max_video_pixels`
+        # or subprocess timeout silently never reached the probe step - only
+        # extract_frame()'s own ffmpeg call honored it. render() now passes
+        # its `limits` through here.
+        check_input_size(ref.path, limits)
+        probe = probe_media(ref.path, limits=limits)
         fmt = probe.get("format", {})
         streams = probe.get("streams", [])
 
@@ -156,7 +185,7 @@ class MediaAdapter(ArtifactAdapter):
 
         if video is not None:
             width, height = video.get("width"), video.get("height")
-            if isinstance(width, int) and isinstance(height, int) and width * height > DEFAULT_LIMITS.max_video_pixels:
+            if isinstance(width, int) and isinstance(height, int) and width * height > limits.max_video_pixels:
                 # Security-review finding, verified by direct reproduction:
                 # a container can declare an enormous *decoded* frame size
                 # while compressing to almost nothing on disk (a solid-color
@@ -168,7 +197,7 @@ class MediaAdapter(ArtifactAdapter):
                 raise ArtifactSecurityError(
                     code="ARTIFACT_MEDIA_RESOLUTION_TOO_LARGE",
                     message=f"'{ref.path}' declares a {width}x{height} video frame "
-                    f"({width * height} pixels), exceeding the limit of {DEFAULT_LIMITS.max_video_pixels}.",
+                    f"({width * height} pixels), exceeding the limit of {limits.max_video_pixels}.",
                     remediation="Not decoded; this may be a decompression-bomb-shaped file. Increase "
                     "Limits.max_video_pixels if this resolution is legitimately expected.",
                     evidence={"path": str(ref.path), "width": width, "height": height},
@@ -185,6 +214,17 @@ class MediaAdapter(ArtifactAdapter):
             bit_rate = int(bit_rate_raw) if bit_rate_raw is not None else None
         except ValueError:
             bit_rate = None
+
+        sample_rate_raw = audio.get("sample_rate") if audio is not None else None
+        try:
+            # Fuzzing-review finding, verified by direct reproduction: ffprobe
+            # can report "N/A" for numeric fields on partially-parseable
+            # containers, the same sentinel duration/bit_rate above already
+            # guard against - sample_rate was missed and raised an unhandled
+            # ValueError.
+            sample_rate = int(sample_rate_raw) if sample_rate_raw else None
+        except (ValueError, TypeError):
+            sample_rate = None
 
         tags = fmt.get("tags", {}) or {}
 
@@ -209,7 +249,7 @@ class MediaAdapter(ArtifactAdapter):
             if audio is None
             else {
                 "codec_name": audio.get("codec_name"),
-                "sample_rate": int(audio["sample_rate"]) if audio.get("sample_rate") else None,
+                "sample_rate": sample_rate,
                 "channels": audio.get("channels"),
             },
             "tags": tags,
@@ -239,16 +279,23 @@ class MediaAdapter(ArtifactAdapter):
 
     def render(self, ref: ArtifactRef, out_dir: Path, *, limits: Limits = DEFAULT_LIMITS) -> RenderResult:
         check_input_size(ref.path, limits)
-        report = self.inspect(ref)
+        report = self.inspect(ref, limits=limits)
         details = report.details
 
         out_dir.mkdir(parents=True, exist_ok=True)
 
         if not details["has_video"]:
-            return RenderResult(
-                kind="page_images", files=[], backend="ffmpeg",
-                warnings=["No video stream to extract a frame from (audio-only media)."],
+            # Fuzzing-review finding: a genuinely stream-less (zero audio,
+            # zero video) container used to hit this same branch and get
+            # labeled "audio-only", which is misleading for a caller who
+            # only looks at render()'s own warning - verify_structural()'s
+            # has_stream check already reports the real reason.
+            warning = (
+                "No video stream to extract a frame from (audio-only media)."
+                if details["has_audio"]
+                else "No audio or video stream found in this container (likely truncated or corrupt)."
             )
+            return RenderResult(kind="page_images", files=[], backend="ffmpeg", warnings=[warning])
 
         duration = details["duration_seconds"]
         at_seconds = min(2.0, duration / 2) if duration and duration > 0 else 0.0
@@ -330,6 +377,18 @@ class MediaAdapter(ArtifactAdapter):
         if "min_duration_seconds" in policy or "max_duration_seconds" in policy:
             lo = policy.get("min_duration_seconds")
             hi = policy.get("max_duration_seconds")
+            for key, val in (("min_duration_seconds", lo), ("max_duration_seconds", hi)):
+                # Fuzzing-review finding, verified by direct reproduction: a
+                # quoted number in a JSON policy (e.g. "5" instead of 5) used
+                # to crash `duration >= lo` with an unhandled TypeError,
+                # including from the real CLI.
+                if val is not None and (isinstance(val, bool) or not isinstance(val, (int, float))):
+                    raise ArtifactInputError(
+                        code="ARTIFACT_INVALID_ARGS",
+                        message=f"'{key}' must be a number, got {val!r}.",
+                        remediation="Pass a plain int or float, not a quoted string.",
+                        evidence={key: val},
+                    )
             if duration is None:
                 # duration_known above already reported UNKNOWN for the
                 # underlying reason — this range check inherits that same
@@ -366,10 +425,38 @@ class MediaAdapter(ArtifactAdapter):
             )
 
         if "require_min_resolution" in policy:
-            min_w, min_h = policy["require_min_resolution"]
+            min_res = policy["require_min_resolution"]
+            # Fuzzing-review finding, verified by direct reproduction: a raw
+            # `min_w, min_h = policy[...]` unpack crashed with an unhandled
+            # ValueError/TypeError on a wrong-length list, a non-sequence
+            # value, or non-numeric entries — including from the real CLI.
+            is_valid_shape = (
+                isinstance(min_res, (list, tuple))
+                and len(min_res) == 2
+                and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in min_res)
+            )
+            if not is_valid_shape:
+                raise ArtifactInputError(
+                    code="ARTIFACT_INVALID_ARGS",
+                    message=f"'require_min_resolution' must be a [width, height] pair of numbers, got {min_res!r}.",
+                    remediation="Pass e.g. [1280, 720].",
+                    evidence={"require_min_resolution": min_res},
+                )
+            min_w, min_h = min_res
             video = details["video"]
-            ok = video is not None and (video["width"] or 0) >= min_w and (video["height"] or 0) >= min_h
-            actual = f"{video['width']}x{video['height']}" if video else "no video stream"
+            actual_w = video["width"] if video else None
+            actual_h = video["height"] if video else None
+            # video/audio stream fields come straight from ffprobe's JSON and
+            # aren't guaranteed to be numeric (see inspect()'s own
+            # isinstance guard on the same fields for the decompression-bomb
+            # check) — fail closed rather than crash on a non-numeric width/height.
+            ok = (
+                video is not None
+                and isinstance(actual_w, (int, float)) and not isinstance(actual_w, bool)
+                and isinstance(actual_h, (int, float)) and not isinstance(actual_h, bool)
+                and actual_w >= min_w and actual_h >= min_h
+            )
+            actual = f"{actual_w}x{actual_h}" if video else "no video stream"
             checks.append(
                 Check(
                     id="min_resolution", name="Video resolution meets minimum",
@@ -380,11 +467,14 @@ class MediaAdapter(ArtifactAdapter):
             )
 
         if "require_video_codec" in policy:
-            allowed = policy["require_video_codec"]
-            allowed = {allowed} if isinstance(allowed, str) else set(allowed)
+            allowed = _validate_codec_policy(policy["require_video_codec"], "require_video_codec")
             video = details["video"]
             actual_codec = video["codec_name"] if video else None
-            ok = actual_codec in allowed
+            # ffprobe always reports codec names lowercase; matching
+            # case-insensitively (fuzzing-review finding: "H264" is a
+            # reasonable caller guess that used to always FAIL silently)
+            # only ever makes a previously-failing match pass, never the reverse.
+            ok = actual_codec is not None and actual_codec.lower() in {a.lower() for a in allowed}
             checks.append(
                 Check(
                     id="video_codec", name="Video codec matches requirement",
@@ -395,11 +485,10 @@ class MediaAdapter(ArtifactAdapter):
             )
 
         if "require_audio_codec" in policy:
-            allowed = policy["require_audio_codec"]
-            allowed = {allowed} if isinstance(allowed, str) else set(allowed)
+            allowed = _validate_codec_policy(policy["require_audio_codec"], "require_audio_codec")
             audio = details["audio"]
             actual_codec = audio["codec_name"] if audio else None
-            ok = actual_codec in allowed
+            ok = actual_codec is not None and actual_codec.lower() in {a.lower() for a in allowed}
             checks.append(
                 Check(
                     id="audio_codec", name="Audio codec matches requirement",

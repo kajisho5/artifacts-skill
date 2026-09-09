@@ -805,7 +805,24 @@ class PdfAdapter(ArtifactAdapter):
             checks.append(Check(id="page_size_consistency", name="Page sizes are consistent", status=CheckStatus.PASS))
 
         if "require_page_size_pt" in policy and details["page_sizes"]:
-            expected_w, expected_h = policy["require_page_size_pt"]
+            size_pt = policy["require_page_size_pt"]
+            # Cross-adapter adversarial-review finding (found in the Media
+            # adapter's identical `require_min_resolution` shape, verified
+            # by direct reproduction here too): a raw 2-value unpack crashes
+            # with an unhandled ValueError/TypeError on a wrong-length list,
+            # a non-sequence value, or non-numeric entries.
+            if (
+                not isinstance(size_pt, (list, tuple))
+                or len(size_pt) != 2
+                or not all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in size_pt)
+            ):
+                raise ArtifactInputError(
+                    code="ARTIFACT_INVALID_ARGS",
+                    message=f"'require_page_size_pt' must be a [width, height] pair of numbers, got {size_pt!r}.",
+                    remediation="Pass e.g. [612, 792] for US Letter.",
+                    evidence={"require_page_size_pt": size_pt},
+                )
+            expected_w, expected_h = size_pt
             tolerance = policy.get("page_size_tolerance_pt", 1.0)
             # Self-audit finding (external review, verified by direct
             # reproduction): this used to check only page_sizes[0] - a
