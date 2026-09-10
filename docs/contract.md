@@ -24,7 +24,7 @@ actually emits.
 {
   "schema": "artifact-contract/v1",
   "tool_name": "artifacts-skill",
-  "tool_version": "0.1.0",
+  "tool_version": "0.2.0",
   "description": "...",
   "capability_id_prefix": "artifacts-skill",
   "tools": [ /* ToolContract[] */ ],
@@ -127,7 +127,7 @@ A breaking change to a tool's input/output shape bumps `artifact-contract`
 to `v2` and both schemas are supported side-by-side for one deprecation
 window; additive changes (a new optional field, a new tool, a new
 capability id) do not bump the schema version. No breaking change has
-happened yet — this project is at `0.1.0`.
+happened yet — this project is at `0.2.0`.
 
 ## Relationship to SPEC (kajisho5/ffmpeg-skill)
 

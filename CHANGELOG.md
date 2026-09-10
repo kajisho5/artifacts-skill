@@ -5,6 +5,26 @@ version section per release. Each entry here is also the source for the
 release announcement text — when this file gets a new version section,
 the announcement text is that section, verbatim or lightly trimmed.
 
+## v0.2.0
+
+- New format: Media (video/audio), backed by ffmpeg/ffprobe — MP4/MOV/M4A,
+  WebM/Matroska, WAV — following the same generation/verification split
+  as every other adapter (structural facts from ffprobe, one extracted
+  frame as visual evidence).
+- PDF `merge`'s `plan()` now checks each `additional_inputs` entry is a
+  readable, unencrypted PDF up front, instead of only discovering an
+  unreadable or encrypted secondary file at `execute()` time.
+- Consolidated the intra-artifact local-reference resolution logic shared
+  by the HTML, SVG, and Markdown adapters into one helper
+  (`reference_resolution.py`) — pure refactor, no behavior change; see
+  `docs/architecture-evolution-review.md` for why a broader multi-artifact
+  dependency graph was considered and deliberately not built.
+- README restructured to front-load proof (real terminal-recording demos
+  for every format) ahead of the pitch.
+- Assorted hardening from independent adversarial review rounds (input
+  validation, decompression-bomb and fail-open gaps in the Media adapter,
+  concurrency).
+
 ## v0.1.0 — Initial release
 
 `artifacts-skill` is a local-first verification and evidence-generation
