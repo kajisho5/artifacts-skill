@@ -544,6 +544,7 @@ class PdfAdapter(ArtifactAdapter):
             )
         spec = specs[operation]
         report = self.inspect(ref)
+        pypdf = _require_pypdf()
         risks: list[str] = []
         warnings: list[str] = list(report.warnings)
         if report.details["is_encrypted"]:
@@ -572,6 +573,25 @@ class PdfAdapter(ArtifactAdapter):
                 # additional_inputs entry). Checked here (plan()) and again
                 # in execute() since either can be called independently.
                 check_input_size(extra_path)
+                # Issue #42, verified by direct reproduction: plan() only
+                # checked existence/size, never actually opened an
+                # additional_inputs entry - a non-PDF or encrypted secondary
+                # file made plan() report a clean preview, with the real
+                # failure only surfacing later at execute() time. plan()'s
+                # whole purpose is letting a caller see execute()'s outcome
+                # before authorizing it, so this closes that preview gap the
+                # same way primary-input readability is already checked via
+                # self.inspect(ref) above.
+                try:
+                    extra_reader = pypdf.PdfReader(str(extra_path))
+                except Exception as exc:
+                    raise ArtifactInputError(
+                        code="ARTIFACT_PDF_UNREADABLE",
+                        message=f"Additional merge input is not a readable PDF: {extra_path} ({exc})",
+                        evidence={"path": str(extra_path)},
+                    ) from exc
+                if extra_reader.is_encrypted:
+                    risks.append(f"Additional merge input is encrypted and will fail: {extra_path}")
                 files_touched.append(str(extra_path))
         elif operation == "fit_page_size":
             _require_positive_page_size(args)
