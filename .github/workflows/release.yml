@@ -1,0 +1,87 @@
+name: Release
+
+# Fires once CI finishes on main - never on a PR branch's own CI run,
+# since a workflow_run's head_branch for a pull_request-triggered run is
+# the PR's source branch, not "main" (see the job `if:` below). This
+# means every release is built from a commit CI has already verified,
+# not from the push event itself.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Read and cross-check the version
+        id: version
+        run: |
+          py_version=$(grep -m1 '^version = ' pyproject.toml | sed -E 's/version = "(.*)"/\1/')
+          pkg_version=$(node -p "require('./package.json').version")
+          if [ "$py_version" != "$pkg_version" ]; then
+            echo "pyproject.toml ($py_version) and package.json ($pkg_version) versions disagree - fix before releasing." >&2
+            exit 1
+          fi
+          echo "version=$py_version" >> "$GITHUB_OUTPUT"
+
+      # Idempotent by design (checks gh release view itself), so an
+      # ordinary commit to main that doesn't bump the version is a no-op
+      # here, and a version bump that already got tagged (e.g. this step
+      # already ran for this exact commit) is a no-op too.
+      - name: Create the GitHub Release and tag, if not already done
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="v${{ steps.version.outputs.version }}"
+          if gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "$tag already released - skipping."
+            exit 0
+          fi
+          notes=$(awk -v tag="$tag" '
+            /^## / {
+              if (found) exit
+              if (index($0, "## " tag) == 1) { found = 1; print; next }
+              next
+            }
+            found { print }
+          ' CHANGELOG.md)
+          if [ -z "$notes" ]; then
+            echo "No CHANGELOG.md section found for $tag - add one before releasing." >&2
+            exit 1
+          fi
+          echo "$notes" > /tmp/release-notes.md
+          gh release create "$tag" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.event.workflow_run.head_sha }}" \
+            --title "$tag" \
+            --notes-file /tmp/release-notes.md
+
+      # Independently idempotent (checks npm view itself) for the same
+      # reason as the release step above - and so that once the NPM
+      # secret is added/fixed, the next ordinary push to main publishes
+      # whatever version is still pending, without needing a new version
+      # bump.
+      - name: Publish to npm, if this version isn't published yet
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM }}
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          if npm view "artifacts-skill@$version" version >/dev/null 2>&1; then
+            echo "artifacts-skill@$version is already on npm - skipping."
+            exit 0
+          fi
+          npm publish

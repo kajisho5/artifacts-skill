@@ -53,8 +53,9 @@ never a guess.
 
 ## Quickstart
 
-Not yet published to PyPI/npm (tracked in Issue #9) — for now, clone and
-install locally (see **Install** below), then:
+Published on npm (not yet on PyPI — tracked in Issue #9); either
+`npx artifacts-skill doctor` with no local install, or clone and install
+locally (see **Install** below), then:
 
 ```bash
 artifacts-skill doctor                     # what's available locally
@@ -65,8 +66,8 @@ artifacts-skill receipt report.pdf \
 
 The last command runs the full lifecycle and writes
 `reports/receipt.json` plus `reports/rendered/*.png` — the evidence, not
-just a claim. Once published, the same commands work as
-`npx artifacts-skill ...` with no local install at all.
+just a claim. The same commands work as `npx artifacts-skill ...` with
+no local install at all.
 
 ## Demos
 
@@ -214,9 +215,9 @@ package — `.[media]` is an intentionally empty extra, see
 `pyproject.toml`). Run `artifacts-skill doctor` to see exactly what's
 available and what's still missing — never assume.
 
-Or, once published: `npx artifacts-skill doctor` (the npm package is a thin
-wrapper that locates your Python 3 interpreter — the engine itself is
-Python, see `docs/architecture.md` for why).
+Or: `npx artifacts-skill doctor` (the npm package is a thin wrapper that
+locates your Python 3 interpreter — the engine itself is Python, see
+`docs/architecture.md` for why).
 
 ## Use from an agent
 
