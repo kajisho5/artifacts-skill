@@ -37,6 +37,66 @@ same generic `ARTIFACT_TYPE_UNSUPPORTED` a file matching no known format
 signature at all gets — a real .pptx that's simply password-protected
 deserves a more specific answer than "unrecognized file."
 
+## Intra-artifact reference resolution (Phase 0.5 consolidation)
+
+`docs/architecture-evolution-review.md` found that several adapters each
+independently answer the same narrow question — "does a reference this
+document makes to something else actually resolve?" — for references that
+stay entirely inside the artifact being checked (a zip member, or a path
+relative to the artifact's own file): PPTX/DOCX's `broken_media` (an
+embedded-image relationship that fails to open), HTML/SVG/Markdown's
+`local_resources` (a local link/image path that isn't a real file on
+disk), and EPUB's `manifest_references_resolve`/`spine_references_resolve`
+(a manifest/spine entry naming a zip member that doesn't exist). This is
+**not** a dependency graph, lineage tracking, or impact analysis — none of
+that exists in this codebase, and this section doesn't claim otherwise
+(see the review's own Non-Goals). Each of these checks is a single,
+self-contained `Check`, computed and discarded within one `inspect()`
+call, that never produces a second `ArtifactRef` or reasons about any file
+beyond the one being inspected.
+
+The review's own re-verification (re-reading each adapter's current code,
+not just noting the string-level similarity) found this pattern actually
+splits into three genuinely different shapes, and only one of them was
+worth sharing code for:
+
+- **HTML, SVG, and Markdown's *local filesystem* resolution** — resolve an
+  already-classified local reference string against the referencing
+  file's own directory, detect if it escapes that directory, and report
+  present/missing — was byte-for-byte identical logic in all three
+  adapters (differing only in whether a `?query` suffix is also stripped,
+  which only HTML did). Extracted into
+  `reference_resolution.py::resolve_local_reference()`, used by all three
+  adapters' `inspect()`. **What stayed adapter-specific, deliberately:**
+  each adapter's own URL *classification* (what counts as "local" versus
+  "external" versus something else entirely) — Markdown treats
+  `mailto:`/`data:`/a bare `#fragment` as one non-file "other" bucket;
+  SVG treats `data:`/a bare `#fragment` as "data" for its own reason (an
+  SVG `<use href="#id">` referencing an internal `<defs>` element is a
+  normal pattern, not a file reference); HTML has neither special case.
+  These are real, format-specific correctness decisions, not accidental
+  duplication, so each adapter keeps its own classifier.
+- **PPTX's and DOCX's `broken_media`** — reviewed and left alone. The
+  *discovery* step (`shape.image.blob` vs. `document.part.related_parts`
+  plus a content-type filter) is entirely different, library-mediated code
+  with nothing in common; the only shared part left over is a four-line
+  `Check`-construction tail with adapter-specific wording on either side —
+  not enough duplication to justify an indirection.
+- **EPUB's manifest/spine resolution** — reviewed and left alone. It
+  checks membership in a zip archive's member-name set, never resolves a
+  filesystem path, and has no "escapes the directory" concept to share
+  with the filesystem-based logic above. Forcing it into that shape would
+  make EPUB's own manifest/spine semantics less clear, not more.
+- **XLSX's `external_links`** — reviewed and left alone; there is no
+  resolution algorithm to extract, since the check is presence-only by
+  design (the linked workbook is a different file this project's
+  network-off-by-default posture already forbids opening — see
+  `docs/security.md`).
+
+No `Check` id, status, message, evidence shape, or CLI/MCP-visible
+behavior changed as part of this consolidation — confirmed by every
+pre-existing adapter test passing unchanged.
+
 ## Implemented: PDF (`adapters/pdf/adapter.py`)
 
 - **Backends**: `pypdf` (structural read/write/merge, BSD-3) + `pypdfium2`
