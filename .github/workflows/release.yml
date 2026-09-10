@@ -71,12 +71,13 @@ jobs:
             --notes-file /tmp/release-notes.md
 
       # Independently idempotent (checks npm view itself) for the same
-      # reason as the release step above - and so that once NPM_TOKEN is
-      # added/fixed, the next ordinary push to main publishes whatever
-      # version is still pending, without needing a new version bump.
+      # reason as the release step above - and so that once the NPM
+      # secret is added/fixed, the next ordinary push to main publishes
+      # whatever version is still pending, without needing a new version
+      # bump.
       - name: Publish to npm, if this version isn't published yet
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM }}
         run: |
           version="${{ steps.version.outputs.version }}"
           if npm view "artifacts-skill@$version" version >/dev/null 2>&1; then
