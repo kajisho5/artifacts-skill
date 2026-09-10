@@ -59,6 +59,7 @@ from artifact_skill.core.errors import ArtifactInputError
 from artifact_skill.core.operation import OperationPlan
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
 from artifact_skill.leftover_text import find_leftover_markers
+from artifact_skill.reference_resolution import resolve_local_reference
 from artifact_skill.rendering.chromium_render import render_local_file
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import check_input_size
@@ -286,10 +287,13 @@ class HtmlAdapter(ArtifactAdapter):
             if kind == "external":
                 external.append(url)
             elif kind == "local":
-                candidate = (html_dir / url.split("#")[0].split("?")[0]).resolve()
-                try:
-                    candidate.relative_to(html_dir.resolve())
-                except ValueError:
+                # Phase 0.5 consolidation (docs/architecture-evolution-review.md):
+                # this resolve/escape/exists logic used to be inlined here,
+                # byte-for-byte duplicated in the SVG and Markdown adapters too -
+                # see reference_resolution.py for why only this part (not the
+                # "local" classification above it) was worth sharing.
+                outcome = resolve_local_reference(html_dir, url, strip_query=True)
+                if outcome.escaped:
                     # Escapes the HTML file's own directory - render()
                     # actively blocks this file:// reference too (Grok
                     # review P0-2: it used to let any file:// through,
@@ -299,7 +303,7 @@ class HtmlAdapter(ArtifactAdapter):
                     # resource, not merely a theoretical risk.
                     warnings.append(f"Local resource reference escapes the document's directory: {url}")
                     continue
-                if candidate.is_file():
+                if outcome.exists:
                     local_present += 1
                 else:
                     local_missing.append(url)
