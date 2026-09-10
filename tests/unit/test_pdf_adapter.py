@@ -279,6 +279,36 @@ def test_execute_merge_rejects_an_oversized_additional_input(adapter, tmp_path, 
     assert exc_info.value.evidence["path"] == str(big)
 
 
+def test_plan_merge_rejects_unreadable_additional_input(good_pdf, corrupt_pdf, adapter, tmp_path):
+    """Issue #42, verified by direct reproduction before this fix: plan()
+    checked existence/size for additional_inputs but never opened the file,
+    so a non-PDF secondary input reported a clean preview and the real
+    failure only surfaced later at execute() time."""
+    ref = ArtifactRef.from_path(good_pdf)
+    with pytest.raises(ArtifactInputError) as exc_info:
+        adapter.plan(ref, "merge", {"additional_inputs": [str(corrupt_pdf)]}, tmp_path / "out.pdf")
+    assert exc_info.value.code == "ARTIFACT_PDF_UNREADABLE"
+    assert exc_info.value.evidence["path"] == str(corrupt_pdf)
+
+
+def test_plan_merge_surfaces_risk_for_encrypted_additional_input(good_pdf, encrypted_pdf, adapter, tmp_path):
+    """An encrypted-but-readable additional_inputs entry is a foreseeable
+    execute()-time failure (mirrors execute()'s own ARTIFACT_PDF_ENCRYPTED
+    raise), so plan() surfaces it as a risk rather than raising - plan()'s
+    job is to preview, not to pre-authorize."""
+    ref = ArtifactRef.from_path(good_pdf)
+    plan = adapter.plan(ref, "merge", {"additional_inputs": [str(encrypted_pdf)]}, tmp_path / "out.pdf")
+    assert any("encrypted" in risk.lower() for risk in plan.risks)
+
+
+def test_plan_merge_valid_additional_input_still_succeeds(good_pdf, adapter, tmp_path):
+    """Regression check: a valid, unencrypted additional_inputs entry is
+    unaffected by the Issue #42 fix."""
+    ref = ArtifactRef.from_path(good_pdf)
+    plan = adapter.plan(ref, "merge", {"additional_inputs": [str(good_pdf)]}, tmp_path / "out.pdf")
+    assert plan.risks == []
+
+
 def test_execute_unknown_operation_raises(good_pdf, adapter, tmp_path):
     ref = ArtifactRef.from_path(good_pdf)
     with pytest.raises(ArtifactInputError):
