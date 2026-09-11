@@ -67,6 +67,22 @@ user the job is done. Don't route a "create a slide deck about X" request
 here; do route a "make sure the deck you just created actually has 10
 slides and no encryption" request here.
 
+### Division of labor with `ffmpeg-skill`
+
+The same split applies to video/audio if `kajisho5/ffmpeg-skill` (28
+standalone ffmpeg tools — trim, concat, transcode, extract audio, and so
+on) is also installed: **`ffmpeg-skill` generates or edits the media, this
+skill's Media adapter verifies whatever it produced** — structural facts
+via `ffprobe` (duration, codecs, streams, resolution) plus one extracted
+representative frame as visual evidence, per `docs/roadmap.md`'s
+generation/verification split. A typical flow: run an `ffmpeg-skill` tool
+(e.g. trim a clip), then run this skill's inspect → verify (→ receipt, once
+a verify-only receipt path exists — see Issue #18) on its output before
+telling the user the job is done. Neither skill depends on the other or
+knows about the other at the code level — this is a workflow pattern for
+an agent that happens to have both loaded, not an integration between the
+two projects.
+
 ## The workflow
 
 Follow this order. Do not skip straight to "execute" on a file you have not
