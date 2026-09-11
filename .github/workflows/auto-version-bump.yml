@@ -1,0 +1,69 @@
+name: Auto Version Bump
+
+# Fires once CI finishes on main, same trigger as release.yml (see that
+# workflow's comment on why workflow_run + head_branch == 'main' never
+# fires for a PR branch's own CI run). Computes whether the Conventional
+# Commits titles merged since the last real tag warrant a version bump
+# (scripts/bump_version.py) and, if so, opens or updates a pending draft
+# "chore(release): vX.Y.Z" PR - merging that PR is what actually ships the
+# new version (release.yml tags + publishes once it lands on main).
+#
+# Adopted going forward only: nothing before this workflow existed used
+# Conventional Commits PR titles, so "no bump found" is the correct answer
+# until a properly-typed PR merges after it - see docs/roadmap.md's
+# "Automated versioning" section for the full policy.
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Compute the next version, if any Conventional-Commit-worthy change landed
+        id: bump
+        run: python3 scripts/bump_version.py
+
+      # Idempotent: force-pushing a fixed branch name means a later run
+      # (more commits landed since this PR opened) recomputes and replaces
+      # the pending PR's single commit rather than piling up duplicates -
+      # the same "one continuously-updated release PR" pattern release.yml's
+      # own idempotency checks are modeled on.
+      - name: Open or update the pending release PR
+        if: steps.bump.outputs.bumped == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="chore/version-bump"
+          version="${{ steps.bump.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add pyproject.toml package.json src/artifact_skill/__init__.py CHANGELOG.md
+          git commit -m "chore(release): v$version"
+          git push --force origin "$branch"
+
+          existing=$(gh pr list --repo "${{ github.repository }}" --head "$branch" --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            echo "Pending release PR #$existing for $branch updated by the force-push above."
+          else
+            gh pr create --repo "${{ github.repository }}" \
+              --head "$branch" --base main --draft \
+              --title "chore(release): v$version" \
+              --body "Automated version bump to v$version, computed from Conventional Commits PR titles (feat/fix/BREAKING CHANGE) merged since the last tag. Review the new CHANGELOG.md section before merging - merging this PR is what actually ships v$version (release.yml tags + publishes to npm once this lands on main)."
+          fi
