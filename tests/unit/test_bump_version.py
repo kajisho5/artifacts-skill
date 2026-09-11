@@ -49,6 +49,22 @@ def test_classify_breaking_change_footer_is_breaking():
     assert level == "major"
 
 
+def test_classify_breaking_change_mentioned_in_prose_is_not_breaking():
+    """Confirmed by direct reproduction on this script's own first real
+    commit: "BREAKING CHANGE" merely mentioned mid-sentence, describing the
+    feature rather than declaring an actual footer trailer, was
+    misclassified as a real breaking change before this fix."""
+    body = (
+        "Verified end-to-end against disposable git worktrees before writing this\n"
+        "commit message: a feat:+fix: pair produces a correct minor bump with a\n"
+        "grouped changelog section, a feat!:/BREAKING CHANGE: commit produces a\n"
+        "major bump, and chore:/docs:/untyped commits alone produce no bump at\n"
+        "all."
+    )
+    level, _ = bump_version.classify([("feat: automate version bumps from Conventional Commits PR titles", body)])
+    assert level == "minor"
+
+
 def test_classify_chore_and_untyped_commits_never_bump():
     level, sections = bump_version.classify(
         [("chore: tidy up", ""), ("Merge pull request #1 from x/y", ""), ("random commit message", "")]

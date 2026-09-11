@@ -41,6 +41,13 @@ SECTION_HEADINGS = {
     "docs": "Documentation",
 }
 _TYPE_RE = re.compile(r"^(?P<type>[a-zA-Z]+)(\([^)]*\))?(?P<breaking>!)?:\s*(?P<desc>.+)$")
+# Conventional Commits defines this as a footer *trailer* - a line on its
+# own starting with this token - not a bare substring match anywhere in the
+# body. A bare substring match is a real false-positive risk: this exact
+# script's own first commit merely *mentioned* "BREAKING CHANGE:" in prose
+# describing this feature (mid-sentence, not at the start of a line) and
+# got misclassified as an actual breaking change before this fix.
+_BREAKING_FOOTER_RE = re.compile(r"^BREAKING[ -]CHANGE:\s", re.MULTILINE)
 
 
 def _run(*args: str) -> str:
@@ -105,7 +112,7 @@ def classify(commits: list[tuple[str, str]]) -> tuple[str | None, dict[str, list
         if not match:
             continue
         commit_type = match.group("type").lower()
-        breaking = bool(match.group("breaking")) or "BREAKING CHANGE" in body
+        breaking = bool(match.group("breaking")) or bool(_BREAKING_FOOTER_RE.search(body))
         desc = match.group("desc").strip()
         if breaking:
             level = "major"
