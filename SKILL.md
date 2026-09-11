@@ -78,10 +78,14 @@ representative frame as visual evidence, per `docs/roadmap.md`'s
 generation/verification split. A typical flow: run an `ffmpeg-skill` tool
 (e.g. trim a clip), then run this skill's inspect → verify (→ receipt, once
 a verify-only receipt path exists — see Issue #18) on its output before
-telling the user the job is done. Neither skill depends on the other or
-knows about the other at the code level — this is a workflow pattern for
-an agent that happens to have both loaded, not an integration between the
-two projects.
+telling the user the job is done. `artifacts-skill doctor` reports whether
+`ffmpeg-skill` is installed (`companion.ffmpeg_skill`, detected by the
+presence of its `SKILL.md` under a `.claude`/`.cursor`/`.codex` skills
+directory — the same install model `ffmpeg-skill`'s own installer uses)
+purely as an informational signal; neither skill has a functional
+dependency on the other, and this is a workflow pattern for an agent that
+happens to have both loaded, not a code-level integration between the two
+projects.
 
 ## The workflow
 
