@@ -85,6 +85,40 @@ def _probe_version(path: str) -> str | None:
     return None
 
 
+def _agent_skill_capability(cap_id: str, skill_name: str) -> Capability:
+    """Detect a companion Agent Skill installed as a directory of files
+    rather than a binary on PATH or an importable module - the model
+    `kajisho5/ffmpeg-skill`'s own installer uses (`npx ffmpeg-skill` copies
+    `SKILL.md` + `scripts/` into an agent's skills directory; it does not
+    put anything on PATH or leave an importable package behind). Purely
+    informational: this project has no functional dependency on any
+    companion skill, so its absence is NOT_REQUIRED, never MISSING - see
+    SKILL.md's "Division of labor with ffmpeg-skill" for the workflow this
+    signals is available, not a capability this project's own code uses."""
+    home = os.path.expanduser("~")
+    candidates = [
+        os.path.join(os.getcwd(), ".claude", "skills", skill_name),
+        os.path.join(home, ".claude", "skills", skill_name),
+        os.path.join(home, ".cursor", "skills", skill_name),
+        os.path.join(home, ".codex", "skills", skill_name),
+    ]
+    for candidate in candidates:
+        skill_md = os.path.join(candidate, "SKILL.md")
+        if os.path.isfile(skill_md):
+            return Capability(
+                cap_id,
+                CapabilityStatus.AVAILABLE,
+                detail=f"Found at {candidate}",
+                detected_via=f"'{skill_md}' exists",
+            )
+    return Capability(
+        cap_id,
+        CapabilityStatus.NOT_REQUIRED,
+        detail=f"No '{skill_name}' Agent Skill found under a .claude/.cursor/.codex skills directory.",
+        detected_via="checked well-known Agent Skill install paths",
+    )
+
+
 def _chromium_capability() -> Capability:
     browsers_path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
     if browsers_path and os.path.isdir(browsers_path):
@@ -136,6 +170,7 @@ def detect_environment() -> CapabilityReport:
     report.add(_binary_capability("backend.ffmpeg", ["ffmpeg"]))
     report.add(_binary_capability("backend.ffprobe", ["ffprobe"]))
     report.add(_chromium_capability())
+    report.add(_agent_skill_capability("companion.ffmpeg_skill", "ffmpeg-skill"))
 
     # Adapter-facing libraries. `required=True` only for what the currently
     # implemented (PDF) adapter needs; everything else is informational so

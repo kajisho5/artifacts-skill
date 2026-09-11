@@ -223,7 +223,11 @@ locates your Python 3 interpreter — the engine itself is Python, see
 
 Point Claude Code, Cursor, Codex, or any Agent Skills–compatible agent at
 `SKILL.md` in this repo. It documents the exact workflow above, the current
-operations, and how to read a `PASS`/`WARN`/`FAIL` result.
+operations, how to read a `PASS`/`WARN`/`FAIL` result, and — in its
+"Division of labor" sections — how an agent should combine this skill with
+a generator (Anthropic's own document skills, or, for video/audio,
+[`ffmpeg-skill`](https://github.com/kajisho5/ffmpeg-skill)) rather than
+route generation requests here.
 
 ## Use as MCP
 
