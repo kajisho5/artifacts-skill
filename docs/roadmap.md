@@ -390,3 +390,29 @@ shape: one well-defined failure mode with a deterministic, safe
 correction, evidence-driven rather than guessed, with a test proving the
 retry actually converges — not a speculative "smart" fixer that tries to
 handle everything.
+
+## Automated versioning
+
+Through v0.2.0, releasing meant hand-editing `pyproject.toml`/
+`package.json`/`__init__.py`'s version strings and a `CHANGELOG.md`
+section, then letting `release.yml` (`.github/workflows/release.yml`) tag,
+create the GitHub Release, and `npm publish`. A second workflow,
+`.github/workflows/auto-version-bump.yml`, now automates the "decide the
+next version number" step too:
+
+- On every CI success on `main`, `scripts/bump_version.py` reads the
+  Conventional Commits type prefix (`feat:`, `fix:`, `feat!:`/`BREAKING
+  CHANGE:`, ...) off each commit subject since the last real git tag —
+  since every PR in this repo is squash-merged, that subject is exactly
+  the PR title. `feat` bumps minor, `fix` bumps patch, a breaking-change
+  marker bumps major; anything else (`chore`, `docs`, `ci`, `refactor`,
+  `test`, an untyped legacy commit) contributes to no bump at all.
+- If a bump is warranted, it writes the new version into all three files
+  plus a generated `CHANGELOG.md` section, and opens (or, on a later push,
+  updates in place) a single pending draft PR, `chore(release): vX.Y.Z`.
+  Merging that PR — a normal, reviewed merge, not a direct push to `main`
+  — is what actually ships the release; `release.yml` picks it up exactly
+  like a hand-authored version bump always has.
+- Adopted going forward only: nothing merged before this landed used
+  Conventional Commits titles, so "no bump found" was, correctly, this
+  workflow's answer until the first properly-typed PR after it.
