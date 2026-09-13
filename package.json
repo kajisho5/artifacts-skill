@@ -1,6 +1,6 @@
 {
   "name": "artifacts-skill",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A local-first verification and evidence-generation engine for AI-generated documents: inspect, plan, execute, render, verify, and receipt PDF/PPTX/DOCX/XLSX/image/HTML/SVG artifacts, locally.",
   "bin": {
     "artifacts-skill": "bin/artifacts-skill.js"
