@@ -5,6 +5,14 @@ version section per release. Each entry here is also the source for the
 release announcement text — when this file gets a new version section,
 the announcement text is that section, verbatim or lightly trimmed.
 
+## v0.4.0
+
+### Added
+- automate version bumps from Conventional Commits PR titles (#56)
+
+### Fixed
+- require BREAKING CHANGE to be a footer trailer, not any substring (#57)
+
 ## v0.3.0
 
 ### Added
