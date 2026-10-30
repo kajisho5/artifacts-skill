@@ -1,10 +1,11 @@
 name: Release
 
-# Fires once CI finishes on main - never on a PR branch's own CI run,
-# since a workflow_run's head_branch for a pull_request-triggered run is
-# the PR's source branch, not "main" (see the job `if:` below). This
-# means every release is built from a commit CI has already verified,
-# not from the push event itself.
+# Fires once CI finishes on a push to main - never on a pull request's CI run.
+# head_branch alone is not enough: it is the PR's *source* branch name, and
+# a fork can name its branch "main". The job `if:` below therefore also
+# requires the CI run to come from a push event in this repository, so a
+# fork PR can never get its code checked out here with contents: write and
+# the NPM secret. Every release is built from a commit CI already verified.
 on:
   workflow_run:
     workflows: ["CI"]
@@ -15,7 +16,11 @@ permissions:
 
 jobs:
   release:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,8 +50,9 @@ jobs:
       - name: Create the GitHub Release and tag, if not already done
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          tag="v${{ steps.version.outputs.version }}"
+          tag="v$VERSION"
           if gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             echo "$tag already released - skipping."
             exit 0
@@ -78,8 +84,9 @@ jobs:
       - name: Publish to npm, if this version isn't published yet
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          version="${{ steps.version.outputs.version }}"
+          version="$VERSION"
           if npm view "artifacts-skill@$version" version >/dev/null 2>&1; then
             echo "artifacts-skill@$version is already on npm - skipping."
             exit 0
