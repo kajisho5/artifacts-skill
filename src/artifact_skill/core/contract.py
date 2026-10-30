@@ -64,6 +64,19 @@ PROVIDES = {
     "document.look": "look",
     "document.receipt": "receipt",
 }
+# Self-declared non-responsibilities, the OS registry's `not_provided` key.
+# Captions (SRT/WebVTT/ASS) belong to subtitle-skill (字幕生成・検証) and
+# qc-skill (規格判定(QC)) in the OS ownership map; see docs/architecture.md,
+# "Captions (ecosystem roadmap step 4)".
+NOT_PROVIDED = [
+    "caption/subtitle file verification (SRT, WebVTT, ASS): subtitle-skill",
+    "caption generation, rewriting, translation, or burn-in: subtitle-skill",
+    "caption timing or reading-speed checks against a video: qc-skill",
+    "document generation from a prompt, template, or outline",
+    "OCR of scanned images with no text layer",
+    "subjective design or layout judgment",
+    "decryption of encrypted documents",
+]
 
 
 @dataclass(frozen=True)
@@ -494,6 +507,7 @@ def build_contract() -> dict[str, Any]:
             {"id": cap_id, "lifecycle": "EXPERIMENTAL", "tool_id": f"{SKILL_ID}/{tool}"}
             for cap_id, tool in PROVIDES.items()
         ],
+        "not_provided": list(NOT_PROVIDED),
         "schema": CONTRACT_SCHEMA,
         "tool_name": "artifacts-skill",
         "tool_version": __version__,

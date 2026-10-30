@@ -13,7 +13,7 @@ v0.3.0, Python 3.10+ (+ npm wrapper, MCP server). 11 format adapters (pdf, pptx,
 
 | Owned job | Status | Note |
 |---|---|---|
-| 生成文書の検証 | partial | no SRT/VTT/ASS adapter for captions |
+| 生成文書の検証 | partial | captions (SRT/VTT/ASS) left to subtitle-skill and qc-skill by decision (step 4) |
 
 ## Wiring
 
@@ -27,7 +27,7 @@ Not reachable from the agent. Contract does not fit the OS schema (tool_name/too
   - Done when: docs and schema updated, CLI alias kept
 - [x] **3. Fix #47** — unique evidence dir per run ([#63](https://github.com/kajisho5/artifacts-skill/pull/63))
   - Done when: 50 concurrent runs, no collision
-- [ ] **4. Captions: adapter or ADR leaving them to subtitle/qc**
+- [x] **4. Captions: adapter or ADR leaving them to subtitle/qc** ([#65](https://github.com/kajisho5/artifacts-skill/pull/65))
   - Done when: written decision
 - [ ] **5. (agent side) adapter + SkillSpec document_verify**
   - Done when: placeholder left in a doc fails QA

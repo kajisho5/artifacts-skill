@@ -48,6 +48,13 @@ chromium`); Media renders one representative frame via `ffmpeg`/`ffprobe`
   python-docx/openpyxl, LibreOffice, Playwright+Chromium, Pillow). No file
   is ever uploaded anywhere, and no functionality depends on a cloud
   account or API key.
+- **Not a caption tool.** Standalone caption files (`.srt`, `.vtt`,
+  `.ass`) are not recognized (`ARTIFACT_TYPE_UNSUPPORTED`), and the Media
+  adapter does not read subtitle streams. Generating, validating, timing,
+  translating or burning in captions is subtitle-skill's job; checking
+  caption timing against the delivered video is qc-skill's. A caption
+  *script* delivered as a document (DOCX, PDF, Markdown) is verified here
+  like any other document. See `docs/architecture.md`, "Captions".
 - **Not decryption.** An encrypted PDF is detected and reported (`is_encrypted`
   in `inspect`, an `encryption` structural check) but there is no operation
   or argument anywhere in this skill to supply a password and decrypt —

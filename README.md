@@ -148,6 +148,13 @@ recognized-but-not-yet-built format would fail with
 `docs/roadmap.md` for the phase plan and `docs/architecture.md` for why
 the Core/Adapter split makes adding a format additive, not a rewrite.
 
+Caption files (SRT, WebVTT, ASS) are deliberately not a format here: in
+the AI Video Production OS they belong to
+[subtitle-skill](https://github.com/kajisho5/subtitle-skill) (generation,
+validation, burn-in) and [qc-skill](https://github.com/kajisho5/qc-skill)
+(timing checks against the video). The contract says so in its
+`not_provided` list; see `docs/architecture.md`, "Captions".
+
 ## Design principles
 
 - **Local-first.** No cloud, no account, no API key required. External

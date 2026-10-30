@@ -22,6 +22,11 @@
         "additionalProperties": false
       }
     },
+    "not_provided": {
+      "type": "array",
+      "description": "OS registry key: jobs this skill deliberately does not do, each naming the owner where another skill owns it (e.g. captions: subtitle-skill, qc-skill). Optional, so a contract emitted before it was added still validates.",
+      "items": { "type": "string" }
+    },
     "schema": { "type": "string", "enum": ["artifact-contract/v1"] },
     "tool_name": { "type": "string" },
     "tool_version": { "type": "string" },

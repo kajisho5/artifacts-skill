@@ -328,6 +328,59 @@ still `artifact-receipt/v1`; `tests/schemas/test_schema_files.py` checks
 the schema title uses the new name and that the `schema` enum still accepts
 the old identifier.
 
+## Captions (ecosystem roadmap step 4)
+
+**Context.** The AI Video Production OS ownership map
+(`AI-video-production-OS/ecosystem.json`) gives every job to exactly one
+repository. This skill owns 生成文書の検証 (verifying generated documents).
+Captions are owned elsewhere: subtitle-skill owns 字幕生成・検証 (subtitle
+generation and validation, SRT/WebVTT output, burn-in, translation and
+per-locale formatting), and qc-skill owns 規格判定(QC), whose rules include
+subtitle timing and malformed-cue checks against the delivered video. The
+ecosystem audit listed "no SRT/VTT/ASS adapter for captions" as a gap here,
+and the map's one-line role for this skill mentions captions, so the
+question was whether to add a caption adapter or write down that captions
+are not this skill's job.
+
+**Decision.** No caption adapter. Caption files are left to subtitle-skill
+and qc-skill. What this skill does and does not do with captions:
+
+| | This skill | Owner |
+|---|---|---|
+| A caption script delivered as a document (DOCX, PDF, Markdown, ...) | Verifies it like any other document: structure, leftover placeholder text, rendered pages | — |
+| A video file that carries captions | Media adapter verifies the container and its video/audio streams; subtitle streams are not read | — |
+| A standalone `.srt` / `.vtt` / `.ass` file | Not recognized: `inspect` returns `ARTIFACT_TYPE_UNSUPPORTED` | subtitle-skill |
+| Writing, rewriting, translating or burning in captions | No | subtitle-skill |
+| Cue timing, overlaps, reading speed, cues past the end of the video | No | subtitle-skill (document), qc-skill (against the delivered video) |
+
+The contract states the same in a `not_provided` list, the OS registry's
+key for a skill's self-declared non-responsibilities
+(`core/contract.py::NOT_PROVIDED`). Each caption entry names its owner.
+No capability id, `provides[]` entry or artifact type mentions captions.
+
+**Alternatives considered.** An SRT/WebVTT/ASS adapter here (parse cues,
+check timing, render a contact sheet of cues) would fill the audit's gap,
+but it would give one job to two repositories, which the ownership map
+forbids, and duplicate subtitle-skill's typed `SubtitleDocument`
+validation with different rules, so the two could disagree on the same
+file. A thin adapter that calls subtitle-skill would add a dependency
+between two skills for no new check; the orchestrator
+(video-production-agent) can call subtitle-skill directly. Reading
+subtitle streams in the Media adapter was rejected for the same reason:
+media facts already duplicate qc-skill and media-analysis-skill (see
+`ECOSYSTEM_ROADMAP.md`, "Boundaries"), and this would widen that overlap.
+
+**Consequences.** A caption file sent to this skill fails loudly with
+`ARTIFACT_TYPE_UNSUPPORTED` rather than passing an empty check, and the
+contract tells a caller where to go instead. The roadmap's owned-job note
+no longer lists a caption adapter as missing. If the ownership map ever
+gives caption files to this skill, this decision is reopened and an
+adapter is added like any other format (`docs/adapters.md`). Tests:
+`tests/contract/test_caption_boundary.py` checks that the contract claims
+no caption capability, that `not_provided` names subtitle-skill and
+qc-skill, and that `.srt`/`.vtt`/`.ass` files are detected as `unknown`
+and rejected with `ARTIFACT_TYPE_UNSUPPORTED`.
+
 ## Security model
 
 See `docs/security.md` for the full model; the short version: every
