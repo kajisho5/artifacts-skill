@@ -132,7 +132,9 @@ inspected, and do not report success without having verified.
    for that operation; without it, inspect→render→verify→receipt with no
    mutation and no fix loop (the only way to get a receipt for a format
    with zero mutating operations, like HTML/SVG). Either way it writes
-   `reports/receipt.json` (schema `artifact-receipt/v1`), which is what
+   `receipt.json` (schema `artifact-receipt/v1`) into a fresh
+   `reports/<run-id>/` directory of its own (or into `--evidence-dir`, if
+   you pass one, exactly as given), which is what
    you should point to as evidence when you tell the user the job is
    done. The fix loop (operation-only) retries up to
    `Limits.max_fix_iterations` (3) by default — pass `--max-iterations 1`

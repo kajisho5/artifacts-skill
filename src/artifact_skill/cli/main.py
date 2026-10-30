@@ -37,6 +37,7 @@ from artifact_skill.core.errors import (
     ErrorCategory,
 )
 from artifact_skill.core.operation import default_output_path
+from artifact_skill.core.run_dir import evidence_dir_for
 from artifact_skill.core.verification import CheckStatus
 from artifact_skill.doctor.detect import detect_environment
 from artifact_skill.policies import PRESETS as _PRESET_NAMES
@@ -104,7 +105,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_execute.add_argument("--output", help="Output path (default: derived, never the input path).")
     p_execute.add_argument(
         "--policy", default="{}",
-        help="JSON object to gate execute's own reports/receipt.json structural verification. "
+        help="JSON object to gate execute's own receipt.json structural verification. "
         "Without this, execute always verifies against an empty policy (barely gates anything) - "
         "use `receipt` instead of `execute` when you need a real submission gate.",
     )
@@ -115,16 +116,15 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_execute.add_argument(
         "--evidence-dir",
-        help="Directory for execute's own reports/receipt.json (default: ./reports, same default as "
-        "`receipt` — FIX_PROMPT P2-5. Previously always output_path.parent/'reports', which put the "
-        "receipt somewhere different than `receipt`'s default for the exact same input/output).",
+        help="Directory for execute's own receipt.json (default: a fresh ./reports/<run-id>/ per run, "
+        "same default as `receipt` — FIX_PROMPT P2-5, Issue #47). An explicit directory is used as given.",
     )
     p_execute.add_argument("--dry-run", action="store_true")
     common(p_execute)
 
     p_render = sub.add_parser("render", help="Produce page images for visual inspection.")
     p_render.add_argument("input")
-    p_render.add_argument("--out-dir", help="Directory for rendered images (default: ./reports/rendered).")
+    p_render.add_argument("--out-dir", help="Directory for rendered images (default: a fresh ./reports/<run-id>/rendered per run).")
     p_render.add_argument("--dry-run", action="store_true")
     common(p_render)
 
@@ -141,7 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_look = sub.add_parser("look", help="Build a contact sheet (or before/after) for Agent visual review.")
     p_look.add_argument("input")
     p_look.add_argument("--compare-to", help="A second artifact to render as a before/after comparison.")
-    p_look.add_argument("--out-dir", help="Directory for evidence images (default: ./reports).")
+    p_look.add_argument("--out-dir", help="Directory for evidence images (default: a fresh ./reports/<run-id>/ per run).")
     p_look.add_argument("--dry-run", action="store_true")
     common(p_look)
 
@@ -166,7 +166,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"Fix-loop retry cap, must be in [1, {DEFAULT_LIMITS.max_fix_iterations}] "
         f"(default when omitted: {DEFAULT_LIMITS.max_fix_iterations}).",
     )
-    p_receipt.add_argument("--evidence-dir", help="Directory for the receipt and evidence (default: ./reports).")
+    p_receipt.add_argument("--evidence-dir", help="Directory for the receipt and evidence (default: a fresh ./reports/<run-id>/ per run).")
     p_receipt.add_argument("--dry-run", action="store_true")
     common(p_receipt)
 
@@ -294,18 +294,18 @@ def _cmd_execute(args: argparse.Namespace) -> int:
     policy = _resolve_policy_arg(args)
     input_path = Path(args.input)
     output_path = Path(args.output) if args.output else default_output_path(input_path, args.operation)
-    # FIX_PROMPT P2-5: default is now cwd-relative "./reports", matching
-    # `receipt`'s own default exactly, instead of output_path.parent /
-    # "reports" - the latter put an `--output /tmp/out.pdf` execute's
+    # FIX_PROMPT P2-5: the default lives under cwd-relative "./reports",
+    # matching `receipt`'s own default exactly, instead of output_path.parent
+    # / "reports" - the latter put an `--output /tmp/out.pdf` execute's
     # receipt.json at /tmp/reports, a different place than `receipt`'s
-    # default for the exact same input/output, which could read as "no
-    # receipt was written" to an agent checking the conventional location.
-    evidence_dir = Path(args.evidence_dir) if args.evidence_dir else Path("reports")
-
-    result = run_lifecycle(
-        input_path, args.operation, op_args, output_path,
-        policy=policy, evidence_dir=evidence_dir, dry_run=args.dry_run,
-    )
+    # default for the exact same input/output. Issue #47: without
+    # --evidence-dir each run gets its own fresh ./reports/<run-id>/, so
+    # concurrent runs never overwrite each other's evidence.
+    with evidence_dir_for(args.evidence_dir, dry_run=args.dry_run) as evidence_dir:
+        result = run_lifecycle(
+            input_path, args.operation, op_args, output_path,
+            policy=policy, evidence_dir=evidence_dir, dry_run=args.dry_run,
+        )
     if args.dry_run:
         payload = {"dry_run": True, "plan": result.plan.to_dict()}
         _emit(payload, args.json, human=None if args.json else json.dumps(payload, indent=2))
@@ -314,6 +314,7 @@ def _cmd_execute(args: argparse.Namespace) -> int:
     payload = {
         "output": result.output.to_dict() if result.output else None,
         "receipt": result.receipt.to_dict() if result.receipt else None,
+        "evidence_dir": str(evidence_dir),
     }
     _emit(payload, args.json, human=None if args.json else json.dumps(payload, indent=2))
     if result.receipt is None:
@@ -324,14 +325,17 @@ def _cmd_execute(args: argparse.Namespace) -> int:
 def _cmd_render(args: argparse.Namespace) -> int:
     ref = ArtifactRef.from_path(args.input)
     adapter = adapter_for(ref)
-    out_dir = Path(args.out_dir) if args.out_dir else Path("reports") / "rendered"
-    if args.dry_run:
-        report = adapter.inspect(ref)
-        page_count = report.details.get("page_count", "unknown")
-        payload = {"dry_run": True, "would_render_to": str(out_dir), "estimated_files": page_count}
-        _emit(payload, args.json, human=None if args.json else json.dumps(payload, indent=2))
-        return EXIT_OK
-    rendered = adapter.render(ref, out_dir)
+    # Issue #47: without --out-dir, each run renders into its own fresh
+    # ./reports/<run-id>/rendered instead of a shared ./reports/rendered.
+    with evidence_dir_for(args.out_dir, dry_run=args.dry_run) as base_dir:
+        out_dir = base_dir if args.out_dir else base_dir / "rendered"
+        if args.dry_run:
+            report = adapter.inspect(ref)
+            page_count = report.details.get("page_count", "unknown")
+            payload = {"dry_run": True, "would_render_to": str(out_dir), "estimated_files": page_count}
+            _emit(payload, args.json, human=None if args.json else json.dumps(payload, indent=2))
+            return EXIT_OK
+        rendered = adapter.render(ref, out_dir)
     payload = rendered.to_dict()
     _emit(payload, args.json, human=None if args.json else json.dumps(payload, indent=2))
     return EXIT_OK
@@ -350,20 +354,22 @@ def _cmd_verify(args: argparse.Namespace) -> int:
 def _cmd_look(args: argparse.Namespace) -> int:
     ref = ArtifactRef.from_path(args.input)
     adapter = adapter_for(ref)
-    out_dir = Path(args.out_dir) if args.out_dir else Path("reports")
-    if args.dry_run:
-        payload = {"dry_run": True, "would_write_to": str(out_dir / "contact-sheet.png")}
-        _emit(payload, args.json, human=None if args.json else json.dumps(payload, indent=2))
-        return EXIT_OK
+    # Issue #47: without --out-dir, each run writes into its own fresh
+    # ./reports/<run-id>/ instead of a shared ./reports.
+    with evidence_dir_for(args.out_dir, dry_run=args.dry_run) as out_dir:
+        if args.dry_run:
+            payload = {"dry_run": True, "would_write_to": str(out_dir / "contact-sheet.png")}
+            _emit(payload, args.json, human=None if args.json else json.dumps(payload, indent=2))
+            return EXIT_OK
 
-    rendered = adapter.render(ref, out_dir / "rendered")
-    if args.compare_to:
-        other_ref = ArtifactRef.from_path(args.compare_to)
-        other_adapter = adapter_for(other_ref)
-        other_rendered = other_adapter.render(other_ref, out_dir / "rendered_compare")
-        sheet_path = build_before_after(rendered.files, other_rendered.files, out_dir / "before-after.png")
-    else:
-        sheet_path = build_contact_sheet(rendered.files, out_dir / "contact-sheet.png")
+        rendered = adapter.render(ref, out_dir / "rendered")
+        if args.compare_to:
+            other_ref = ArtifactRef.from_path(args.compare_to)
+            other_adapter = adapter_for(other_ref)
+            other_rendered = other_adapter.render(other_ref, out_dir / "rendered_compare")
+            sheet_path = build_before_after(rendered.files, other_rendered.files, out_dir / "before-after.png")
+        else:
+            sheet_path = build_contact_sheet(rendered.files, out_dir / "contact-sheet.png")
     payload = {"contact_sheet": str(sheet_path), "source_pages": len(rendered.files)}
     _emit(payload, args.json, human=None if args.json else json.dumps(payload, indent=2))
     return EXIT_OK
@@ -386,13 +392,14 @@ def _cmd_receipt(args: argparse.Namespace) -> int:
         output_path = None
     else:
         output_path = Path(args.output) if args.output else default_output_path(input_path, args.operation)
-    evidence_dir = Path(args.evidence_dir) if args.evidence_dir else Path("reports")
-
-    result = run_lifecycle(
-        input_path, args.operation, op_args, output_path,
-        policy=policy, evidence_dir=evidence_dir, dry_run=args.dry_run,
-        max_iterations=args.max_iterations,
-    )
+    # Issue #47: without --evidence-dir, each run gets its own fresh
+    # ./reports/<run-id>/ (see core/run_dir.py).
+    with evidence_dir_for(args.evidence_dir, dry_run=args.dry_run) as evidence_dir:
+        result = run_lifecycle(
+            input_path, args.operation, op_args, output_path,
+            policy=policy, evidence_dir=evidence_dir, dry_run=args.dry_run,
+            max_iterations=args.max_iterations,
+        )
     if args.dry_run:
         payload = {"dry_run": True, "plan": result.plan.to_dict()}
         _emit(payload, args.json, human=None if args.json else json.dumps(payload, indent=2))

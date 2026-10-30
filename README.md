@@ -40,9 +40,9 @@ proposal.pdf   -->   inspect -> plan -> execute   -->   proposal_final.pdf
                           |                    |
                         render               verify
                           v                    v
-                    reports/rendered/*.png   PASS / WARN / FAIL
+          reports/<run-id>/rendered/*.png   PASS / WARN / FAIL
                           \                   /
-                           reports/receipt.json   (artifact-receipt/v1)
+                  reports/<run-id>/receipt.json   (artifact-receipt/v1)
 ```
 
 **11 formats, one contract** — PDF, PPTX, DOCX, XLSX, Image, HTML, SVG,
@@ -79,8 +79,10 @@ artifacts-skill receipt report.pdf \
 ```
 
 The last command runs the full lifecycle and writes
-`reports/receipt.json` plus `reports/rendered/*.png` — the evidence, not
-just a claim. The same commands work as `npx artifacts-skill ...` with
+`reports/<run-id>/receipt.json` plus `reports/<run-id>/rendered/*.png` —
+the evidence, not just a claim. Each run gets its own fresh `<run-id>`
+directory, so concurrent runs never overwrite each other's evidence; pass
+`--evidence-dir` to choose the directory yourself. The same commands work as `npx artifacts-skill ...` with
 no local install at all.
 
 ## Demos

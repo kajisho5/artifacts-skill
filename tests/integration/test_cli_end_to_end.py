@@ -203,7 +203,10 @@ def test_execute_default_evidence_dir_matches_receipts_default(good_pdf, tmp_pat
     cwd-relative './reports' default whenever --output pointed outside
     cwd - confirmed by direct reproduction before this fix that an
     absolute --output path put the receipt somewhere an agent checking
-    the conventional ./reports location would never find it."""
+    the conventional ./reports location would never find it.
+
+    Issue #47: the default is now a fresh ./reports/<run-id>/ per run, and
+    execute's JSON names it as `evidence_dir`."""
     out_dir = tmp_path / "elsewhere"
     out_dir.mkdir()
     proc = run_cli(
@@ -212,8 +215,10 @@ def test_execute_default_evidence_dir_matches_receipts_default(good_pdf, tmp_pat
         cwd=tmp_path,
     )
     assert proc.returncode == 0
-    assert (tmp_path / "reports" / "receipt.json").exists()
-    assert not (out_dir / "reports" / "receipt.json").exists()
+    evidence_dir = tmp_path / json.loads(proc.stdout)["evidence_dir"]
+    assert evidence_dir.parent == tmp_path / "reports"
+    assert (evidence_dir / "receipt.json").exists()
+    assert not (out_dir / "reports").exists()
 
 
 def test_execute_evidence_dir_flag_overrides_the_default(good_pdf, tmp_path):
@@ -224,7 +229,8 @@ def test_execute_evidence_dir_flag_overrides_the_default(good_pdf, tmp_path):
     )
     assert proc.returncode == 0
     assert (tmp_path / "custom_evidence" / "receipt.json").exists()
-    assert not (tmp_path / "reports" / "receipt.json").exists()
+    assert json.loads(proc.stdout)["evidence_dir"] == "custom_evidence"
+    assert not (tmp_path / "reports").exists()
 
 
 def test_execute_accepts_policy_preset(good_pdf, tmp_path):
@@ -399,7 +405,10 @@ def test_receipt_end_to_end_human_readable_report(good_pdf, tmp_path):
     )
     assert "ARTIFACT REPORT" in proc.stdout
     assert "Status:" in proc.stdout
-    assert (tmp_path / "reports" / "receipt.json").exists()
+    receipts = list((tmp_path / "reports").glob("*/receipt.json"))
+    assert len(receipts) == 1
+    # The report's "Evidence:" section names the run's own receipt.json.
+    assert str(receipts[0].relative_to(tmp_path)) in proc.stdout
 
 
 def test_pptx_doctor_reports_structural_capability(tmp_path):
@@ -601,7 +610,7 @@ def test_html_receipt_without_operation_gives_a_real_verify_only_receipt(good_ht
     data = json.loads(proc.stdout)
     assert data["status"] == "pass"
     assert data["operations"] == []
-    assert (tmp_path / "reports" / "receipt.json").exists()
+    assert len(list((tmp_path / "reports").glob("*/receipt.json"))) == 1
 
 
 def test_receipt_without_operation_rejects_output(good_html, tmp_path):

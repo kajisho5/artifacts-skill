@@ -213,7 +213,7 @@ the same "don't hide the unknown" rule applied one level up.
 
 **Published JSON Schema** (Issue #16): [`schemas/artifact-receipt-v1.schema.json`](../schemas/artifact-receipt-v1.schema.json)
 is a real, standalone JSON Schema file — an external consumer (or CI in
-another repo) can validate a `reports/receipt.json` against it without
+another repo) can validate a `receipt.json` against it without
 running this tool. `tests/schemas/test_schema_files.py` validates real
 receipts from three different lifecycle outcomes (clean success, a
 structural `FAIL`, and an operation that raises outright) against it on

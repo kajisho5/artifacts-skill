@@ -74,6 +74,13 @@ per-tool option. `side_effects.writes_files` distinguishes read-only tools
 new files (`execute`, `render`, `look`, `receipt`) — all of which still
 never touch the input path itself.
 
+Where those files go: an explicit `evidence_dir` / `out_dir` is used
+exactly as given. Without one, each call writes into a fresh
+`./reports/<run-id>/` of its own (Issue #47), so concurrent calls never
+overwrite each other's evidence; `execute`'s result names it in an
+`evidence_dir` key. See `docs/architecture.md`'s "Evidence directory per
+run".
+
 For `execute` and `receipt`, the *actual* per-operation verification policy
 (whether structural/visual verification is required, whether rendering is
 required, and known limitations) comes from the adapter's own

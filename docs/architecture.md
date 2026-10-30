@@ -197,6 +197,61 @@ Two things are deliberately *not* automated:
    rationale. Any other adapter can add its own fixer the same way,
    without touching `engine.py`.
 
+## Evidence directory per run (Issue #47)
+
+**Context.** `render()` writes fixed file names (`rendered/page-001.png`,
+`rendered/frame-001.png`, ...) and the receipt is always `receipt.json`.
+Until this change, every CLI/MCP call that omitted `--evidence-dir` /
+`--out-dir` (`evidence_dir` / `out_dir` over MCP) wrote into the same
+cwd-relative `./reports`. Concurrent calls therefore overwrote each
+other's evidence: with 50 concurrent `receipt` processes on two different
+inputs, every receipt pointed at page images another process had written
+for the other input, and only one `receipt.json` was left on disk.
+
+**Decision.** When the caller omits the directory, each call gets a fresh
+directory of its own, `./reports/<run-id>/`, where `<run-id>` is
+`<UTC timestamp>-<8 random hex chars>` (e.g. `20261030T120501Z-3f9a0c1b`;
+they sort in creation order). `core/run_dir.py` reserves it with a single
+`mkdir()` that fails if the name exists, which is atomic, so two processes
+can never be handed the same directory; on a clash it simply draws a new
+name. Inside the run directory the layout is unchanged:
+
+| Command | Default before | Default now |
+|---|---|---|
+| `receipt`, `execute` | `reports/receipt.json`, `reports/rendered/` | `reports/<run-id>/receipt.json`, `reports/<run-id>/rendered/` |
+| `render` | `reports/rendered/` | `reports/<run-id>/rendered/` |
+| `look` | `reports/contact-sheet.png`, `reports/rendered/` | `reports/<run-id>/contact-sheet.png`, `reports/<run-id>/rendered/` |
+
+An explicit directory is used exactly as given, as before: a caller that
+needs a known or reusable location passes one. Dry runs report a fresh
+path but create nothing. A call that fails before writing anything (e.g.
+a missing input) removes its empty run directory again.
+
+**How a caller finds the run directory.** `receipt` already returns the
+whole receipt (and the human report prints the `receipt.json` path); every
+evidence path in the receipt's `artifacts` lives in the run directory.
+`execute`'s JSON result gains an `evidence_dir` key. `render` and `look`
+return the paths of the files they wrote, as before. The receipt itself
+(`artifact-receipt/v1`) is unchanged.
+
+**Alternatives considered.** `tempfile.mkdtemp()` gives the same
+atomicity but creates the directory with mode `0700`, a visible change for
+anyone who reads evidence as another user; plain `mkdir()` keeps the
+umask-derived permissions `./reports` always had. A `reports/latest`
+pointer was left out: updating it is itself a shared write that concurrent
+runs would race on, which is the bug being fixed. Keeping `reports/` as
+the default and only adding a lock would serialize runs and still leave
+earlier receipts pointing at overwritten files.
+
+**Consequences.** `./reports` now grows by one directory per run that
+omits the directory; deleting old run directories is the caller's call
+(`reports/` is already git-ignored). Callers or scripts that read the
+fixed `reports/receipt.json` path should pass `--evidence-dir reports`
+(the old behaviour, safe when runs are not concurrent) or read the path
+from the result. Regression test: `tests/integration/test_evidence_dir_per_run.py`
+runs 50 concurrent `receipt` processes and checks no evidence is shared,
+lost or overwritten.
+
 ## Brain / Hands split
 
 This engine never makes a subjective call ("this design is good," "this
