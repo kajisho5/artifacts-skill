@@ -13,11 +13,14 @@ authors = [{ name = "SEVENTHWELL" }]
 dependencies = []
 
 [project.optional-dependencies]
-pdf = ["pypdf>=5.0", "pypdfium2>=4.30", "Pillow>=10.0"]
-pptx = ["python-pptx>=1.0", "pypdf>=5.0", "pypdfium2>=4.30", "Pillow>=10.0"]
-docx = ["python-docx>=1.0", "pypdf>=5.0", "pypdfium2>=4.30", "Pillow>=10.0"]
-xlsx = ["openpyxl>=3.1", "pypdf>=5.0", "pypdfium2>=4.30", "Pillow>=10.0"]
-image = ["Pillow>=10.0"]
+# Floors clear every published advisory (OSV, 2026-10-30). Pillow 13.0.0 needs
+# Python 3.11, so 3.10 gets 12.3.0, its last release (docs/architecture.md,
+# "Dependency floors").
+pdf = ["pypdf>=6.21.2", "pypdfium2>=4.30", "Pillow>=13.0.0; python_version >= '3.11'", "Pillow>=12.3.0; python_version < '3.11'"]
+pptx = ["python-pptx>=1.0", "pypdf>=6.21.2", "pypdfium2>=4.30", "Pillow>=13.0.0; python_version >= '3.11'", "Pillow>=12.3.0; python_version < '3.11'"]
+docx = ["python-docx>=1.0", "pypdf>=6.21.2", "pypdfium2>=4.30", "Pillow>=13.0.0; python_version >= '3.11'", "Pillow>=12.3.0; python_version < '3.11'"]
+xlsx = ["openpyxl>=3.1", "pypdf>=6.21.2", "pypdfium2>=4.30", "Pillow>=13.0.0; python_version >= '3.11'", "Pillow>=12.3.0; python_version < '3.11'"]
+image = ["Pillow>=13.0.0; python_version >= '3.11'", "Pillow>=12.3.0; python_version < '3.11'"]
 html = ["playwright>=1.40"]
 svg = ["playwright>=1.40"]
 csv = ["playwright>=1.40"]
@@ -31,11 +34,11 @@ epub = ["playwright>=1.40"]
 # extra name, matching every other format's install story.
 media = []
 all = [
-    "pypdf>=5.0", "pypdfium2>=4.30", "Pillow>=10.0",
+    "pypdf>=6.21.2", "pypdfium2>=4.30", "Pillow>=13.0.0; python_version >= '3.11'", "Pillow>=12.3.0; python_version < '3.11'",
     "python-pptx>=1.0", "python-docx>=1.0", "openpyxl>=3.1",
     "playwright>=1.40", "markdown-it-py>=3.0",
 ]
-dev = ["pytest>=8.0", "pytest-cov>=5.0", "reportlab>=4.0", "python-pptx>=1.0", "python-docx>=1.0", "openpyxl>=3.1", "playwright>=1.40", "markdown-it-py>=3.0", "ruff>=0.16", "mypy>=1.13"]
+dev = ["pytest>=9.0.3", "pytest-cov>=5.0", "reportlab>=4.0", "python-pptx>=1.0", "python-docx>=1.0", "openpyxl>=3.1", "playwright>=1.40", "markdown-it-py>=3.0", "ruff>=0.16", "mypy>=1.13"]
 
 [project.scripts]
 artifacts-skill = "artifact_skill.cli.main:main"

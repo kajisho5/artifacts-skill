@@ -381,6 +381,29 @@ no caption capability, that `not_provided` names subtitle-skill and
 qc-skill, and that `.srt`/`.vtt`/`.ass` files are detected as `unknown`
 and rejected with `ARTIFACT_TYPE_UNSUPPORTED`.
 
+## Dependency floors (supply-chain audit)
+
+**Context.** A supply-chain audit (Trail of Bits supply-chain-risk-auditor,
+checked against OSV on 2026-10-30) found that the optional extras allowed
+vulnerable releases: `pypdf>=5.0` allowed 60 advisories (13 HIGH, mostly
+long runtimes or memory exhaustion on crafted PDFs), and `Pillow>=10.0`
+allowed 50+ (5 CRITICAL decoder heap overflows). The PDF adapter and every
+renderer open files this skill is asked to verify, so these are the inputs
+an attacker would control. The dev extra's `pytest>=8.0` allowed
+GHSA-6w46-j5rx-g56g (tmpdir handling).
+
+**Decision.** Raise each floor to the first release with no published
+advisory: `pypdf>=6.21.2`, `pytest>=9.0.3` and `Pillow>=13.0.0`. Pillow
+13.0.0 requires Python 3.11, and this skill supports and tests 3.10, so
+Pillow's floor is split with an environment marker: Python 3.11+ gets
+`>=13.0.0`, Python 3.10 gets `>=12.3.0` (the last release for 3.10).
+
+**Consequences.** On Python 3.10 the Pillow advisories fixed in 13.0.0
+remain (e.g. GHSA-332p-7hrc-92wf, GHSA-5x8w-8jj5-q52h, GHSA-8g5g-8vmr-9782,
+GHSA-w889-685w-c8fh); a caller who needs the fully patched Pillow runs
+Python 3.11+. Python 3.10 support is not dropped for a dependency. pypdf
+and pytest floors apply on every supported Python.
+
 ## Security model
 
 See `docs/security.md` for the full model; the short version: every
