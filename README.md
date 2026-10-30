@@ -1,4 +1,18 @@
-# artifacts-skill
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/app-icon-dark.png">
+    <img src="brand/app-icon.png" width="128" alt="artifacts-skill app icon">
+  </picture>
+</p>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/logo/artifacts-skill-wordmark-white.svg">
+    <img src="brand/logo/artifacts-skill-wordmark-black.svg" height="48" alt="artifacts-skill">
+  </picture>
+</p>
+
+<p align="center"><b>Local verification of AI-generated documents</b></p>
 
 [![tests](https://github.com/kajisho5/artifacts-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/kajisho5/artifacts-skill/actions/workflows/ci.yml)
 ![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)
