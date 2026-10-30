@@ -49,6 +49,21 @@ from artifact_skill.core.errors import EXIT_CODE_BY_CATEGORY, EXIT_FAIL, EXIT_OK
 from artifact_skill.security.limits import DEFAULT_LIMITS
 
 CONTRACT_SCHEMA = "artifact-contract/v1"
+# The AI Video Production OS registry's shape (skill_id, version,
+# contract_version, provides[]), published next to this contract's own keys
+# so the OS conformance checks can read it without a second document.
+SKILL_ID = "artifacts-skill"
+CONTRACT_VERSION = "1.0"
+# Capability id -> tool name. doctor/contract are not capabilities.
+PROVIDES = {
+    "document.inspect": "inspect",
+    "document.plan": "plan",
+    "document.execute": "execute",
+    "document.render": "render",
+    "document.verify": "verify",
+    "document.look": "look",
+    "document.receipt": "receipt",
+}
 
 
 @dataclass(frozen=True)
@@ -462,6 +477,13 @@ def get_tool(name: str) -> ToolContract | None:
 
 def build_contract() -> dict[str, Any]:
     return {
+        "skill_id": SKILL_ID,
+        "version": __version__,
+        "contract_version": CONTRACT_VERSION,
+        "provides": [
+            {"id": cap_id, "lifecycle": "EXPERIMENTAL", "tool_id": f"{SKILL_ID}/{tool}"}
+            for cap_id, tool in PROVIDES.items()
+        ],
         "schema": CONTRACT_SCHEMA,
         "tool_name": "artifacts-skill",
         "tool_version": __version__,

@@ -5,6 +5,23 @@
   "description": "The document `artifacts-skill contract --json` emits (core/contract.py::build_contract()). Generated from the code that runs, not maintained by hand beside it — see docs/contract.md. Validated in tests/schemas/test_schema_files.py against a freshly-generated real contract document on every CI run, so this file cannot silently drift from what the tool actually emits.",
   "type": "object",
   "properties": {
+    "skill_id": { "type": "string", "enum": ["artifacts-skill"], "description": "AI Video Production OS registry identity (same value as tool_name)." },
+    "version": { "type": "string", "description": "Same value as tool_version, under the OS registry's key." },
+    "contract_version": { "type": "string" },
+    "provides": {
+      "type": "array",
+      "description": "OS registry capabilities: one entry per tool that is a capability (doctor and contract are not).",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "lifecycle": { "type": "string", "enum": ["PROPOSED", "EXPERIMENTAL", "STABLE", "DEPRECATED", "RETIRED"] },
+          "tool_id": { "type": "string" }
+        },
+        "required": ["id", "lifecycle", "tool_id"],
+        "additionalProperties": false
+      }
+    },
     "schema": { "type": "string", "enum": ["artifact-contract/v1"] },
     "tool_name": { "type": "string" },
     "tool_version": { "type": "string" },
@@ -82,6 +99,7 @@
     "input_mutation_policy": { "type": "string", "enum": ["never"] }
   },
   "required": [
+    "skill_id", "version", "contract_version", "provides",
     "schema", "tool_name", "tool_version", "description", "capability_id_prefix",
     "tools", "exit_codes", "network_policy", "input_mutation_policy"
   ],

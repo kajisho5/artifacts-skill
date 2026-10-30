@@ -21,7 +21,7 @@ Not reachable from the agent. Contract does not fit the OS schema (tool_name/too
 
 ## Steps
 
-- [ ] **1. OS-shaped contract** — add skill_id, version, contract_version, provides[] keeping the current keys
+- [x] **1. OS-shaped contract** — add skill_id, version, contract_version, provides[] keeping the current keys
   - Done when: contract validates against the OS schema in CI
 - [ ] **2. Rename its receipt** — "Artifact Verification Receipt" (clashes with the agent's ProductionReceipt)
   - Done when: docs and schema updated, CLI alias kept

@@ -58,6 +58,26 @@ def test_contract_schema_and_exit_codes_present():
     assert contract["input_mutation_policy"] == "never"
 
 
+def test_contract_carries_the_os_registry_shape():
+    """AI Video Production OS registry keys (skill_id, version,
+    contract_version, provides[]) sit beside this contract's own keys:
+    identity and version match tool_name/tool_version, every provides entry
+    carries exactly id/lifecycle/tool_id, ids are unique, and each tool_id
+    names a real tool."""
+    contract = build_contract()
+    assert contract["skill_id"] == contract["tool_name"] == "artifacts-skill"
+    assert contract["version"] == contract["tool_version"]
+    assert isinstance(contract["contract_version"], str)
+    tool_names = {t["name"] for t in contract["tools"]}
+    ids = [p["id"] for p in contract["provides"]]
+    assert ids and len(ids) == len(set(ids))
+    for entry in contract["provides"]:
+        assert set(entry) == {"id", "lifecycle", "tool_id"}
+        assert entry["lifecycle"] in ("PROPOSED", "EXPERIMENTAL", "STABLE", "DEPRECATED", "RETIRED")
+        prefix, _, tool = entry["tool_id"].partition("/")
+        assert prefix == contract["skill_id"] and tool in tool_names
+
+
 # CLI flags that are deliberately outside input_schema: they control
 # invocation/output format (which JSON-RPC has no equivalent of) or local
 # execution mechanics, not the tool's structural contract, and none of
