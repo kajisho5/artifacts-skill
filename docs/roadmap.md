@@ -150,15 +150,19 @@ paragraph to stay current forever.
 Nothing tracked here is currently blocking; see GitHub issue #2 for
 whatever's been filed since this section was last updated.
 
-**Issue #47 (filed, needs owner design decision): CLI/MCP default
-`evidence_dir` ("reports/") collides under concurrent invocations.** Found
+**Issue #47 (fixed): CLI/MCP default `evidence_dir` ("reports/") collided
+under concurrent invocations.** Found
 via a round-4 adversarial review of the Media adapter (see
 `docs/adapters.md`), reproduced with a 50% collision rate across 50
 concurrent `receipt` calls sharing the default output directory — not
 Media-specific, every adapter's `receipt`/`render` path shares the same
 default. Not fixed as a drive-by: the fix is a new default-uniqueness
 scheme across the whole CLI + MCP surface, which changes default on-disk
-output layout for every existing caller/doc/test.
+output layout for every existing caller/doc/test. Fixed since: a caller
+that omits the directory now gets a fresh `reports/<run-id>/` per run,
+reserved atomically — see `docs/architecture.md`'s "Evidence directory per
+run" for the decision and `tests/integration/test_evidence_dir_per_run.py`
+for the 50-process regression test.
 
 **CAD and 3D assets (DWG/DXF/STEP, glTF/OBJ/STL, …) are not planned.**
 Considered directly when broadening beyond CSV/Markdown/EPUB (Phase 8):

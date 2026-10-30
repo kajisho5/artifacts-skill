@@ -763,7 +763,8 @@ pre-existing adapter test passing unchanged.
   CLI/MCP path shares the same default), and fixing it means picking a
   new default-uniqueness scheme across the whole tool, not a Media-only
   change — flagged for a deliberate design decision rather than fixed
-  as a drive-by (filed as Issue #47).
+  as a drive-by (filed as Issue #47, since fixed for every adapter: see
+  `docs/architecture.md`'s "Evidence directory per run").
 
 ## Planned, not implemented
 

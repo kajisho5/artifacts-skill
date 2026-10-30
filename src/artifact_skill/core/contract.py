@@ -264,8 +264,9 @@ TOOLS: list[ToolContract] = [
                 },
                 "evidence_dir": {
                     "type": "string",
-                    "description": "Directory for execute's own reports/receipt.json (default: "
-                    "\"./reports\", same default as `receipt` — FIX_PROMPT P2-5).",
+                    "description": "Directory for execute's own receipt.json (default: a fresh "
+                    "\"./reports/<run-id>/\" per call, same default as `receipt` — FIX_PROMPT P2-5, "
+                    "Issue #47). An explicit directory is used as given.",
                 },
                 "dry_run": {
                     "type": "boolean",
@@ -304,7 +305,11 @@ TOOLS: list[ToolContract] = [
             "type": "object",
             "properties": {
                 **_INPUT_PATH_PROPERTY,
-                "out_dir": {"type": "string"},
+                "out_dir": {
+                    "type": "string",
+                    "description": "Directory for rendered images (default: a fresh "
+                    "\"./reports/<run-id>/rendered\" per call, Issue #47).",
+                },
                 "dry_run": {
                     "type": "boolean",
                     "description": "Report where output would be written and an estimated file count "
@@ -373,7 +378,11 @@ TOOLS: list[ToolContract] = [
             "properties": {
                 **_INPUT_PATH_PROPERTY,
                 "compare_to": {"type": "string"},
-                "out_dir": {"type": "string"},
+                "out_dir": {
+                    "type": "string",
+                    "description": "Directory for the contact sheet and rendered images (default: a "
+                    "fresh \"./reports/<run-id>/\" per call, Issue #47).",
+                },
                 "dry_run": {
                     "type": "boolean",
                     "description": "Report where the contact sheet would be written without actually "
@@ -435,7 +444,8 @@ TOOLS: list[ToolContract] = [
                 },
                 "evidence_dir": {
                     "type": "string",
-                    "description": "Directory for the receipt and evidence (default: \"./reports\"). "
+                    "description": "Directory for the receipt and evidence (default: a fresh "
+                    "\"./reports/<run-id>/\" per call, Issue #47). "
                     "FIX_PROMPT P2-5/self-audit: this was already read by the MCP handler but was never a "
                     "declared schema property, so additionalProperties:false silently rejected every real "
                     "MCP caller that tried to pass it — dead code in practice, now reachable.",
