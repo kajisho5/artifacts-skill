@@ -27,7 +27,7 @@ Not reachable from the agent. Contract does not fit the OS schema (tool_name/too
   - Done when: docs and schema updated, CLI alias kept
 - [x] **3. Fix #47** — unique evidence dir per run ([#63](https://github.com/kajisho5/artifacts-skill/pull/63))
   - Done when: 50 concurrent runs, no collision
-- [ ] **4. Captions: adapter or ADR leaving them to subtitle/qc**
+- [x] **4. Captions: adapter or ADR leaving them to subtitle/qc** ([#65](https://github.com/kajisho5/artifacts-skill/pull/65))
   - Done when: written decision
 - [ ] **5. (agent side) adapter + SkillSpec document_verify**
   - Done when: placeholder left in a doc fails QA
