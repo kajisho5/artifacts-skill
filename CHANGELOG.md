@@ -5,6 +5,20 @@ version section per release. Each entry here is also the source for the
 release announcement text — when this file gets a new version section,
 the announcement text is that section, verbatim or lightly trimmed.
 
+## v0.4.0
+
+### Documentation
+- add app icon and wordmark (made with fresnel) (#61)
+
+### Fixed
+- contract in the OS registry shape (#62)
+- unique evidence directory per run when none is passed (#47) (#63)
+- rename the receipt to Artifact Verification Receipt (#64)
+- only release from CI runs of pushes to this repository's main (#66)
+
+### Added
+- declare not_provided and leave captions to subtitle-skill and qc-skill (roadmap step 4) (#65)
+
 ## v0.3.0
 
 ### Added
