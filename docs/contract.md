@@ -136,8 +136,10 @@ by hand; see `docs/roadmap.md`'s "Phase 7" writeup.
 ## Versioning
 
 - `artifact-contract/v1` — this document's schema.
-- `artifact-receipt/v1` — the receipt schema (`docs/verification.md`,
-  `receipt/model.py`).
+- `artifact-receipt/v1` — the schema of the Artifact Verification Receipt
+  (`docs/verification.md`, `receipt/model.py`). The receipt was called the
+  "Production Receipt" before; the rename did not change this identifier
+  (`docs/architecture.md`, "Receipt name (ecosystem roadmap step 2)").
 - Tool version (`tool_version` in the contract and every receipt) follows
   the package's own SemVer (`artifact_skill.__version__`).
 

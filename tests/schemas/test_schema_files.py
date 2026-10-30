@@ -96,3 +96,15 @@ def test_schema_files_are_self_consistent_json():
         doc = _load_schema(name)
         assert doc["$schema"]
         assert doc["type"] == "object"
+
+
+def test_receipt_schema_uses_the_new_name_and_still_accepts_the_old_identifier():
+    """Ecosystem roadmap step 2: the schema's human-readable title is the
+    Artifact Verification Receipt, while the machine-readable identifier,
+    file name and $id stay `artifact-receipt/v1`, so receipts written before
+    the rename still validate."""
+    schema = _load_schema("artifact-receipt-v1.schema.json")
+    assert "Artifact Verification Receipt" in schema["title"]
+    assert "Production Receipt" not in schema["title"]
+    assert schema["$id"].endswith("/schemas/artifact-receipt-v1.schema.json")
+    assert schema["properties"]["schema"]["enum"] == ["artifact-receipt/v1"]

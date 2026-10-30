@@ -1,6 +1,6 @@
 ---
 name: artifacts-skill
-description: Local-first execution and verification engine for real-world artifacts (PDF, PPTX, DOCX, XLSX, PNG/JPEG/WebP, HTML, SVG, CSV, Markdown, EPUB, video/audio media). Use it whenever you create or modify a document-like file and need to prove it is actually correct before calling the job done — inspect what a file really is, plan a mutation before touching it, execute it without overwriting the original, render it to images, run structural checks, and get a machine-readable Production Receipt. Trigger on requests like "make sure this PDF is correct", "verify this document before I send it", "did the page count come out right", "check this file isn't corrupted", or any time you are about to say a generated artifact is "done" without having checked it.
+description: Local-first execution and verification engine for real-world artifacts (PDF, PPTX, DOCX, XLSX, PNG/JPEG/WebP, HTML, SVG, CSV, Markdown, EPUB, video/audio media). Use it whenever you create or modify a document-like file and need to prove it is actually correct before calling the job done — inspect what a file really is, plan a mutation before touching it, execute it without overwriting the original, render it to images, run structural checks, and get a machine-readable Artifact Verification Receipt. Trigger on requests like "make sure this PDF is correct", "verify this document before I send it", "did the page count come out right", "check this file isn't corrupted", or any time you are about to say a generated artifact is "done" without having checked it.
 license: MIT
 compatibility: "Requires Python 3.10+. Install the `all` extra for every adapter, or a per-format extra (`pdf`, `pptx`, `docx`, `xlsx`, `image`, `html`, `svg`, `csv`, `markdown`, `epub`, `media`) for just what you need. PPTX/DOCX/XLSX rendering additionally needs a `soffice`/`libreoffice` binary on PATH; HTML/SVG/CSV rendering needs `playwright install chromium` after installing the relevant extra, and Markdown rendering additionally needs `markdown-it-py` (pulled in by `.[markdown]`). EPUB structural verification needs nothing beyond the standard library; EPUB rendering needs `playwright install chromium` after installing the `epub` extra, same as HTML/SVG/CSV/Markdown. Media (video/audio) needs `ffmpeg`/`ffprobe` on PATH — no pip package, `.[media]` is an intentionally empty extra. Run `artifacts-skill doctor` to see real availability rather than assuming."
 ---
@@ -132,7 +132,8 @@ inspected, and do not report success without having verified.
    for that operation; without it, inspect→render→verify→receipt with no
    mutation and no fix loop (the only way to get a receipt for a format
    with zero mutating operations, like HTML/SVG). Either way it writes
-   `receipt.json` (schema `artifact-receipt/v1`) into a fresh
+   `receipt.json` — the Artifact Verification Receipt, schema
+   `artifact-receipt/v1` — into a fresh
    `reports/<run-id>/` directory of its own (or into `--evidence-dir`, if
    you pass one, exactly as given), which is what
    you should point to as evidence when you tell the user the job is
@@ -162,7 +163,7 @@ The most common task is verifying a document you (or another tool) already
 generated — most formats need no mutation at all, just a real policy.
 `receipt` with no `--operation` is the one-shot version: inspect → render →
 structural verify → receipt, no mutation, no fix loop — and it's the only
-way to get a Production Receipt at all for a format with zero mutating
+way to get an Artifact Verification Receipt at all for a format with zero mutating
 operations (HTML, SVG):
 
 ```bash

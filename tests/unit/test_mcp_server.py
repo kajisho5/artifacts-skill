@@ -224,7 +224,7 @@ def test_initialize_response_falls_back_with_no_params_at_all():
 
 def test_receipt_without_operation_is_a_real_verify_only_receipt(good_html):
     """HTML has zero mutating operations - before Issue #18 there was no
-    way to get a Production Receipt for it at all over MCP either."""
+    way to get an Artifact Verification Receipt for it at all over MCP either."""
     result = call_tool(f"{CAPABILITY_PREFIX}.receipt", {"input": str(good_html)})
     assert result["isError"] is False
     payload = json.loads(result["content"][0]["text"])

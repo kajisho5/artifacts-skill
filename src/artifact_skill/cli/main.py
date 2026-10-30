@@ -145,12 +145,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_look.add_argument("--dry-run", action="store_true")
     common(p_look)
 
-    p_receipt = sub.add_parser("receipt", help="Run the full lifecycle and emit a Production Receipt.")
+    p_receipt = sub.add_parser("receipt", help="Run the full lifecycle and emit an Artifact Verification Receipt.")
     p_receipt.add_argument("input")
     p_receipt.add_argument(
         "--operation",
         help="Omit for a verify-only receipt (inspect -> render -> structural verify -> receipt, no "
-        "mutation, no fix loop) — the only way to get a Production Receipt for a format with zero "
+        "mutation, no fix loop) — the only way to get an Artifact Verification Receipt for a format with zero "
         "mutating operations (HTML, SVG). --output is invalid without --operation.",
     )
     p_receipt.add_argument("--args", default="{}")

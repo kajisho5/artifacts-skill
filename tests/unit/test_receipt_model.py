@@ -94,3 +94,35 @@ def test_receipt_write_leaves_no_partial_or_temp_file_behind(good_pdf, tmp_path)
     leftovers = [p for p in reports_dir.iterdir() if p.name != "receipt.json"]
     assert leftovers == []
     assert out.exists()
+
+
+def test_receipt_type_is_named_artifact_verification_receipt(good_pdf):
+    """Ecosystem roadmap step 2: the receipt's type is
+    ArtifactVerificationReceipt, so it is not confused with the
+    orchestrator's own ProductionReceipt (video-production-agent ADR-040)."""
+    from artifact_skill.receipt.model import ArtifactVerificationReceipt
+
+    receipt = ReceiptBuilder(ArtifactRef.from_path(good_pdf), CapabilityReport()).build()
+    assert type(receipt) is ArtifactVerificationReceipt
+    assert type(receipt).__name__ == "ArtifactVerificationReceipt"
+
+
+def test_old_production_receipt_name_is_kept_as_an_alias(good_pdf):
+    """Backward compatibility (docs/architecture.md, "Receipt name"): code
+    that imports or isinstance-checks the old name keeps working."""
+    from artifact_skill import receipt as receipt_pkg
+    from artifact_skill.receipt.model import ArtifactVerificationReceipt, ProductionReceipt
+
+    assert ProductionReceipt is ArtifactVerificationReceipt
+    assert receipt_pkg.ProductionReceipt is ArtifactVerificationReceipt
+    assert receipt_pkg.ArtifactVerificationReceipt is ArtifactVerificationReceipt
+    receipt = ReceiptBuilder(ArtifactRef.from_path(good_pdf), CapabilityReport()).build()
+    assert isinstance(receipt, ProductionReceipt)
+
+
+def test_rename_did_not_change_the_emitted_schema_identifier(good_pdf):
+    """The rename is name-only: every receipt, before and after it, says
+    `artifact-receipt/v1`, so consumers that check that value need no
+    change."""
+    receipt = ReceiptBuilder(ArtifactRef.from_path(good_pdf), CapabilityReport()).build()
+    assert receipt.to_dict()["schema"] == "artifact-receipt/v1"

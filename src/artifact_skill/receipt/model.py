@@ -1,4 +1,14 @@
-"""Production Receipt — schema `artifact-receipt/v1` (spec #18).
+"""Artifact Verification Receipt — schema `artifact-receipt/v1` (spec #18).
+
+Named "Production Receipt" / `ProductionReceipt` until the AI Video
+Production OS ecosystem roadmap step 2: that name clashes with the
+orchestrator's own `ProductionReceipt` (video-production-agent ADR-040),
+which is a different document. Only the human-readable name and the Python
+type changed; the machine-readable identifiers this module emits
+(`schema: "artifact-receipt/v1"`, the field names, the
+`schemas/artifact-receipt-v1.schema.json` path) did not, and
+`ProductionReceipt` stays importable as an alias. See
+docs/architecture.md, "Receipt name (ecosystem roadmap step 2)".
 
 The receipt is the one artifact meant to outlive this process: other agents,
 CI systems, or a future orchestration OS should be able to read it without
@@ -30,7 +40,7 @@ def _now_iso() -> str:
 
 
 @dataclass
-class ProductionReceipt:
+class ArtifactVerificationReceipt:
     schema: str
     status: CheckStatus
     input: dict[str, Any]
@@ -78,6 +88,12 @@ class ProductionReceipt:
         path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write_bytes(path, (self.to_json() + "\n").encode("utf-8"))
         return path
+
+
+# Backward-compatible alias for code written against the old name. Kept
+# indefinitely (it costs nothing); new code should use
+# ArtifactVerificationReceipt.
+ProductionReceipt = ArtifactVerificationReceipt
 
 
 class ReceiptBuilder:
@@ -137,7 +153,7 @@ class ReceiptBuilder:
         # verification_strategy in the plan/receipt "verification" block).
         return aggregate(statuses)
 
-    def build(self) -> ProductionReceipt:
+    def build(self) -> ArtifactVerificationReceipt:
         structural_dict = self._structural.to_dict() if self._structural else {
             "kind": "structural",
             "status": CheckStatus.NOT_CHECKED.value,
@@ -152,7 +168,7 @@ class ReceiptBuilder:
             "evidence_files": [],
             "inspected_by": None,
         }
-        return ProductionReceipt(
+        return ArtifactVerificationReceipt(
             schema=RECEIPT_SCHEMA,
             status=self._overall_status(),
             input=self._input.to_dict(),

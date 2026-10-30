@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/kajisho5/artifacts-skill/schemas/artifact-receipt-v1.schema.json",
-  "title": "Artifact Skill — Production Receipt (artifact-receipt/v1)",
-  "description": "The document written to reports/receipt.json by `execute`/`receipt` (receipt/model.py::ProductionReceipt.to_dict()). Validated in tests/schemas/test_schema_files.py against a freshly-generated real receipt (from actually running the lifecycle against a fixture) on every CI run — see docs/verification.md for what each status value means and why UNKNOWN/SKIPPED/NOT_CHECKED are never collapsed into PASS or each other. Deliberately has no $ref/$defs (everything inlined): core/schema_validate.py, the dependency-free validator this repo checks documents against, doesn't resolve references — see that module's docstring.",
+  "title": "Artifact Skill — Artifact Verification Receipt (artifact-receipt/v1)",
+  "description": "The document written to reports/receipt.json by `execute`/`receipt` (receipt/model.py::ArtifactVerificationReceipt.to_dict()). Named 'Production Receipt' until the AI Video Production OS ecosystem roadmap step 2; the identifier `artifact-receipt/v1`, this file's path and $id, and every field are unchanged by that rename (docs/architecture.md, 'Receipt name (ecosystem roadmap step 2)'). Validated in tests/schemas/test_schema_files.py against a freshly-generated real receipt (from actually running the lifecycle against a fixture) on every CI run — see docs/verification.md for what each status value means and why UNKNOWN/SKIPPED/NOT_CHECKED are never collapsed into PASS or each other. Deliberately has no $ref/$defs (everything inlined): core/schema_validate.py, the dependency-free validator this repo checks documents against, doesn't resolve references — see that module's docstring.",
   "type": "object",
   "properties": {
     "schema": { "type": "string", "enum": ["artifact-receipt/v1"] },

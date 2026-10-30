@@ -604,7 +604,7 @@ def test_html_receipt_without_operation_gives_a_real_verify_only_receipt(good_ht
     """Issue #18: HTML has zero mutating operations, so before this feature
     `artifacts-skill receipt page.html` had no way to succeed at all - an
     agent had to hand-assemble inspect/render/verify calls instead of using
-    this project's own flagship 'get a Production Receipt' command."""
+    this project's own flagship 'get an Artifact Verification Receipt' command."""
     proc = run_cli(["receipt", str(good_html), "--json"], cwd=tmp_path)
     assert proc.returncode == 0
     data = json.loads(proc.stdout)

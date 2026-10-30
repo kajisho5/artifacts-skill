@@ -45,6 +45,14 @@ proposal.pdf   -->   inspect -> plan -> execute   -->   proposal_final.pdf
                   reports/<run-id>/receipt.json   (artifact-receipt/v1)
 ```
 
+The receipt is called the **Artifact Verification Receipt** (it was the
+"Production Receipt" up to v0.3.0; the orchestrator,
+[video-production-agent](https://github.com/kajisho5/video-production-agent),
+has its own, different `ProductionReceipt`). Only the name changed: the
+`artifact-receipt/v1` identifier, the file and every field are the same,
+and the CLI/MCP command is still `receipt` — see
+[`docs/architecture.md`](docs/architecture.md#receipt-name-ecosystem-roadmap-step-2).
+
 **11 formats, one contract** — PDF, PPTX, DOCX, XLSX, Image, HTML, SVG,
 CSV, Markdown, EPUB, Media. [See it run for real](#demos), no staged
 output.
