@@ -13,7 +13,7 @@ v0.3.0, Python 3.10+ (+ npm wrapper, MCP server). 11 format adapters (pdf, pptx,
 
 | Owned job | Status | Note |
 |---|---|---|
-| 生成文書の検証 | partial | no SRT/VTT/ASS adapter for captions |
+| 生成文書の検証 | partial | captions (SRT/VTT/ASS) left to subtitle-skill and qc-skill by decision (step 4) |
 
 ## Wiring
 
