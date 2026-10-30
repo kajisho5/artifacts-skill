@@ -25,7 +25,7 @@ Not reachable from the agent. Contract does not fit the OS schema (tool_name/too
   - Done when: contract validates against the OS schema in CI
 - [ ] **2. Rename its receipt** — "Artifact Verification Receipt" (clashes with the agent's ProductionReceipt)
   - Done when: docs and schema updated, CLI alias kept
-- [ ] **3. Fix #47** — unique evidence dir per run
+- [x] **3. Fix #47** — unique evidence dir per run ([#63](https://github.com/kajisho5/artifacts-skill/pull/63))
   - Done when: 50 concurrent runs, no collision
 - [ ] **4. Captions: adapter or ADR leaving them to subtitle/qc**
   - Done when: written decision
