@@ -83,7 +83,7 @@ policy; nothing enforces it.
 Render / Evidence
        |
        v
-Production Receipt
+Artifact Verification Receipt
 ```
 
 `cli/main.py` and `mcp/server.py` are both thin: they parse a request into
@@ -169,7 +169,7 @@ structural verify → visual evidence → fix (bounded retries) → receipt.
 `operation` is optional (Issue #18): passing `None` takes a separate,
 shorter branch — inspect → render → structural verify → receipt, with no
 `execute()` call and no fix loop (there is no operation to retry). This is
-the only route to a real Production Receipt for a format with zero
+the only route to a real Artifact Verification Receipt for a format with zero
 mutating operations (HTML, SVG currently) — before this, the flagship
 `receipt` command was unusable for those two formats entirely, and an
 agent had to hand-assemble evidence from separate `inspect`/`render`/
@@ -265,12 +265,68 @@ engine did.
 
 ## Receipt (`receipt/model.py`)
 
-Schema `artifact-receipt/v1`. See `docs/contract.md` for the full field
+The Artifact Verification Receipt (`ArtifactVerificationReceipt`), schema
+`artifact-receipt/v1`. See `docs/contract.md` for the full field
 list. Overall `status` is the worst-status-wins aggregate of: any failed
 operation, the structural result, and the visual result. This means a
 receipt's `status` can be `UNKNOWN` even when nothing outright failed — see
 `docs/verification.md` for why that's intentional rather than a bug to
 work around by hiding the unknown check.
+
+## Receipt name (ecosystem roadmap step 2)
+
+**Context.** Until this change the receipt was called the "Production
+Receipt" in the docs, the CLI/MCP help and the JSON Schema title, and the
+Python type was `ProductionReceipt`. The AI Video Production OS
+orchestrator, video-production-agent, has its own `ProductionReceipt`
+(its ADR-040, Artifact type `PRODUCTION_RECEIPT`): a roll-up of one whole
+production run, with different fields. Once the agent calls this skill,
+both documents sit side by side in one run and the shared name makes them
+easy to confuse.
+
+**Decision.** The receipt is now called the **Artifact Verification
+Receipt**, and the Python type is `ArtifactVerificationReceipt`. Renamed:
+the docs (README, SKILL.md, `docs/`), the `receipt` command's CLI help and
+contract/MCP description, the JSON Schema `title`/`description`, and the
+type. Not renamed, because they are machine-readable and already emitted
+or referenced by consumers:
+
+| Identifier | Value (unchanged) |
+|---|---|
+| `schema` field in every receipt | `artifact-receipt/v1` |
+| JSON Schema file and `$id` | `schemas/artifact-receipt-v1.schema.json` |
+| Field names | `schema`, `status`, `input`, ... (all 13) |
+| CLI command / MCP tool | `receipt` |
+| Contract capability | `document.receipt` |
+| File name | `receipt.json` |
+
+The identifier `artifact-receipt/v1` never had the clash (it does not
+contain "production"), so a receipt written before this change and one
+written after are the same document, and a consumer that checks
+`schema == "artifact-receipt/v1"` or validates against the published
+schema needs no change. `ProductionReceipt` stays importable from
+`artifact_skill.receipt` and `artifact_skill.receipt.model` as an alias of
+`ArtifactVerificationReceipt` (the same class object, so `isinstance`
+checks keep working). It does not raise a deprecation warning; new code
+should use the new name.
+
+**Alternatives considered.** Changing the identifier to
+`artifact-verification-receipt/v1` would match the new name, but every
+receipt already written says `artifact-receipt/v1`, and the published
+schema pins that value with `enum`. It would need a reader that accepts
+both values and a schema that allows both, for no gain: the identifier is
+not the part that clashes. If the receipt shape ever needs a breaking
+change, `docs/contract.md`'s versioning rule applies (a `v2` alongside
+`v1` for a deprecation window), and the new name can be adopted then.
+Removing `ProductionReceipt` outright would break any Python caller that
+imports it, for the same lack of gain.
+
+**Consequences.** Text that says "Production Receipt" now means only the
+agent's document. Tests: `tests/unit/test_receipt_model.py` checks the new
+type, that the alias is the same class, and that the emitted identifier is
+still `artifact-receipt/v1`; `tests/schemas/test_schema_files.py` checks
+the schema title uses the new name and that the `schema` enum still accepts
+the old identifier.
 
 ## Security model
 

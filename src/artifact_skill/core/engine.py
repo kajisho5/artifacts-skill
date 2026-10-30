@@ -30,7 +30,7 @@ from artifact_skill.core.operation import OperationPlan, OperationRecord
 from artifact_skill.core.schema_validate import validate_against_schema
 from artifact_skill.core.verification import Check, CheckStatus, VerificationResult
 from artifact_skill.policies import unknown_policy_keys
-from artifact_skill.receipt.model import ProductionReceipt, ReceiptBuilder
+from artifact_skill.receipt.model import ArtifactVerificationReceipt, ReceiptBuilder
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import reject_output_overwrites_input
 
@@ -42,7 +42,7 @@ def _now_iso() -> str:
 @dataclass
 class LifecycleResult:
     plan: OperationPlan
-    receipt: ProductionReceipt | None  # None for a dry-run: no execution happened
+    receipt: ArtifactVerificationReceipt | None  # None for a dry-run: no execution happened
     output: ArtifactRef | None
     render: RenderResult | None
 
@@ -135,7 +135,7 @@ def run_lifecycle(
         # No mutation requested (Issue #18): inspect -> render -> structural
         # verify -> receipt, with no execute() call and no fix loop (there is
         # no operation to retry). The only route in for a format with zero
-        # mutating operations (HTML, SVG) to get a real Production Receipt at
+        # mutating operations (HTML, SVG) to get a real Artifact Verification Receipt at
         # all, rather than an agent hand-assembling one from separate
         # inspect/render/verify calls.
         return _run_verify_only_lifecycle(

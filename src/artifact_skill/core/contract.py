@@ -406,10 +406,10 @@ TOOLS: list[ToolContract] = [
     ToolContract(
         name="receipt",
         description="Run the full lifecycle (inspect -> plan -> execute -> render -> structural verify "
-        "-> [fix loop] -> receipt) for one mutating operation and emit a Production Receipt (schema "
+        "-> [fix loop] -> receipt) for one mutating operation and emit an Artifact Verification Receipt (schema "
         "artifact-receipt/v1). 'operation' is optional: omit it for a verify-only receipt (inspect -> "
         "render -> structural verify -> receipt, no mutation, no fix loop) - the only way to get a "
-        "Production Receipt for a format with zero mutating operations (HTML, SVG). 'output' is invalid "
+        "Artifact Verification Receipt for a format with zero mutating operations (HTML, SVG). 'output' is invalid "
         "without 'operation' (nothing is written without a mutation).",
         input_schema={
             "type": "object",

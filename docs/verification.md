@@ -203,7 +203,7 @@ check — see `PdfAdapter.limitations()`.
 
 ## Receipt-level status
 
-`ProductionReceipt.status` (see `receipt/model.py`) aggregates: any failed
+`ArtifactVerificationReceipt.status` (see `receipt/model.py`) aggregates: any failed
 `OperationRecord`, the structural `VerificationResult.status`, and the
 visual `VerificationResult.status`. A receipt whose operation succeeded and
 whose structural checks all passed can still show overall `UNKNOWN` if
