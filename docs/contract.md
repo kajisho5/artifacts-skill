@@ -22,6 +22,10 @@ actually emits.
 
 ```json
 {
+  "skill_id": "artifacts-skill",
+  "version": "0.3.0",
+  "contract_version": "1.0",
+  "provides": [ { "id": "document.verify", "lifecycle": "EXPERIMENTAL", "tool_id": "artifacts-skill/verify" }, /* ... */ ],
   "schema": "artifact-contract/v1",
   "tool_name": "artifacts-skill",
   "tool_version": "0.2.0",
@@ -33,6 +37,13 @@ actually emits.
   "input_mutation_policy": "never"
 }
 ```
+
+`skill_id`, `version`, `contract_version` and `provides[]` are the AI Video
+Production OS registry's keys (its `registry/conformance.py` reads them):
+`skill_id`/`version` repeat `tool_name`/`tool_version`, and `provides[]` maps
+each capability id (`document.inspect`, `document.plan`, `document.execute`,
+`document.render`, `document.verify`, `document.look`, `document.receipt`) to
+its tool. `doctor` and `contract` are not capabilities.
 
 ## Per-tool shape (`ToolContract.to_dict()`)
 
