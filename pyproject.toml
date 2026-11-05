@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "artifacts-skill"
-version = "0.3.0"
+version = "0.4.0"
 description = "Local-first execution and verification engine for AI-generated artifacts (inspect -> plan -> execute -> render -> structural verify -> visual verify -> fix -> receipt)."
 readme = "README.md"
 license = { text = "MIT" }
