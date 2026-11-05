@@ -29,7 +29,7 @@ Not reachable from the agent. Contract does not fit the OS schema (tool_name/too
   - Done when: 50 concurrent runs, no collision
 - [x] **4. Captions: adapter or ADR leaving them to subtitle/qc** ([#65](https://github.com/kajisho5/artifacts-skill/pull/65))
   - Done when: written decision
-- [ ] **5. (agent side) adapter + SkillSpec document_verify**
+- [x] **5. (agent side) adapter + SkillSpec document_verify** ([video-production-agent#110](https://github.com/kajisho5/video-production-agent/pull/110))
   - Done when: placeholder left in a doc fails QA
 
 ## Boundaries
