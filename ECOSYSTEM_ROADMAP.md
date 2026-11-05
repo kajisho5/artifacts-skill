@@ -17,7 +17,7 @@ v0.3.0, Python 3.10+ (+ npm wrapper, MCP server). 11 format adapters (pdf, pptx,
 
 ## Wiring
 
-Not reachable from the agent. Contract does not fit the OS schema (tool_name/tools[], no skill_id/provides).
+Wired: the agent's `document.verify` runs `artifacts-skill/verify` and a leftover placeholder fails QA (step 5, video-production-agent#110, pinned 0.3.0). The contract is in the OS shape since step 1.
 
 ## Steps
 
@@ -37,4 +37,4 @@ Not reachable from the agent. Contract does not fit the OS schema (tool_name/too
 Media facts duplicate qc / media-analysis.
 
 ---
-Engine for every media operation: [ffmpeg-skill](https://github.com/kajisho5/ffmpeg-skill) (42 tools, treated as complete). Orchestrator: [video-production-agent](https://github.com/kajisho5/video-production-agent).
+Engine for every media operation: [ffmpeg-skill](https://github.com/kajisho5/ffmpeg-skill) (3.x, 42 tools, contract_version 2.0; treated as complete, proposals go to Velisa's ROADMAP). Orchestrator: [video-production-agent](https://github.com/kajisho5/video-production-agent).
