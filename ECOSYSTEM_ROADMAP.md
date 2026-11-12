@@ -34,7 +34,7 @@ Wired: the agent's `document.verify` runs `artifacts-skill/verify` and a leftove
 - [ ] **6. Event documents against their source** — verify generated cue sheets, run-of-show sheets, speaker lists and lower-third CSVs against the organiser's source list: every name, title and affiliation spelled exactly as the source (no variant kanji, no dropped honorific), every session time consistent. Field review 2026-11-05 (Velisa ROADMAP, third round)
   - なぜ要るか：テロップの氏名・所属の誤字は現場で一番重い事故。生成した一覧を元データと突き合わせて止める
   - Done when: a fixture with one 髙/高 swap and one wrong time gives two findings with their source rows
-- [ ] **7. Numbers and terms in generated text** — in a generated summary, narration script or description, every number with a unit, every drug name and every person's name must appear in the source (transcript, slides); anything else is reported as unsupported
+- [x] **7. Numbers and terms in generated text** — in a generated summary, narration script or description, every number with a unit, every drug name and every person's name must appear in the source (transcript, slides); anything else is reported as unsupported ([#71](https://github.com/kajisho5/artifacts-skill/pull/71))
   - なぜ要るか：医学系の要約やナレーションで、出典のない数値や薬剤名が紛れ込まない
   - Done when: a fixture summary with one invented dosage reports exactly that dosage
 - [ ] **8. Credits and licence lines** — the end roll, description or credits document is checked against the licence records of every asset used (sound-design-skill, stock assets, AI voices, fonts): every required attribution is present and worded as the licence asks
