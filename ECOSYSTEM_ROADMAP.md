@@ -37,7 +37,7 @@ Wired: the agent's `document.verify` runs `artifacts-skill/verify` and a leftove
 - [x] **7. Numbers and terms in generated text** — in a generated summary, narration script or description, every number with a unit, every drug name and every person's name must appear in the source (transcript, slides); anything else is reported as unsupported ([#71](https://github.com/kajisho5/artifacts-skill/pull/71))
   - なぜ要るか：医学系の要約やナレーションで、出典のない数値や薬剤名が紛れ込まない
   - Done when: a fixture summary with one invented dosage reports exactly that dosage
-- [ ] **8. Credits and licence lines** — the end roll, description or credits document is checked against the licence records of every asset used (sound-design-skill, stock assets, AI voices, fonts): every required attribution is present and worded as the licence asks
+- [x] **8. Credits and licence lines** — the end roll, description or credits document is checked against the licence records of every asset used (sound-design-skill, stock assets, AI voices, fonts): every required attribution is present and worded as the licence asks ([#72](https://github.com/kajisho5/artifacts-skill/pull/72))
   - なぜ要るか：BGM・素材・フォントのクレジット漏れを公開前に見つけられる
   - Done when: a fixture missing one CC BY attribution reports it with the asset
 
