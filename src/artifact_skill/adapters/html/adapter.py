@@ -318,7 +318,7 @@ class HtmlAdapter(ArtifactAdapter):
             # output shouldn't balloon with a large page's entire text.
             "leftover_markers": find_leftover_markers("\n".join(parser.text_parts)),
         }
-        return InspectionReport(artifact=ref, details=details, warnings=warnings)
+        return InspectionReport(artifact=ref, details=details, warnings=warnings, text="\n".join(parser.text_parts))
 
     # ---- plan / execute -----------------------------------------------
 

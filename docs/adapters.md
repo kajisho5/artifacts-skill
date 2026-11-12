@@ -97,6 +97,17 @@ No `Check` id, status, message, evidence shape, or CLI/MCP-visible
 behavior changed as part of this consolidation — confirmed by every
 pre-existing adapter test passing unchanged.
 
+## Document text (`InspectionReport.text`)
+
+PDF, PPTX, DOCX, XLSX, HTML, SVG, CSV and Markdown set
+`InspectionReport.text` to the readable text they already collect for the
+leftover-placeholder scan. It is not part of `inspect`'s JSON output. The
+`source_grounding` check (`source_grounding.py`, policy keys
+`grounding_sources` and `grounding_terms`) reads it for every adapter, so
+no adapter's `verify_structural()` handles those keys itself; see
+`docs/verification.md`. EPUB, Image and Media leave it `None`, and the
+check reports `UNKNOWN` for them.
+
 ## Implemented: PDF (`adapters/pdf/adapter.py`)
 
 - **Backends**: `pypdf` (structural read/write/merge, BSD-3) + `pypdfium2`

@@ -400,6 +400,12 @@ class InspectionReport:
     artifact: ArtifactRef
     details: dict[str, Any] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
+    # The document's readable text, as the adapter extracted it, for checks
+    # that compare that text against another file (source_grounding.py).
+    # Deliberately left out of to_dict(): inspect output carries the
+    # signals found, never a large document's whole body. None means this
+    # adapter does not extract text for its format.
+    text: str | None = field(default=None, repr=False, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
         return {

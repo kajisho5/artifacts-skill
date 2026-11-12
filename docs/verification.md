@@ -190,6 +190,44 @@ text), DOCX (paragraph text), and HTML (body text, explicitly excluding
 it during `inspect()` and surface a `leftover_placeholder_text` check:
 `WARN` by default, `FAIL` under `policy["forbid_placeholder_text"]`.
 
+## Generated text against its source (ecosystem roadmap step 7)
+
+A summary, narration script or description written from a transcript or
+slides must not state numbers, dosages, dates or names the source does
+not. With `policy["grounding_sources"]` set (a list of file paths),
+`verify`, `receipt` and `execute` add one `source_grounding` check, for
+every format, from `source_grounding.py`:
+
+- **What is checked.** Every number with a unit (`40 mg`, `2.5 mL/kg`,
+  `12 %`, `3 days`, `120 patients`, `3日間`; a range `5-10 mg` is two
+  numbers), every date (`2026-03-12`, `12 March 2026`, `March 2026`,
+  `2026年3月12日`), every drug name ending in an international
+  nonproprietary name stem (`-mab`, `-nib`, `-pril`, `-sartan`, `-olol`,
+  `-statin`, `-azole`, `-vir`, ...) or on a short list of common drugs
+  without one (aspirin, warfarin, insulin, ...), every person's name after
+  a title (`Dr. Jane Smith`, `Prof. Tanaka`, `山田教授`), and every term in
+  `policy["grounding_terms"]`.
+- **When the source supports it.** Numbers compare by value and unit after
+  normalisation (full-width folded, `1,000` = `1000`, `5.0` = `5`, `mcg` =
+  `µg`, `hours` = `h`). Dates compare by year, month and day; a less
+  specific date (`March 2026`) is supported by a more specific one in the
+  source. Names and terms compare as case-insensitive text; initials in a
+  name are skipped.
+- **Result.** `FAIL` listing each unsupported claim with its kind, text and
+  line numbers (`evidence.unsupported`); `PASS` when every claim was
+  found; `UNKNOWN` when the document's format has no text to read (an
+  image, a video), the document has no extractable text (a scanned PDF),
+  or a source file cannot be read. The document is never changed.
+- **Sources.** A file of a format this tool reads (PPTX, PDF, DOCX,
+  Markdown, HTML, ...) is read through its adapter; any other file
+  (`.txt`, `.srt`, `.vtt`) is read as UTF-8 text.
+- **What it does not catch.** A number without a unit, a name with no
+  title that is not listed in `grounding_terms`, a drug name with no known
+  stem, and a number written in words ("five milligrams") are not
+  checked. A plain `.txt` document is not a format this tool verifies;
+  save a narration script as Markdown (a heading and a list item are
+  enough) or DOCX.
+
 ## Blank pages (PDF, Issue #14)
 
 `page_count` catches zero pages; it doesn't catch *N* pages where one is

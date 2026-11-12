@@ -249,7 +249,7 @@ class DocxAdapter(ArtifactAdapter):
             # document's entire body just to report this one signal.
             "leftover_markers": find_leftover_markers(all_text),
         }
-        return InspectionReport(artifact=ref, details=details, warnings=warnings)
+        return InspectionReport(artifact=ref, details=details, warnings=warnings, text=all_text)
 
     # ---- plan --------------------------------------------------------
 

@@ -257,7 +257,7 @@ class XlsxAdapter(ArtifactAdapter):
             # previously invisible since only cell values were scanned.
             "leftover_markers": find_leftover_markers("\n".join(all_text_parts + sheet_names)),
         }
-        return InspectionReport(artifact=ref, details=details, warnings=warnings)
+        return InspectionReport(artifact=ref, details=details, warnings=warnings, text="\n".join(all_text_parts + sheet_names))
 
     # ---- plan --------------------------------------------------------
 

@@ -280,7 +280,7 @@ class PptxAdapter(ArtifactAdapter):
             "slides_with_notes": has_notes,
             "leftover_markers": find_leftover_markers("\n".join(all_text_parts)),
         }
-        return InspectionReport(artifact=ref, details=details, warnings=warnings)
+        return InspectionReport(artifact=ref, details=details, warnings=warnings, text="\n".join(all_text_parts))
 
     # ---- plan --------------------------------------------------------
 

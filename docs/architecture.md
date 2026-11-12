@@ -381,6 +381,59 @@ no caption capability, that `not_provided` names subtitle-skill and
 qc-skill, and that `.srt`/`.vtt`/`.ass` files are detected as `unknown`
 and rejected with `ARTIFACT_TYPE_UNSUPPORTED`.
 
+## Numbers and terms in generated text (ecosystem roadmap step 7)
+
+**Context.** A medical summary or a narration script written by a model
+from a lecture transcript can carry a dosage, a date or a name that is not
+in the transcript. Nothing here caught that: every check looked at the
+document on its own, never at what it was written from. The roadmap asks
+that every number with a unit, every drug name and every person's name in
+a generated summary, narration script or description appear in the
+source, and that anything else be reported as unsupported.
+
+**Decision.** A new, format-independent check, `source_grounding`, in
+`source_grounding.py`, switched on by the policy key `grounding_sources`
+(a list of file paths) and extended by `grounding_terms` (extra terms).
+It pulls claims out of the document's text with a small set of literal
+patterns (numbers with units, dates, drug-name stems and a short drug
+list, titled names, listed terms), pulls the same from the sources, and
+lists every claim with no match in a source, with its line numbers. It
+only reports: the document is never edited, and nothing is guessed about
+what the right value would have been. `FAIL` when a claim is unsupported,
+`UNKNOWN` when there is no text to compare or a source cannot be read.
+
+The check runs outside the adapters. `verify_structural_with_grounding()`
+wraps `adapter.verify_structural()` at every call site (CLI `verify`, MCP
+`verify`, both lifecycle paths), and adapters only expose the text they
+already extract, through a new `InspectionReport.text` field that is kept
+out of `inspect`'s JSON. `policies.known_policy_keys()` adds the two keys
+so a typo in them is still rejected, and a malformed value is rejected
+with `ARTIFACT_INVALID_ARGS` before any work.
+
+**Alternatives considered.** An NLP model or a named-entity tagger would
+catch names without titles and numbers written in words, but every
+finding has to be explainable by a rule a reviewer can read, and a model
+adds a dependency and false positives nobody can trace (the same reasoning
+as `leftover_text.py`). Matching each claim as a raw substring of the
+source was rejected: "10 mg" is a substring of "100 mg", and "5.0 mg" and
+"5mg" would not match "5 mg". A separate `ground` command was rejected in
+favour of a policy key, so the result lands in the same receipt and the
+same exit codes as every other check, and the contract (tools and
+capabilities) does not change. Fixing the text (replacing the number with
+the source's) was rejected: which source value was meant is a judgement
+for the user, and a silent fix hides the error the check exists to show.
+
+**Consequences.** A caller who passes `grounding_sources` gets one more
+check in the receipt; a caller who does not sees no change. Coverage is
+limited to what the patterns recognise (see docs/verification.md for the
+list of what is not checked); `grounding_terms` is the way to cover the
+rest. A plain `.txt` document is still not a verifiable format, so a
+narration script has to be Markdown or DOCX to be checked, while a `.txt`,
+`.srt` or `.vtt` transcript works as a source. Tests:
+`tests/unit/test_source_grounding.py` (including the fixture summary with
+one invented dosage, `tests/fixtures/grounding/`, which reports exactly
+that dosage) and two benchmark cases in `tests/benchmark/cases.py`.
+
 ## Dependency floors (supply-chain audit)
 
 **Context.** A supply-chain audit (Trail of Bits supply-chain-risk-auditor,

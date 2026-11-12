@@ -49,12 +49,15 @@ separately, not folded into the broken/good counts.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from artifact_skill.core.artifact import ArtifactType
 from artifact_skill.core.verification import CheckStatus
 
 FIXTURES_ROOT = "tests/fixtures"
+# Absolute, so the grounding cases do not depend on the working directory.
+_GROUNDING_SOURCE = str(Path(__file__).resolve().parent.parent / "fixtures" / "grounding" / "transcript.txt")
 
 
 @dataclass(frozen=True)
@@ -112,6 +115,7 @@ TYPE_REJECTED_CASES: list[TypeRejectedCase] = [
     TypeRejectedCase("pptx/corrupt.pptx", "Garbage bytes no longer sniff as a valid zip/OOXML container."),
     TypeRejectedCase("xlsx/corrupt.xlsx", "Garbage bytes no longer sniff as a valid zip/OOXML container."),
     TypeRejectedCase("html/binary_garbage.html", "Binary content doesn't sniff as HTML despite the extension."),
+    TypeRejectedCase("grounding/transcript.txt", "Plain-text transcript: read only as a grounding source, not verified itself."),
 ]
 
 STRUCTURAL_DEFECT_CASES: list[StructuralDefectCase] = [
@@ -239,6 +243,11 @@ STRUCTURAL_DEFECT_CASES: list[StructuralDefectCase] = [
         "Only the first 20 bytes of a real MP4 (still enough to match the 'ftyp' magic-byte check at the "
         "type-detection layer); media_readable — ffprobe has nowhere near enough data to read anything.",
     ),
+    StructuralDefectCase(
+        "grounding/summary_invented_dosage.md", CheckStatus.FAIL,
+        "One dosage (apixaban 10 mg) is not in the transcript; source_grounding.",
+        policy={"grounding_sources": [_GROUNDING_SOURCE]},
+    ),
 ]
 
 EXCEPTION_CASES: list[ExceptionCase] = [
@@ -312,6 +321,11 @@ KNOWN_GOOD_CASES: list[KnownGoodCase] = [
         "A 0.01s single-frame clip with a real frame only at t=0 — proves render() falls back to seeking "
         "t=0 when the computed midpoint has no frame, instead of raising (adversarial-review finding, "
         "verified by direct reproduction).",
+    ),
+    KnownGoodCase(
+        "grounding/summary_faithful.md", CheckStatus.PASS,
+        "Every number, date, drug and name in the summary appears in the transcript; source_grounding.",
+        policy={"grounding_sources": [_GROUNDING_SOURCE]},
     ),
 ]
 

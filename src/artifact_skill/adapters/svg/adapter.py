@@ -174,7 +174,7 @@ class SvgAdapter(ArtifactAdapter):
             # marker list found, not every <text>/<tspan>'s full content.
             "leftover_markers": find_leftover_markers("\n".join(text_parts)),
         }
-        return InspectionReport(artifact=ref, details=details, warnings=warnings)
+        return InspectionReport(artifact=ref, details=details, warnings=warnings, text="\n".join(text_parts))
 
     # ---- plan / execute -----------------------------------------------
 

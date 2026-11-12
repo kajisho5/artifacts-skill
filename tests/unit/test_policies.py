@@ -4,6 +4,7 @@ import pytest
 
 from artifact_skill.adapters.registry import all_adapter_classes
 from artifact_skill.policies import PRESETS, known_policy_keys, resolve_policy, unknown_policy_keys
+from artifact_skill.source_grounding import GROUNDING_POLICY_KEYS
 
 
 def test_every_preset_is_a_plain_dict():
@@ -134,7 +135,9 @@ def test_multiple_unknown_keys_are_all_named_in_the_error():
 
 
 def test_known_policy_keys_is_the_union_across_every_registered_adapter():
-    expected: set[str] = set()
+    # Plus the grounding keys, which source_grounding.py reads for every
+    # adapter rather than any one adapter's verify_structural().
+    expected: set[str] = set(GROUNDING_POLICY_KEYS)
     for adapter_cls in all_adapter_classes():
         expected |= adapter_cls().recognized_policy_keys()
     assert known_policy_keys() == frozenset(expected)

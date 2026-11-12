@@ -140,7 +140,7 @@ class CsvAdapter(ArtifactAdapter):
             "size_bytes": ref.size_bytes,
             "leftover_markers": find_leftover_markers(flat_text),
         }
-        return InspectionReport(artifact=ref, details=details)
+        return InspectionReport(artifact=ref, details=details, text=flat_text)
 
     # ---- plan / execute -----------------------------------------------
 

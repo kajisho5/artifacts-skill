@@ -529,7 +529,7 @@ class PdfAdapter(ArtifactAdapter):
             # marker list found, not the full extracted text of every page.
             "leftover_markers": find_leftover_markers("\n".join(all_text_parts)),
         }
-        return InspectionReport(artifact=ref, details=details, warnings=warnings)
+        return InspectionReport(artifact=ref, details=details, warnings=warnings, text=None if is_encrypted else "\n".join(all_text_parts))
 
     # ---- plan --------------------------------------------------------
 
