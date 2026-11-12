@@ -161,6 +161,14 @@ class SvgAdapter(ArtifactAdapter):
 
         text_parts = [elem.text for elem in root.iter() if _local_name(elem.tag) in ("text", "tspan") and elem.text]
 
+        # The document's text for InspectionReport.text: each <text>
+        # element's whole content in order, tspan tails included (the
+        # .text-only list above misses "10 mg" in
+        # "<text><tspan>Note</tspan> 10 mg</text>").
+        full_text = "\n".join(
+            part for part in ("".join(elem.itertext()) for elem in root.iter() if _local_name(elem.tag) == "text") if part
+        )
+
         details = {
             "width": width,
             "height": height,
@@ -174,7 +182,7 @@ class SvgAdapter(ArtifactAdapter):
             # marker list found, not every <text>/<tspan>'s full content.
             "leftover_markers": find_leftover_markers("\n".join(text_parts)),
         }
-        return InspectionReport(artifact=ref, details=details, warnings=warnings)
+        return InspectionReport(artifact=ref, details=details, warnings=warnings, text=full_text)
 
     # ---- plan / execute -----------------------------------------------
 

@@ -33,6 +33,7 @@ from artifact_skill.policies import unknown_policy_keys
 from artifact_skill.receipt.model import ArtifactVerificationReceipt, ReceiptBuilder
 from artifact_skill.security.limits import DEFAULT_LIMITS, Limits
 from artifact_skill.security.paths import reject_output_overwrites_input
+from artifact_skill.source_grounding import validate_grounding_policy, verify_structural_with_grounding
 
 
 def _now_iso() -> str:
@@ -101,6 +102,7 @@ def run_lifecycle(
             remediation="See docs/adapters.md for the valid policy keys per format.",
             evidence={"unknown_keys": bad_keys},
         )
+    validate_grounding_policy(policy)
     # None means "use the real default", not "run the fix loop once and stop" -
     # a bare int default here previously meant every caller that didn't pass
     # max_iterations explicitly silently disabled the fix loop entirely
@@ -209,7 +211,7 @@ def run_lifecycle(
             break
         builder.add_operation(record)
 
-        structural = adapter.verify_structural(output_ref, policy)
+        structural = verify_structural_with_grounding(adapter, output_ref, policy)
         visual, rendered = _visual_evidence_result(
             adapter=adapter, ref=output_ref, evidence_dir=evidence_dir,
             capability_report=capability_report, spec_render_required=bool(spec and spec.render_required),
@@ -305,7 +307,7 @@ def _run_verify_only_lifecycle(
             capability_report.add(adapter_cap)
 
     builder = ReceiptBuilder(ref, capability_report)
-    structural = adapter.verify_structural(ref, policy)
+    structural = verify_structural_with_grounding(adapter, ref, policy)
     # spec_render_required=False: no operation was chosen, so there is no
     # OperationSpec.visual_verification_required to consult - this matches
     # the majority of registered operations today (every metadata_set-style

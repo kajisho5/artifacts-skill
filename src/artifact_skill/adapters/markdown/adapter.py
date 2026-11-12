@@ -180,7 +180,7 @@ class MarkdownAdapter(ArtifactAdapter):
             "size_bytes": ref.size_bytes,
             "leftover_markers": find_leftover_markers(_strip_fenced_code(text)),
         }
-        return InspectionReport(artifact=ref, details=details, warnings=warnings)
+        return InspectionReport(artifact=ref, details=details, warnings=warnings, text=text)
 
     # ---- plan / execute -----------------------------------------------
 

@@ -24,6 +24,7 @@ from __future__ import annotations
 from typing import Any
 
 from artifact_skill.adapters.registry import all_adapter_classes
+from artifact_skill.source_grounding import GROUNDING_POLICY_KEYS, validate_grounding_policy
 
 PRESETS: dict[str, dict[str, Any]] = {
     "print-a4": {
@@ -91,7 +92,9 @@ def known_policy_keys() -> frozenset[str]:
     cannot possibly do anything in any adapter — it's not "inert for this
     format" (the documented, intentional cross-adapter-reuse case above),
     it's simply not a real policy key anywhere, almost always a typo."""
-    keys: set[str] = set()
+    # The grounding keys are read by source_grounding.py for every adapter,
+    # not by any one adapter's verify_structural().
+    keys: set[str] = set(GROUNDING_POLICY_KEYS)
     for adapter_cls in all_adapter_classes():
         keys.update(adapter_cls().recognized_policy_keys())
     return frozenset(keys)
@@ -129,4 +132,5 @@ def resolve_policy(preset_name: str | None, explicit_policy: dict[str, Any] | No
             f"Unknown policy key(s): {bad}. No adapter recognizes {'this key' if len(bad) == 1 else 'these keys'} "
             "— check for a typo. See docs/adapters.md for the valid policy keys per format."
         )
+    validate_grounding_policy(base)
     return base

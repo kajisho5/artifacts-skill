@@ -493,13 +493,17 @@ class PdfAdapter(ArtifactAdapter):
         text_extractable_pages = 0
         blank_pages: list[int] = []
         all_text_parts: list[str] = []
+        # A page whose text could not be extracted makes the document's
+        # text incomplete; InspectionReport.text is then None rather than
+        # the other pages' text presented as the whole document.
+        text_extraction_failed = False
         if not is_encrypted:
             for i, page in enumerate(reader.pages):
                 page_text = ""
                 try:
                     page_text = page.extract_text()
-                except Exception:  # noqa: BLE001, S110 - a single bad page must not abort inspect
-                    pass
+                except Exception:  # noqa: BLE001 - a single bad page must not abort inspect
+                    text_extraction_failed = True
                 has_text = bool(page_text.strip())
                 if has_text:
                     text_extractable_pages += 1
@@ -529,7 +533,10 @@ class PdfAdapter(ArtifactAdapter):
             # marker list found, not the full extracted text of every page.
             "leftover_markers": find_leftover_markers("\n".join(all_text_parts)),
         }
-        return InspectionReport(artifact=ref, details=details, warnings=warnings)
+        return InspectionReport(
+            artifact=ref, details=details, warnings=warnings,
+            text=None if is_encrypted or text_extraction_failed else "\n".join(all_text_parts),
+        )
 
     # ---- plan --------------------------------------------------------
 

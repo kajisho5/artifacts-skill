@@ -164,6 +164,22 @@ leftover generation artifacts are a hard `FAIL` under any of them, not a
 silent `WARN`. `execute`, `verify`, and `receipt` all accept
 `--policy-preset`/`--policy` (explicit fields override the preset).
 
+**Check a summary, script or description against its source.** When the
+document was written from a transcript or slides, add
+`"grounding_sources": ["transcript.txt", "slides.pptx"]` to the policy.
+Every number with a unit, every date, every recognised drug name and
+every titled person's name in the document must then appear in a source;
+each one that does not is listed in the `source_grounding` check (`FAIL`,
+with the text and line). Add `"grounding_terms": [...]` for names or
+terms the patterns do not catch (a name without a title, a drug name in
+Japanese). Nothing is changed in the document: report each finding to
+the user, do not quietly edit it away.
+
+```bash
+artifacts-skill verify summary.md --json \
+  --policy '{"grounding_sources": ["transcript.txt"], "grounding_terms": ["Okafor"]}'
+```
+
 ## Quick reference
 
 The most common task is verifying a document you (or another tool) already
