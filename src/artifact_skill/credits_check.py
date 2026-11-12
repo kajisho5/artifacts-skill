@@ -59,7 +59,7 @@ _CC_ELEMENT_WORDS = {
     "noderivs": "nd", "no-derivatives": "nd",
 }
 _CC_SHORT_RE = re.compile(
-    r"(?<![a-z])cc[\s-]?(?P<els>(?:by|0|zero)(?:[\s-]?(?:sa|nc|nd))*)(?:[\s-]?(?P<ver>\d\.\d))?(?![a-z0-9])",
+    r"(?<![a-z])cc[\s-]?(?P<els>(?:by|0|zero)(?:[\s-]?(?:sa|nc|nd))*)(?:[\s-]*(?P<ver>\d\.\d))?(?![a-z0-9])",
     re.IGNORECASE,
 )
 _CC_LONG_RE = re.compile(
@@ -112,7 +112,15 @@ def _comparable(text: str) -> str:
 
 
 def _contains(document: str, needle: str) -> bool:
-    return _comparable(needle) in document
+    """`needle` in `document` as a whole: a letter or digit right before or
+    after it does not count, so "Rain by Ann" is not found in "Rain by
+    Anna" and "Ann" is not found in "Joanna"."""
+    target = _comparable(needle)
+    if not target:
+        return False
+    before = r"(?<![^\W_])" if target[0].isalnum() else ""
+    after = r"(?![^\W_])" if target[-1].isalnum() else ""
+    return re.search(before + re.escape(target) + after, document) is not None
 
 
 # ---- records ---------------------------------------------------------------
@@ -285,8 +293,9 @@ def credits_check(adapter: ArtifactAdapter, ref: ArtifactRef, policy: dict[str, 
     document = _comparable(text)
     cc_in_document = parse_cc(text)
     findings = [f for f in (_evaluate(r, document, cc_in_document) for r in records) if f is not None]
-    failures = [f for f in findings if f["kind"] in {"missing", "incomplete", "worded_differently"}]
-    unknown = [f for f in findings if f not in failures]
+    failure_kinds = {"missing", "incomplete", "worded_differently"}
+    failures = [f for f in findings if f["kind"] in failure_kinds]
+    unknown = [f for f in findings if f["kind"] not in failure_kinds]
     evidence = {"assets": len(records), "findings": findings}
     if failures:
         listed = "; ".join(f"{f['asset']} ({f['licence']}): {f['kind'].replace('_', ' ')}" for f in failures[:10])

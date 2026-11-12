@@ -240,3 +240,20 @@ def test_cli_verify_exits_fail_and_names_the_asset(tmp_path):
     data = json.loads(proc.stdout)
     check = next(c for c in data["checks"] if c["id"] == CHECK_ID)
     assert [f["asset"] for f in check["evidence"]["findings"]] == ["sfx/rain-loop.wav"]
+
+
+# ---- review follow-ups -----------------------------------------------------
+
+
+def test_a_line_inside_a_longer_name_does_not_count(tmp_path):
+    record = {"asset": "a", "licence": "CC-BY-4.0", "attribution": "Rain by Ann"}
+    assert [f["kind"] for f in _findings(tmp_path, [record], "Rain by Anna")] == ["missing"]
+    author_only = {"asset": "b", "licence": "CC-BY-4.0", "author": "Ann"}
+    findings = _findings(tmp_path, [author_only], "Music by Joanna, CC BY 4.0")
+    assert [(f["kind"], f["missing_parts"]) for f in findings] == [("missing", ["author"])]
+    assert _findings(tmp_path, [author_only], "Music by Ann, CC BY 4.0.") == []
+
+
+def test_repeated_whitespace_before_the_version(tmp_path):
+    record = {"asset": "a", "licence": "CC-BY-4.0", "author": "Alice", "title": "Rain"}
+    assert _findings(tmp_path, [record], "Rain - Alice - CC BY  4.0") == []
