@@ -58,6 +58,7 @@ from artifact_skill.core.verification import CheckStatus
 FIXTURES_ROOT = "tests/fixtures"
 # Absolute, so the grounding cases do not depend on the working directory.
 _GROUNDING_SOURCE = str(Path(__file__).resolve().parent.parent / "fixtures" / "grounding" / "transcript.txt")
+_LICENCE_RECORDS = str(Path(__file__).resolve().parent.parent / "fixtures" / "credits" / "licences.json")
 
 
 @dataclass(frozen=True)
@@ -115,6 +116,7 @@ TYPE_REJECTED_CASES: list[TypeRejectedCase] = [
     TypeRejectedCase("pptx/corrupt.pptx", "Garbage bytes no longer sniff as a valid zip/OOXML container."),
     TypeRejectedCase("xlsx/corrupt.xlsx", "Garbage bytes no longer sniff as a valid zip/OOXML container."),
     TypeRejectedCase("html/binary_garbage.html", "Binary content doesn't sniff as HTML despite the extension."),
+    TypeRejectedCase("credits/licences.json", "Licence records (JSON): read only as the credits check's input, not verified itself."),
     TypeRejectedCase("grounding/transcript.txt", "Plain-text transcript: read only as a grounding source, not verified itself."),
 ]
 
@@ -248,6 +250,11 @@ STRUCTURAL_DEFECT_CASES: list[StructuralDefectCase] = [
         "One dosage (apixaban 10 mg) is not in the transcript; source_grounding.",
         policy={"grounding_sources": [_GROUNDING_SOURCE]},
     ),
+    StructuralDefectCase(
+        "credits/end_roll_missing_one.md", CheckStatus.FAIL,
+        "One CC BY sound effect is not credited; credits_attribution.",
+        policy={"licence_records": _LICENCE_RECORDS},
+    ),
 ]
 
 EXCEPTION_CASES: list[ExceptionCase] = [
@@ -326,6 +333,11 @@ KNOWN_GOOD_CASES: list[KnownGoodCase] = [
         "grounding/summary_faithful.md", CheckStatus.PASS,
         "Every number, date, drug and name in the summary appears in the transcript; source_grounding.",
         policy={"grounding_sources": [_GROUNDING_SOURCE]},
+    ),
+    KnownGoodCase(
+        "credits/end_roll_complete.md", CheckStatus.PASS,
+        "Every attribution the assets' licences ask for is in the end roll; credits_attribution.",
+        policy={"licence_records": _LICENCE_RECORDS},
     ),
 ]
 

@@ -1,0 +1,39 @@
+{
+  "assets": [
+    {
+      "asset": "bgm/morning-light.wav",
+      "licence": "CC-BY-4.0",
+      "title": "Morning Light",
+      "author": "Ana Ruiz",
+      "attribution": "\"Morning Light\" by Ana Ruiz, licensed under CC BY 4.0"
+    },
+    {
+      "asset": "sfx/door-close.wav",
+      "licence": "CC BY 4.0",
+      "title": "Door Close",
+      "author": "Field Sounds Collective",
+      "licence_url": "https://creativecommons.org/licenses/by/4.0/"
+    },
+    {
+      "asset": "sfx/rain-loop.wav",
+      "licence": "CC-BY-4.0",
+      "title": "Rain Loop",
+      "author": "Kenji Mori"
+    },
+    {
+      "asset": "stock/harbour-dawn.mp4",
+      "licence": "CC0-1.0",
+      "title": "Harbour at Dawn"
+    },
+    {
+      "asset": "voice/narrator",
+      "licence": "Provider terms of service",
+      "credit": "Narration voice: Lumen Voice Studio"
+    },
+    {
+      "asset": "fonts/Inter",
+      "licence": "OFL-1.1",
+      "author": "Rasmus Andersson"
+    }
+  ]
+}

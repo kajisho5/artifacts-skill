@@ -228,6 +228,43 @@ every format, from `source_grounding.py`:
   save a narration script as Markdown (a heading and a list item are
   enough) or DOCX.
 
+## Credits and licence lines (ecosystem roadmap step 8)
+
+With `policy["licence_records"]` set (a list of asset records, or the
+path of a JSON file holding one, as a list or under `assets`, `files` or
+`records`), `verify`, `receipt` and `execute` add one
+`credits_attribution` check, for every format with text, from
+`credits_check.py`. A record names its asset (`asset` or `file`) and its
+`licence`, plus any of `attribution`, `credit`, `title`, `author`,
+`source`, `licence_url`: the fields sound-design-skill records for its
+library. A library-index row, whose `licence` is an object holding those
+fields, is read as well.
+
+- **Declared line.** A record with `attribution` (or, without one,
+  `credit`) needs that line in the document. Whitespace, letter case,
+  quote style and full-width forms do not count as differences; anything
+  else does. When the line is absent but the author or title appears, the
+  finding is `worded_differently`; otherwise `missing`.
+- **Creative Commons BY without a declared line** (CC BY, BY-SA, BY-NC,
+  ...): the declared author and title, and the licence named with the
+  same elements and version (`CC BY-SA 4.0`, `CC-BY-SA-4.0`,
+  `Creative Commons Attribution-ShareAlike 4.0`) or its `licence_url`.
+  Some parts present gives `incomplete` with `missing_parts`; none gives
+  `missing`. One licence line in the document ("Music under CC BY 4.0")
+  counts for every asset under that licence.
+- **No attribution asked.** CC0, public domain, the SIL Open Font
+  Licence, or any licence with no recorded line and no BY element: nothing
+  is required.
+- **Result.** `FAIL` when any asset's attribution is missing, incomplete
+  or worded differently (`evidence.findings`, each with the asset, its
+  licence and the reason); otherwise `UNKNOWN` when a record has no
+  licence (`licence_unknown`) or a BY licence with nothing to look for
+  (`record_incomplete`), when the records cannot be read, or when the
+  document has no text; otherwise `PASS`. The document is never changed.
+- **What it does not know.** It checks the records it is given; it does
+  not find assets that have no record, and it does not read the licence
+  texts themselves.
+
 ## Blank pages (PDF, Issue #14)
 
 `page_count` catches zero pages; it doesn't catch *N* pages where one is

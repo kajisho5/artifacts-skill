@@ -45,7 +45,7 @@ from artifact_skill.policies import resolve_policy
 from artifact_skill.rendering.contact_sheet import build_before_after, build_contact_sheet
 from artifact_skill.security.limits import DEFAULT_LIMITS
 from artifact_skill.security.subprocess_exec import treat_sigterm_as_interrupt
-from artifact_skill.source_grounding import verify_structural_with_grounding
+from artifact_skill.text_checks import verify_structural_with_text_checks
 
 
 def _eprint(*a: Any, **kw: Any) -> None:
@@ -346,7 +346,7 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     policy = _resolve_policy_arg(args)
     ref = ArtifactRef.from_path(args.input)
     adapter = adapter_for(ref)
-    result = verify_structural_with_grounding(adapter, ref, policy)
+    result = verify_structural_with_text_checks(adapter, ref, policy)
     payload = result.to_dict()
     _emit(payload, args.json, human=None if args.json else json.dumps(payload, indent=2))
     return _exit_for_status(result.status)
