@@ -180,6 +180,16 @@ artifacts-skill verify summary.md --json \
   --policy '{"grounding_sources": ["transcript.txt"], "grounding_terms": ["Okafor"]}'
 ```
 
+**Check an end roll, description or credits document against the assets'
+licences.** Add `"licence_records": "licences.json"` (or the list itself)
+to the policy: one record per asset used (BGM, sound effects, stock
+footage, AI voices, fonts) with `asset`, `licence` and, where the licence
+asks for one, `attribution` or `credit`, `author`, `title`, `licence_url`.
+sound-design-skill's library records and library-index rows are read as
+they are. The `credits_attribution` check fails for each asset whose
+required attribution is missing or not worded as its record asks, naming
+the asset. Nothing is written into the document for you.
+
 ## Quick reference
 
 The most common task is verifying a document you (or another tool) already

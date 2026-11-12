@@ -30,7 +30,7 @@ from cases import (  # noqa: E402
 from artifact_skill.adapters.registry import get_adapter  # noqa: E402
 from artifact_skill.core.artifact import ArtifactRef  # noqa: E402
 from artifact_skill.core.errors import ArtifactCapabilityError, ArtifactError  # noqa: E402
-from artifact_skill.source_grounding import verify_structural_with_grounding  # noqa: E402
+from artifact_skill.text_checks import verify_structural_with_text_checks  # noqa: E402
 
 
 def _fixture_path(fixture: str) -> Path:
@@ -58,7 +58,7 @@ def _check_structural_defect(case) -> Outcome:
     ref = ArtifactRef.from_path(_fixture_path(case.fixture))
     adapter = get_adapter(ref.type)
     try:
-        result = verify_structural_with_grounding(adapter, ref, case.policy)
+        result = verify_structural_with_text_checks(adapter, ref, case.policy)
     except ArtifactError as exc:
         return Outcome(case.fixture, False, f"expected status={case.expected_status.value}, but verify_structural() raised {exc.code}")
     ok = result.status == case.expected_status
@@ -79,7 +79,7 @@ def _check_exception(case) -> Outcome:
 def _check_known_good(case) -> Outcome:
     ref = ArtifactRef.from_path(_fixture_path(case.fixture))
     adapter = get_adapter(ref.type)
-    result = verify_structural_with_grounding(adapter, ref, case.policy)
+    result = verify_structural_with_text_checks(adapter, ref, case.policy)
     ok = result.status == case.expected_status
     return Outcome(case.fixture, ok, f"expected={case.expected_status.value}, actual={result.status.value}")
 

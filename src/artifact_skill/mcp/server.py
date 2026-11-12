@@ -47,7 +47,7 @@ from artifact_skill.doctor.detect import detect_environment
 from artifact_skill.policies import resolve_policy
 from artifact_skill.rendering.contact_sheet import build_before_after, build_contact_sheet
 from artifact_skill.security.subprocess_exec import treat_sigterm_as_interrupt
-from artifact_skill.source_grounding import verify_structural_with_grounding
+from artifact_skill.text_checks import verify_structural_with_text_checks
 
 SERVER_NAME = "artifacts-skill"
 CAPABILITY_PREFIX = "artifacts-skill"
@@ -224,7 +224,7 @@ def _h_verify(args: dict[str, Any]) -> dict[str, Any]:
     ref = ArtifactRef.from_path(args["input"])
     adapter = adapter_for(ref)
     policy = _resolve_policy_arg(args)
-    return verify_structural_with_grounding(adapter, ref, policy).to_dict()
+    return verify_structural_with_text_checks(adapter, ref, policy).to_dict()
 
 
 def _h_look(args: dict[str, Any]) -> dict[str, Any]:

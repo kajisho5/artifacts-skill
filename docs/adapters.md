@@ -108,8 +108,10 @@ output. When the text would be incomplete (a PDF page whose text cannot
 be extracted, an XLSX formula with no cached result) it is `None`, so the
 check reports `UNKNOWN` instead of comparing part of the document. The
 `source_grounding` check (`source_grounding.py`, policy keys
-`grounding_sources` and `grounding_terms`) reads it for every adapter, so
-no adapter's `verify_structural()` handles those keys itself; see
+`grounding_sources` and `grounding_terms`) and the `credits_attribution`
+check (`credits_check.py`, policy key `licence_records`) read it for every
+adapter through `text_checks.py`, so no adapter's `verify_structural()`
+handles those keys itself; see
 `docs/verification.md`. EPUB, Image and Media leave it `None`, and the
 check reports `UNKNOWN` for them.
 

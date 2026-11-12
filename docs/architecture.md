@@ -434,6 +434,50 @@ narration script has to be Markdown or DOCX to be checked, while a `.txt`,
 one invented dosage, `tests/fixtures/grounding/`, which reports exactly
 that dosage) and two benchmark cases in `tests/benchmark/cases.py`.
 
+## Credits and licence lines (ecosystem roadmap step 8)
+
+**Context.** A video's end roll, description or credits document has to
+carry the attribution each asset's licence asks for: BGM and sound effects
+from sound-design-skill's library, stock footage and photos, AI voices,
+fonts. A missing CC BY credit is found today only after publishing, if at
+all. sound-design-skill already records each library file's licence and
+the attribution line it asks for (`licence`, `attribution`, `credit`,
+`title`, `author`, `source`, `licence_url`), but nothing compared those
+records with the credits that were actually written.
+
+**Decision.** A second format-independent text check, `credits_attribution`
+(`credits_check.py`), switched on by the policy key `licence_records`: the
+asset records themselves, or the path of a JSON file holding them. A
+record with a declared attribution or credit line needs that line in the
+document, compared after folding whitespace, case, quote style and
+full-width forms; a Creative Commons BY licence without a declared line
+needs the declared author and title and the licence named with its
+elements and version, or its URL; a licence that asks for no attribution
+needs nothing. Each finding names the asset, its licence and what is
+missing. Records with no licence cannot be checked and make the check
+`UNKNOWN` unless something already failed. Nothing is written into the
+document. Both text checks now run through one wrapper,
+`text_checks.py::verify_structural_with_text_checks()`, at the same call
+sites as step 7.
+
+**Alternatives considered.** Composing the expected line from the record
+and requiring it verbatim for every CC BY asset was rejected: CC BY asks
+for the creator, the title where supplied and the licence, not one fixed
+sentence, and a credits roll that names them in its own layout is
+compliant. Reading licence texts (or SPDX data) to work out what each
+licence requires was rejected: the record is the place where the
+requirement is declared, which keeps this check free of a licence
+database and free of guesses. Finding the assets used in the video itself
+belongs to the orchestrator, which knows the timeline; this check takes
+the records it is given.
+
+**Consequences.** A caller that passes `licence_records` gets one more
+check; a caller that does not sees no change, and the contract does not
+change. An asset with no record is not checked. Tests:
+`tests/unit/test_credits_check.py` (including the end roll that misses
+one CC BY attribution, `tests/fixtures/credits/`, which reports it
+with the asset) and two benchmark cases.
+
 ## Dependency floors (supply-chain audit)
 
 **Context.** A supply-chain audit (Trail of Bits supply-chain-risk-auditor,
