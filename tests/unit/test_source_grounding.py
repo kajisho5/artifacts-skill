@@ -277,3 +277,82 @@ def test_cli_verify_exits_fail_and_lists_the_dosage(tmp_path):
     data = json.loads(proc.stdout)
     check = next(c for c in data["checks"] if c["id"] == CHECK_ID)
     assert [u["text"] for u in check["evidence"]["unsupported"]] == ["10 mg"]
+
+
+# ---- review follow-ups -----------------------------------------------------
+
+
+def test_the_sign_of_a_number_counts(tmp_path):
+    assert _unsupported(tmp_path, "Store at -5 °C.", "store at 5 °C") == ["-5 °C"]
+    assert _unsupported(tmp_path, f"Store at {chr(0x2212)}5 °C.", "store at -5 °C") == []
+
+
+def test_a_known_unit_prefix_is_not_the_claim(tmp_path):
+    assert _unsupported(tmp_path, "Give 5 mg/kg/week.", "give 5 mg/kg") == ["5 mg/kg/week"]
+    assert _unsupported(tmp_path, "Give 5 mg/kg/week.", "give 5 mg/kg/week") == []
+
+
+def test_a_name_must_appear_as_one_name(tmp_path):
+    source = "Speakers: Dr. Jane Doe and Dr. Alice Smith; also Jane K. Smith."
+    assert _unsupported(tmp_path, "Dr. Jane Smith spoke.", "Dr. Jane Doe and Dr. Alice Smith") == ["Dr. Jane Smith"]
+    assert _unsupported(tmp_path, "Dr. Jane Smith spoke.", source) == []
+
+
+def test_an_empty_source_is_unknown(tmp_path):
+    src = _write(tmp_path, "empty.txt", "  \n")
+    doc = _write(tmp_path, "doc.md", "# Notes\n\n- Give 5 mg.\n")
+    assert _check(doc, {"grounding_sources": [str(src)]}).status == CheckStatus.UNKNOWN
+
+
+def test_text_inside_grouped_pptx_shapes_is_read(tmp_path):
+    pptx = pytest.importorskip("pptx")
+    from pptx.util import Inches
+
+    prs = pptx.Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+    outer = slide.shapes.add_group_shape()
+    inner = outer.shapes.add_group_shape()
+    inner.shapes.add_textbox(Inches(1), Inches(1), Inches(3), Inches(1)).text_frame.text = "Give 7.5 mg"
+    deck = tmp_path / "deck.pptx"
+    prs.save(str(deck))
+    check = _check(deck, {"grounding_sources": [str(TRANSCRIPT)]})
+    assert [u["text"] for u in check.evidence["unsupported"]] == ["7.5 mg"]
+
+
+def test_svg_tspan_tails_are_read(tmp_path):
+    svg = _write(tmp_path, "x.svg", '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10">'
+                 "<text><tspan>Note</tspan> 7.5 mg</text></svg>")
+    check = _check(svg, {"grounding_sources": [str(TRANSCRIPT)]})
+    assert [u["text"] for u in check.evidence["unsupported"]] == ["7.5 mg"]
+
+
+def test_xlsx_numeric_cells_are_read(tmp_path):
+    openpyxl = pytest.importorskip("openpyxl")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["dose", 7.5, "mg"])
+    path = tmp_path / "doses.xlsx"
+    wb.save(str(path))
+    check = _check(path, {"grounding_sources": [str(TRANSCRIPT)]})
+    assert [u["text"] for u in check.evidence["unsupported"]] == ["7.5 mg"]
+
+
+def test_xlsx_formula_without_a_cached_value_is_unknown(tmp_path):
+    openpyxl = pytest.importorskip("openpyxl")
+    wb = openpyxl.Workbook()
+    wb.active.append([1, 2, "=A1+B1"])
+    path = tmp_path / "f.xlsx"
+    wb.save(str(path))
+    assert _check(path, {"grounding_sources": [str(TRANSCRIPT)]}).status == CheckStatus.UNKNOWN
+
+
+def test_pdf_with_a_page_whose_text_fails_is_unknown(tmp_path, monkeypatch):
+    pypdf = pytest.importorskip("pypdf")
+    pdf = tmp_path / "good.pdf"
+    shutil.copy(FIXTURES.parent / "pdf" / "good_2page.pdf", pdf)
+
+    def boom(self, *args, **kwargs):
+        raise ValueError("broken page")
+
+    monkeypatch.setattr(pypdf.PageObject, "extract_text", boom)
+    assert _check(pdf, {"grounding_sources": [str(TRANSCRIPT)]}).status == CheckStatus.UNKNOWN

@@ -96,8 +96,12 @@ def _alternation(words: dict[str, str]) -> str:
     return "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True))
 
 
-_NUM = r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?"
-_UNIT = rf"(?:{_alternation(_ASCII_UNITS)})(?![a-z])|(?:{_alternation(_CJK_UNITS)})"
+# A leading minus sign (ASCII or U+2212) is part of the number: "-5 °C"
+# is not "5 °C".
+_NUM = r"[-\u2212]?(?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)"
+# A known unit followed by more "/segment" parts is read whole
+# ("mg/kg/week"), never as its known prefix ("mg/kg").
+_UNIT = rf"(?:{_alternation(_ASCII_UNITS)})(?:/[a-zμ]+\d?)*(?![a-z/])|(?:{_alternation(_CJK_UNITS)})"
 # A number not glued to a preceding Latin letter, digit or decimal point.
 # Deliberately ASCII-only: Japanese text puts a number straight after a
 # kanji ("1日5mg"), which must still count.
@@ -175,7 +179,7 @@ def _fold(text: str) -> str:
 
 def _number_key(num: str) -> str | None:
     try:
-        value = Decimal(num.replace(",", "")).normalize()
+        value = Decimal(num.replace(",", "").replace("\u2212", "-")).normalize()
     except InvalidOperation:
         return None
     return format(value, "f")
@@ -183,7 +187,10 @@ def _number_key(num: str) -> str | None:
 
 def _unit_key(unit: str) -> str:
     u = unit.lower()
-    return _ASCII_UNITS.get(u) or _CJK_UNITS.get(unit) or u
+    known = _ASCII_UNITS.get(u) or _CJK_UNITS.get(unit)
+    if known:
+        return known
+    return "/".join(_ASCII_UNITS.get(part, part) for part in u.split("/"))
 
 
 def _mask(line: str, start: int, end: int) -> str:
@@ -295,10 +302,16 @@ class _SourceIndex:
             run = claim.key
             return any(run[i:] in self.text for i in range(len(run) - 1))
         if claim.kind == "person":
-            # Initials ("J.") are skipped; every spelled-out part of the
-            # name has to appear in the source.
+            # Initials ("J.") are skipped; the spelled-out parts have to
+            # appear together, in order, as one name (initials may sit
+            # between them): "Jane Smith" is not supported by "Jane Doe"
+            # and "Alice Smith".
             words = [w for w in claim.key.replace(".", " ").split() if len(w) > 1]
-            return bool(words) and all(_text_pattern(w).search(self.text) for w in words)
+            if not words:
+                return False
+            between = r"(?:\s+[A-Za-z]\.?)*\s+"
+            pattern = between.join(re.escape(w) for w in words)
+            return re.search(rf"(?<![A-Za-z]){pattern}(?![A-Za-z])", self.text, re.IGNORECASE) is not None
         return _text_pattern(claim.key).search(self.text) is not None
 
 
@@ -348,12 +361,15 @@ def _read_source(path_str: str) -> str:
     if ref.type == ArtifactType.UNKNOWN:
         check_input_size(path)
         try:
-            return path.read_text(encoding="utf-8-sig", errors="strict")
+            text: str | None = path.read_text(encoding="utf-8-sig", errors="strict")
         except UnicodeDecodeError as exc:
             raise ValueError("not a format this tool reads, and not UTF-8 text") from exc
-    text = get_adapter(ref.type).inspect(ref).text
+    else:
+        text = get_adapter(ref.type).inspect(ref).text
     if text is None:
         raise ValueError(f"no text can be extracted from a '{ref.type.value}' file")
+    if not text.strip():
+        raise ValueError("no readable text was found in it (a scanned PDF has none)")
     return text
 
 

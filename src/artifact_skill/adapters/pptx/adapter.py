@@ -77,6 +77,21 @@ def _require_pptx():
     return pptx
 
 
+
+def _group_text_parts(group: Any, group_type: Any) -> list[str]:
+    """Text of every shape inside a group shape, nested groups and table
+    cells included."""
+    parts: list[str] = []
+    for child in group.shapes:
+        if child.shape_type == group_type:
+            parts.extend(_group_text_parts(child, group_type))
+            continue
+        if getattr(child, "has_text_frame", False) and child.text_frame.text.strip():
+            parts.append(child.text_frame.text)
+        if getattr(child, "has_table", False):
+            parts.extend(cell.text for row in child.table.rows for cell in row.cells if cell.text.strip())
+    return parts
+
 class PptxAdapter(ArtifactAdapter):
     id = "pptx"
     artifact_type = ArtifactType.PPTX
@@ -241,6 +256,10 @@ class PptxAdapter(ArtifactAdapter):
                         for cell in row.cells
                         if cell.text.strip()
                     )
+                # Grouped shapes (nested groups included) carry their own
+                # text frames and tables, invisible to the checks above.
+                if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+                    all_text_parts.extend(_group_text_parts(shape, MSO_SHAPE_TYPE.GROUP))
                 if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
                     try:
                         _ = shape.image.blob

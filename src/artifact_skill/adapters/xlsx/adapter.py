@@ -90,6 +90,32 @@ def _reject_entities_before_opening(path: Path) -> None:
         pass
 
 
+
+def _grounding_text(wb: Any, wb_cached: Any) -> str | None:
+    """Every cell's value, numbers included, one line per row, each sheet
+    headed by its name - the text InspectionReport.text carries. A formula
+    cell's value is its cached result; a formula with no cached result
+    makes the text incomplete, so None is returned rather than a text that
+    silently leaves those cells out."""
+    lines: list[str] = []
+    for sheet_name in wb.sheetnames:
+        ws = wb[sheet_name]
+        ws_cached = wb_cached[sheet_name] if wb_cached is not None else None
+        lines.append(sheet_name)
+        for row in ws.iter_rows():
+            values: list[str] = []
+            for cell in row:
+                value = cell.value
+                if cell.data_type == "f":
+                    value = ws_cached[cell.coordinate].value if ws_cached is not None else None
+                    if value is None:
+                        return None
+                if value is not None:
+                    values.append(str(value))
+            if values:
+                lines.append(" ".join(values))
+    return "\n".join(lines)
+
 class XlsxAdapter(ArtifactAdapter):
     id = "xlsx"
     artifact_type = ArtifactType.XLSX
@@ -257,7 +283,7 @@ class XlsxAdapter(ArtifactAdapter):
             # previously invisible since only cell values were scanned.
             "leftover_markers": find_leftover_markers("\n".join(all_text_parts + sheet_names)),
         }
-        return InspectionReport(artifact=ref, details=details, warnings=warnings, text="\n".join(all_text_parts + sheet_names))
+        return InspectionReport(artifact=ref, details=details, warnings=warnings, text=_grounding_text(wb, wb_cached))
 
     # ---- plan --------------------------------------------------------
 
