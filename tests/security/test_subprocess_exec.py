@@ -140,7 +140,12 @@ def _run_child_and_sigterm_it(install_handler: bool, tmp_path) -> bool:
     script = tmp_path / "child.py"
     script.write_text(_CHILD_SCRIPT.format(src_path=src_path, install_handler=install_handler))
 
-    proc = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, text=True)
+    # TMPDIR inside tmp_path: the child's `artifacts-skill-exec-*` directory is made there, never in the
+    # OS temp directory (the unhandled SIGTERM case cannot remove it; see the tests below)
+    child_tmp = tmp_path / "tmp"
+    child_tmp.mkdir()
+    env = {**os.environ, "TMPDIR": str(child_tmp), "TEMP": str(child_tmp), "TMP": str(child_tmp)}
+    proc = subprocess.Popen([sys.executable, str(script)], stdout=subprocess.PIPE, text=True, env=env)
     try:
         ready_line = proc.stdout.readline()
         assert ready_line.strip() == "READY", f"child didn't start cleanly: {ready_line!r}"
@@ -162,14 +167,22 @@ def _run_child_and_sigterm_it(install_handler: bool, tmp_path) -> bool:
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="signal.SIGTERM semantics tested here are POSIX-specific")
+def _exec_dirs(tmp_path):
+    return sorted(p.name for p in (tmp_path / "tmp").iterdir() if p.name.startswith("artifacts-skill-exec-"))
+
+
 def test_sigterm_without_the_handler_orphans_the_child(tmp_path):
     """Establishes the bug is real before asserting the fix works below."""
     assert _run_child_and_sigterm_it(install_handler=False, tmp_path=tmp_path) is True
+    # killed with no Python exception, so the TemporaryDirectory is left behind too (inside tmp_path)
+    assert len(_exec_dirs(tmp_path)) == 1
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="signal.SIGTERM semantics tested here are POSIX-specific")
 def test_treat_sigterm_as_interrupt_prevents_the_orphan(tmp_path):
     assert _run_child_and_sigterm_it(install_handler=True, tmp_path=tmp_path) is False
+    # and the exec helper's temporary directory is removed on the way out
+    assert _exec_dirs(tmp_path) == []
 
 
 def test_treat_sigterm_as_interrupt_is_safe_to_call_outside_the_main_thread():
