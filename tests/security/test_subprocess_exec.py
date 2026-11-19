@@ -166,11 +166,11 @@ def _run_child_and_sigterm_it(install_handler: bool, tmp_path) -> bool:
         subprocess.run(["pkill", "-9", "-f", "sleep 30"], capture_output=True)
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="signal.SIGTERM semantics tested here are POSIX-specific")
 def _exec_dirs(tmp_path):
     return sorted(p.name for p in (tmp_path / "tmp").iterdir() if p.name.startswith("artifacts-skill-exec-"))
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="signal.SIGTERM semantics tested here are POSIX-specific")
 def test_sigterm_without_the_handler_orphans_the_child(tmp_path):
     """Establishes the bug is real before asserting the fix works below."""
     assert _run_child_and_sigterm_it(install_handler=False, tmp_path=tmp_path) is True
