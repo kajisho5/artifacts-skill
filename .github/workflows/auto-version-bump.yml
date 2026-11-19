@@ -43,6 +43,13 @@ jobs:
         id: bump
         run: python3 scripts/bump_version.py
 
+      # contract/contract.json carries the version, so the release commit has
+      # to carry the regenerated file too (tests/test_contract_file.py checks
+      # it, and every tag's file must be that tag's own contract output).
+      - name: Regenerate the committed contract for the new version
+        if: steps.bump.outputs.bumped == 'true'
+        run: python3 contract/generate.py
+
       # Idempotent: force-pushing a fixed branch name means a later run
       # (more commits landed since this PR opened) recomputes and replaces
       # the pending PR's single commit rather than piling up duplicates -
@@ -65,7 +72,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -B "$branch"
-          git add pyproject.toml package.json src/artifact_skill/__init__.py CHANGELOG.md contract/contract.json
+          git add pyproject.toml package.json src/artifact_skill/__init__.py CHANGELOG.md contract/contract.json contract/contract.json
           git commit -m "chore(release): v$version"
           git push --force origin "$branch"
 
