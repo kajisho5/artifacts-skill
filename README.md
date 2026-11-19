@@ -177,6 +177,12 @@ validation, burn-in) and [qc-skill](https://github.com/kajisho5/qc-skill)
   every schema property has a matching CLI flag and vice versa, so the
   two can't silently drift out of sync even without shared codegen. This
   is this project's own answer to **SPEC** — see below.
+  `contract/contract.json` is the same contract committed as a file (the
+  `contract --json` output as one line with sorted keys, compact
+  separators and a final newline), so any release's contract is
+  `git show vX.Y.Z:contract/contract.json`, with nothing installed or run.
+  Regenerate it with `python contract/generate.py`; a test fails when it
+  is stale, and the version-bump workflow regenerates it with the bump.
 
 ### What is SPEC?
 
