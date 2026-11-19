@@ -9,7 +9,8 @@ running this repository's code.
     python contract/generate.py           # regenerate the file after changing the contract
     python contract/generate.py --check   # exit 1 when the committed file is out of date (CI)
 
-The release workflow regenerates it after the version bump, so every tag's file is that tag's
+The version-bump workflow (.github/workflows/auto-version-bump.yml) regenerates it right
+after the bump, so every tag's file is that tag's
 own contract output.
 """
 import argparse
