@@ -48,6 +48,12 @@ jobs:
       # the pending PR's single commit rather than piling up duplicates -
       # the same "one continuously-updated release PR" pattern release.yml's
       # own idempotency checks are modeled on.
+      # contract/contract.json carries the version: regenerate it after the bump so the release commit (and so the
+      # tag) carries that version's own contract output
+      - name: Regenerate the committed contract file
+        if: steps.bump.outputs.bumped == 'true'
+        run: python3 contract/generate.py
+
       - name: Open or update the pending release PR
         if: steps.bump.outputs.bumped == 'true'
         env:
@@ -59,7 +65,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -B "$branch"
-          git add pyproject.toml package.json src/artifact_skill/__init__.py CHANGELOG.md
+          git add pyproject.toml package.json src/artifact_skill/__init__.py CHANGELOG.md contract/contract.json
           git commit -m "chore(release): v$version"
           git push --force origin "$branch"
 
