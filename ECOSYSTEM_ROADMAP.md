@@ -31,7 +31,7 @@ Wired: the agent's `document.verify` runs `artifacts-skill/verify` and a leftove
   - Done when: written decision
 - [x] **5. (agent side) adapter + SkillSpec document_verify** ([video-production-agent#110](https://github.com/kajisho5/video-production-agent/pull/110))
   - Done when: placeholder left in a doc fails QA
-- [ ] **6. Event documents against their source** — verify generated cue sheets, run-of-show sheets, speaker lists and lower-third CSVs against the organiser's source list: every name, title and affiliation spelled exactly as the source (no variant kanji, no dropped honorific), every session time consistent. Field review 2026-11-05 (Velisa ROADMAP, third round)
+- [x] **6. Event documents against their source** — verify generated cue sheets, run-of-show sheets, speaker lists and lower-third CSVs against the organiser's source list: every name, title and affiliation spelled exactly as the source (no variant kanji, no dropped honorific), every session time consistent. Field review 2026-11-05 (Velisa ROADMAP, third round) ([#81](https://github.com/kajisho5/artifacts-skill/pull/81))
   - なぜ要るか：テロップの氏名・所属の誤字は現場で一番重い事故。生成した一覧を元データと突き合わせて止める
   - Done when: a fixture with one 髙/高 swap and one wrong time gives two findings with their source rows
 - [x] **7. Numbers and terms in generated text** — in a generated summary, narration script or description, every number with a unit, every drug name and every person's name must appear in the source (transcript, slides); anything else is reported as unsupported ([#71](https://github.com/kajisho5/artifacts-skill/pull/71))

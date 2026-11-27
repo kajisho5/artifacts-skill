@@ -190,6 +190,59 @@ text), DOCX (paragraph text), and HTML (body text, explicitly excluding
 it during `inspect()` and surface a `leftover_placeholder_text` check:
 `WARN` by default, `FAIL` under `policy["forbid_placeholder_text"]`.
 
+## Event documents against their source list (ecosystem roadmap step 6)
+
+With `policy["event_source"]` set (the organiser's list: a CSV file with
+a header row, a JSON file holding a list or an object with the list under
+`rows`, `speakers`, `sessions` or `entries`, or the rows themselves),
+`verify`, `receipt` and `execute` add one `event_source_match` check, for
+every format with text, from `event_check.py`. A row has any of `name`,
+`honorific`, `title` (the person's role), `affiliation`, `session`,
+`start` and `end` (HH:MM, or H時M分); column names are matched
+case-insensitively, a few alternatives are accepted (`speaker`,
+`organisation`, `start_time`, `talk_title`, ...), and Japanese headers
+(氏名, 敬称, 役職, 所属, 演題, 開始, 終了, ...) are read as well. A row needs a
+`name` or a `session`.
+
+- **Name.** Must appear exactly as in the source. Whitespace inside a CJK
+  name (山田太郎 / 山田 太郎) and full-width ASCII letters and digits are
+  not differences; nothing else is folded, and in particular not NFKC,
+  which would turn 﨑 into 崎. A name found only with a variant
+  character (髙/高, 﨑/崎, 邊/辺, 齋/斎, 澤/沢, 學/学, ..., and any CJK
+  compatibility ideograph) is `variant_spelling`, with `found` and
+  `differs` (each character that differs); a name not found at all is
+  `missing`. A Latin name inside a longer word does not count, and the
+  space between its parts must be there ("Van Dyke" is not "VanDyke").
+- **Honorific.** When the row has one, it must stand right after (先生,
+  様) or right before (Dr., Prof.) the name, or be the next CSV cell:
+  `honorific_dropped`.
+- **Title, affiliation, session.** Must appear exactly, as a whole value
+  ("教授" is not found in "准教授"), on the name's line or the lines
+  around it (one before, three after, blank lines not counted; in a CSV
+  only the name's own row): `variant_spelling` or `mismatch`. A speaker
+  with two rows is matched to the occurrence next to that row's session.
+- **Times.** The row's `start` and `end` must be on the name's line, the
+  end right after the start (exchanged times do not match); when that
+  line has no time at all, on the lines around it. Other times are a
+  `time_mismatch` with `expected` and `found`; no time anywhere near the
+  entry is `time_missing`.
+- **Finding the entry.** By its name; when `event_fields` leaves the name
+  out and it is not in the document, by its session. An entry found by
+  neither is `entry_not_found`.
+- **Which fields.** `event_fields` (a list drawn from the field names
+  above) limits what the document must carry, for a lower third with no
+  times or a speaker list with no affiliations; by default every field
+  the row has is checked.
+- **Result.** `FAIL` with one finding per difference, each with
+  `source_row` (its number in the source, counted from the first data
+  row, and its fields) and `line` / `line_text` in the document; `UNKNOWN`
+  when the source cannot be read or the document has no text; otherwise
+  `PASS`. The document is never changed.
+- **What it does not know.** A variant pair not in the list and
+  not a compatibility ideograph is reported as `missing`, not as a
+  variant; it does not find entries in the document that have no source
+  row.
+
 ## Generated text against its source (ecosystem roadmap step 7)
 
 A summary, narration script or description written from a transcript or

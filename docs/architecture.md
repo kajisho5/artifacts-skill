@@ -381,6 +381,49 @@ no caption capability, that `not_provided` names subtitle-skill and
 qc-skill, and that `.srt`/`.vtt`/`.ass` files are detected as `unknown`
 and rejected with `ARTIFACT_TYPE_UNSUPPORTED`.
 
+## Event documents against their source (ecosystem roadmap step 6)
+
+**Context.** A conference's cue sheets, run-of-show sheets, speaker lists
+and lower-third CSVs are generated from the organiser's list of speakers
+and sessions. A name or affiliation spelled with the wrong variant of a
+character (髙/高, 﨑/崎), a dropped honorific or a session time that
+drifted between the list and the sheet is the error that hurts most on
+the day, and it is easy to miss by eye: the variants look alike.
+
+**Decision.** A third format-independent text check, `event_source_match`
+(`event_check.py`), switched on by the policy key `event_source` (the
+source list: a CSV or JSON file, or the rows) and narrowed by
+`event_fields`. For each source row it looks for the name (or, without
+one, the session title) in the document exactly as the source writes it,
+folding only whitespace inside CJK names and full-width ASCII; when the
+exact spelling is absent it looks again allowing known variant characters
+and the CJK compatibility ideographs, and reports a hit there as
+`variant_spelling` with the characters that differ. Around each
+occurrence it then checks the honorific, title, affiliation and session,
+and the start and end times on the same line. Every finding carries the
+source row and the document line. A CSV document is read row by row so
+that a row's cells stay on one line. It runs through
+`text_checks.py::verify_structural_with_text_checks()`, at the same call
+sites as steps 7 and 8.
+
+**Alternatives considered.** NFKC folding, as the other text checks use,
+was rejected for this check: it maps 﨑 to 崎 and would hide exactly the
+difference it is for. Fuzzy matching (edit distance) was rejected: a
+one-character difference between two short Japanese names is often two
+different people, so the check would either miss swaps or report
+neighbours; a list of variant pairs gives findings a reviewer can read.
+Parsing tables into rows for every format was left out: the line and its
+neighbours cover CSV, Markdown and plain lists, and a DOCX table's cells
+fall inside the window.
+
+**Consequences.** A caller that passes `event_source` gets one more check;
+a caller that does not sees no change, and the contract does not change.
+A variant pair not in the list is reported as `missing` rather than as a
+variant; an entry in the document with no source row is not checked.
+Tests: `tests/unit/test_event_check.py` (including the run-of-show with
+one 髙/高 swap and one wrong time, `tests/fixtures/event/`, which gives
+two findings with their source rows) and three benchmark cases.
+
 ## Numbers and terms in generated text (ecosystem roadmap step 7)
 
 **Context.** A medical summary or a narration script written by a model

@@ -190,6 +190,22 @@ they are. The `credits_attribution` check fails for each asset whose
 required attribution is missing or not worded as its record asks, naming
 the asset. Nothing is written into the document for you.
 
+**Check a cue sheet, run-of-show, speaker list or lower-third CSV against
+the organiser's source list.** Add `"event_source": "speakers.csv"` (a CSV
+with a header row, a JSON file, or the rows themselves: `name`,
+`honorific`, `title`, `affiliation`, `session`, `start`, `end`). The
+`event_source_match` check fails for every name, title or affiliation not
+spelled exactly as the source spells it (a variant character such as
+髙/高 or 﨑/崎 is reported with the character that differs), every
+dropped honorific and every session time that differs, each with its
+source row and the document line. Add `"event_fields": ["name", "title"]`
+when the document carries only some of the fields (a lower third with no
+times). Nothing is changed in the document.
+
+```bash
+artifacts-skill verify run_of_show.csv --json --policy '{"event_source": "speakers.csv"}'
+```
+
 ## Quick reference
 
 The most common task is verifying a document you (or another tool) already
