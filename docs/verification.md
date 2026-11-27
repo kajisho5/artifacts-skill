@@ -211,17 +211,24 @@ case-insensitively, a few alternatives are accepted (`speaker`,
   character (髙/高, 﨑/崎, 邊/辺, 齋/斎, 澤/沢, 學/学, ..., and any CJK
   compatibility ideograph) is `variant_spelling`, with `found` and
   `differs` (each character that differs); a name not found at all is
-  `missing`. A Latin name inside a longer word does not count.
+  `missing`. A Latin name inside a longer word does not count, and the
+  space between its parts must be there ("Van Dyke" is not "VanDyke").
 - **Honorific.** When the row has one, it must stand right after (先生,
-  様) or right before (Dr., Prof.) the name: `honorific_dropped`.
-- **Title, affiliation, session.** Must appear exactly on the name's line
-  or the lines around it (one before, three after, blank lines not
-  counted): `variant_spelling` or `mismatch`. A speaker with two rows is
-  matched to the occurrence next to that row's session.
-- **Times.** The row's `start` and `end` must be on the name's line; when
-  that line has no time at all, on the lines around it. Other times are
-  a `time_mismatch` with `expected` and `found`. An entry with no time
-  anywhere near it is not checked for time.
+  様) or right before (Dr., Prof.) the name, or be the next CSV cell:
+  `honorific_dropped`.
+- **Title, affiliation, session.** Must appear exactly, as a whole value
+  ("教授" is not found in "准教授"), on the name's line or the lines
+  around it (one before, three after, blank lines not counted; in a CSV
+  only the name's own row): `variant_spelling` or `mismatch`. A speaker
+  with two rows is matched to the occurrence next to that row's session.
+- **Times.** The row's `start` and `end` must be on the name's line, the
+  end right after the start (exchanged times do not match); when that
+  line has no time at all, on the lines around it. Other times are a
+  `time_mismatch` with `expected` and `found`; no time anywhere near the
+  entry is `time_missing`.
+- **Finding the entry.** By its name; when `event_fields` leaves the name
+  out and it is not in the document, by its session. An entry found by
+  neither is `entry_not_found`.
 - **Which fields.** `event_fields` (a list drawn from the field names
   above) limits what the document must carry, for a lower third with no
   times or a speaker list with no affiliations; by default every field
@@ -231,8 +238,7 @@ case-insensitively, a few alternatives are accepted (`speaker`,
   row, and its fields) and `line` / `line_text` in the document; `UNKNOWN`
   when the source cannot be read or the document has no text; otherwise
   `PASS`. The document is never changed.
-- **What it does not know.** A title that is part of a longer one ("教授"
-  inside "准教授") counts as found; a variant pair not in the list and
+- **What it does not know.** A variant pair not in the list and
   not a compatibility ideograph is reported as `missing`, not as a
   variant; it does not find entries in the document that have no source
   row.

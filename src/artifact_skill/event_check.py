@@ -135,28 +135,36 @@ def _char_class(ch: str, variants: bool) -> str:
     return "(?:" + "|".join(re.escape(a) for a in sorted(alts)) + ")"
 
 
-def _pattern(value: str, variants: bool = False) -> re.Pattern[str]:
-    """`value` as a regex: whitespace in it matches any whitespace, a CJK
-    character may be followed by whitespace (山田太郎 == 山田 太郎), and a
-    letter or digit right before or after does not count as a match."""
+def _pattern(value: str, variants: bool = False, whole: bool = False) -> re.Pattern[str]:
+    """`value` as a regex. Whitespace between two Latin letters or digits
+    matches any whitespace but must be there ("Van Dyke" is not "VanDyke");
+    next to a CJK character it may be there or not (山田太郎 == 山田 太郎). A
+    letter or digit right before or after a Latin end does not count as a
+    match; with `whole` (titles, affiliations, sessions) no letter, digit or
+    CJK character may stand right before or after it either, so "教授" is
+    not found in "准教授"."""
     chars = list(_fold(value).strip())
     parts: list[str] = []
-    prev_space = False
     for i, ch in enumerate(chars):
         if ch.isspace():
-            if not prev_space:
-                parts.append(r"\s*")
-            prev_space = True
+            if i > 0 and chars[i - 1].isspace():
+                continue
+            prev = chars[i - 1] if i > 0 else ""
+            nxt = next((c for c in chars[i + 1:] if not c.isspace()), "")
+            parts.append(r"\s*" if _is_cjk(prev) or _is_cjk(nxt) else r"\s+")
             continue
-        prev_space = False
         parts.append(_char_class(ch, variants))
         nxt = chars[i + 1] if i + 1 < len(chars) else ""
         if nxt and not nxt.isspace() and (_is_cjk(ch) or _is_cjk(nxt)):
             parts.append(r"\s*")
     body = "".join(parts)
     first, last = chars[0], chars[-1]
-    before = r"(?<![^\W_])" if first.isalnum() and not _is_cjk(first) else ""
-    after = r"(?![^\W_])" if last.isalnum() and not _is_cjk(last) else ""
+    if whole:
+        before = r"(?<![^\W_])" if first.isalnum() else ""
+        after = r"(?![^\W_])" if last.isalnum() else ""
+    else:
+        before = r"(?<![^\W_])" if first.isalnum() and not _is_cjk(first) else ""
+        after = r"(?![^\W_])" if last.isalnum() and not _is_cjk(last) else ""
     return re.compile(before + body + after)
 
 
@@ -288,12 +296,14 @@ def load_source(value: Any) -> list[dict[str, str]]:
 # ---- the document ----------------------------------------------------------
 
 
-def document_lines(adapter: ArtifactAdapter, ref: ArtifactRef) -> list[tuple[int, str]] | None:
+def document_lines(adapter: ArtifactAdapter, ref: ArtifactRef) -> tuple[list[tuple[int, str]], bool] | None:
     """The document's non-blank lines, each with its 1-based line number.
     A CSV's InspectionReport text has one cell per line; here each CSV row
     is one line, its cells joined by " | ", so a row's name and time stay
     on the same line. Blank lines are left out so that "the lines around
-    the name" means the neighbouring entries' text, not empty lines."""
+    the name" means the neighbouring entries' text, not empty lines. The
+    flag is True when each line is one whole entry (a CSV row), so nothing
+    is looked for on the lines around it."""
     from artifact_skill.core.artifact import ArtifactType
 
     raw: list[str]
@@ -305,12 +315,13 @@ def document_lines(adapter: ArtifactAdapter, ref: ArtifactRef) -> list[tuple[int
         except (UnicodeDecodeError, OSError, csv.Error):
             return None
         raw = [" | ".join(cell.strip() for cell in row) for row in rows]
+        return [(n, line) for n, line in enumerate(raw, start=1) if line.strip()], True
     else:
         text = adapter.inspect(ref).text
         if text is None:
             return None
         raw = text.splitlines()
-    return [(n, line) for n, line in enumerate(raw, start=1) if line.strip()]
+    return [(n, line) for n, line in enumerate(raw, start=1) if line.strip()], False
 
 
 def _find(pattern: re.Pattern[str], lines: list[str], indices: range | list[int] | None = None
@@ -323,7 +334,9 @@ def _find(pattern: re.Pattern[str], lines: list[str], indices: range | list[int]
     return out
 
 
-def _window(i: int, n: int) -> list[int]:
+def _window(i: int, n: int, row_per_line: bool = False) -> list[int]:
+    if row_per_line:
+        return [i]
     return list(range(max(0, i - _WINDOW_BEFORE), min(n, i + _WINDOW_AFTER + 1)))
 
 
@@ -333,14 +346,32 @@ def _has_honorific(line: str, matched: str, honorific: str) -> bool:
     pos = folded.find(matched)
     if pos < 0:
         return False
-    after = folded[pos + len(matched):].lstrip()
-    before = folded[:pos].rstrip()
+    # a CSV row's cells are joined by " | ": the honorific may be the
+    # next (or previous) cell, but no further
+    after = re.sub(r"^\s*(?:\|\s*)?", "", folded[pos + len(matched):])
+    before = re.sub(r"(?:\s*\|)?\s*$", "", folded[:pos])
     return after.startswith(hon) or before.endswith(hon)
 
 
-def _row_findings(row_no: int, row: dict[str, str], fields: set[str], numbered: list[tuple[int, str]]
-                  ) -> list[dict[str, Any]]:
+def _times_match(times: list[str], start: str | None, end: str | None) -> bool:
+    """`start` and `end` among `times` in their roles: the end right after
+    the start (a "09:30 | 10:20" row, a "09:30-10:20" range), so exchanged
+    times do not match."""
+    if start is None:
+        return end in times
+    for j, t in enumerate(times):
+        if t == start and (end is None or (j + 1 < len(times) and times[j + 1] == end)):
+            return True
+    return False
+
+
+def _row_findings(row_no: int, row: dict[str, str], fields: set[str], numbered: list[tuple[int, str]],
+                  row_per_line: bool = False) -> list[dict[str, Any]]:
     lines = [text for _, text in numbered]
+
+    def window(i: int) -> list[int]:
+        return _window(i, len(lines), row_per_line)
+
     findings: list[dict[str, Any]] = []
     source = {"row": row_no, **row}
 
@@ -355,10 +386,20 @@ def _row_findings(row_no: int, row: dict[str, str], fields: set[str], numbered: 
 
     anchor_field = "name" if "name" in row else "session"
     anchor = row[anchor_field]
-    exact = _find(_pattern(anchor), lines)
+    exact = _find(_pattern(anchor, whole=anchor_field != "name"), lines)
+    if not exact and anchor_field not in fields and anchor_field == "name" and "session" in row:
+        # the name is not one of the fields to check: find the entry by its
+        # session instead
+        anchor_field, anchor = "session", row["session"]
+        exact = _find(_pattern(anchor, whole=True), lines)
     anchors = [i for i, _ in exact]
     matched_text = dict(exact)
-    if not exact and anchor_field in fields:
+    if not exact and anchor_field not in fields:
+        finding("entry_not_found", anchor_field,
+                f"The entry could not be found in the document by its {anchor_field}, so its other fields could "
+                "not be checked.")
+        return findings
+    if not exact:
         variant = _find(_pattern(anchor, variants=True), lines)
         if variant:
             i, found = variant[0]
@@ -376,8 +417,8 @@ def _row_findings(row_no: int, row: dict[str, str], fields: set[str], numbered: 
     # When the source row has a session too, prefer the occurrences of the
     # name that sit next to that session (a speaker with two talks).
     if anchor_field == "name" and "session" in row:
-        session_pat = _pattern(row["session"])
-        near = [i for i in anchors if _find(session_pat, lines, _window(i, len(lines)))]
+        session_pat = _pattern(row["session"], whole=True)
+        near = [i for i in anchors if _find(session_pat, lines, window(i))]
         if near:
             anchors = near
 
@@ -389,11 +430,11 @@ def _row_findings(row_no: int, row: dict[str, str], fields: set[str], numbered: 
     for field in ("title", "affiliation", "session"):
         if field == anchor_field or field not in row or field not in fields:
             continue
-        pat = _pattern(row[field])
-        if any(_find(pat, lines, _window(i, len(lines))) for i in anchors):
+        pat = _pattern(row[field], whole=True)
+        if any(_find(pat, lines, window(i)) for i in anchors):
             continue
-        variant_pat = _pattern(row[field], variants=True)
-        hit = next((h for i in anchors for h in _find(variant_pat, lines, _window(i, len(lines)))), None)
+        variant_pat = _pattern(row[field], variants=True, whole=True)
+        hit = next((h for i in anchors for h in _find(variant_pat, lines, window(i))), None)
         if hit is not None:
             finding("variant_spelling", field, "Found only with a different character from the source's spelling.",
                     hit[0], found=hit[1], differs=_differing_chars(row[field], hit[1]))
@@ -410,15 +451,21 @@ def _row_findings(row_no: int, row: dict[str, str], fields: set[str], numbered: 
             if on_line:
                 candidates.append((i, on_line))
             else:
-                around = [t for j in _window(i, len(lines)) for t in _times_in(lines[j])]
+                around = [t for j in window(i) for t in _times_in(lines[j])]
                 if around:
                     candidates.append((i, around))
-        if candidates and not any(all(t in times for _, t in expected_times) for _, times in candidates):
+        want = dict(expected_times)
+        if not candidates:
+            finding("time_missing", expected_times[0][0],
+                    "The source list gives a time for this entry, but the document gives none near it.", anchors[0],
+                    expected=want)
+        elif not any(_times_match(times, want.get("start"), want.get("end")) for _, times in candidates):
             i, times = candidates[0]
-            wrong = [f for f, t in expected_times if t not in times]
-            finding("time_mismatch", wrong[0],
+            # the first time given for the entry is its start
+            wrong = "start" if "start" in want and times[0] != want["start"] else ("end" if "end" in want else "start")
+            finding("time_mismatch", wrong,
                     "The document gives a different time for this entry than the source list.", i,
-                    expected=dict(expected_times), found=times)
+                    expected=want, found=times)
     return findings
 
 
@@ -434,16 +481,16 @@ def event_check(adapter: ArtifactAdapter, ref: ArtifactRef, policy: dict[str, An
         return Check(id=CHECK_ID, name=CHECK_NAME, status=CheckStatus.UNKNOWN,
                      message=f"The event source list could not be read: {exc}", evidence={})
     try:
-        lines = document_lines(adapter, ref)
+        doc = document_lines(adapter, ref)
     except ArtifactError as exc:
         return Check(id=CHECK_ID, name=CHECK_NAME, status=CheckStatus.UNKNOWN,
                      message=f"Could not read the document's text: {exc}", evidence={"rows": len(rows)})
-    if not lines:
+    if doc is None or not doc[0]:
         return Check(id=CHECK_ID, name=CHECK_NAME, status=CheckStatus.UNKNOWN,
                      message="The document has no readable text, so it could not be compared with the source list.",
                      evidence={"rows": len(rows)})
 
-    findings = [f for n, row in enumerate(rows, start=1) for f in _row_findings(n, row, fields, lines)]
+    findings = [f for n, row in enumerate(rows, start=1) for f in _row_findings(n, row, fields, doc[0], doc[1])]
     evidence = {"rows": len(rows), "findings": findings}
     if findings:
         listed = "; ".join(

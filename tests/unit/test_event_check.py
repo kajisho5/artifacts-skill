@@ -155,10 +155,27 @@ def test_a_variant_character_in_the_affiliation_is_reported(tmp_path):
 
 
 def test_a_different_title_is_a_mismatch(tmp_path):
+    # "教授" is inside "准教授": a whole value is compared, not a substring.
     doc = _csv(tmp_path, "09:30,10:20,基調講演,髙橋 一郎 先生,准教授,東京医科大学 循環器内科")
-    # "教授" is inside "准教授", so look for a title that is simply absent.
-    check = _check(doc, {"event_source": [{**ROW_1, "title": "名誉教授"}]})
-    assert _kinds(check) == [("mismatch", "title", 1)]
+    assert _kinds(_check(doc, {"event_source": [ROW_1]})) == [("mismatch", "title", 1)]
+
+
+def test_titles_exchanged_between_adjacent_csv_rows_are_found(tmp_path):
+    doc = _csv(tmp_path, "09:00,09:30,Talk A,Ana Ruiz,Lecturer,Uni A", "09:30,10:00,Talk B,Bo Chen,Professor,Uni B")
+    rows = [{"name": "Ana Ruiz", "title": "Professor"}, {"name": "Bo Chen", "title": "Lecturer"}]
+    assert _kinds(_check(doc, {"event_source": rows})) == [("mismatch", "title", 1), ("mismatch", "title", 2)]
+
+
+def test_an_honorific_in_the_next_csv_cell_counts(tmp_path):
+    doc = tmp_path / "lt.csv"
+    doc.write_text("name,honorific,title\nAna Ruiz,Dr.,Lecturer\nBo Chen,,Lecturer\n", encoding="utf-8")
+    rows = [{"name": "Ana Ruiz", "honorific": "Dr."}, {"name": "Bo Chen", "honorific": "Dr."}]
+    assert _kinds(_check(doc, {"event_source": rows})) == [("honorific_dropped", "honorific", 2)]
+
+
+def test_latin_name_parts_need_their_space(tmp_path):
+    doc = _csv(tmp_path, "10:30,11:00,x,VanDyke,,")
+    assert _kinds(_check(doc, {"event_source": [{"name": "Van Dyke"}]})) == [("missing", "name", 1)]
 
 
 def test_event_fields_limits_what_the_document_must_carry(tmp_path):
@@ -177,6 +194,29 @@ def test_a_wrong_end_time_is_reported(tmp_path):
     doc = _csv(tmp_path, "09:30,10:25,基調講演,髙橋 一郎 先生,教授,東京医科大学 循環器内科")
     check = _check(doc, {"event_source": [ROW_1]})
     assert _kinds(check) == [("time_mismatch", "end", 1)]
+
+
+def test_exchanged_start_and_end_are_found(tmp_path):
+    doc = _csv(tmp_path, "10:20,09:30,基調講演,髙橋 一郎 先生,教授,東京医科大学 循環器内科")
+    assert _kinds(_check(doc, {"event_source": [ROW_1]})) == [("time_mismatch", "start", 1)]
+
+
+def test_an_entry_with_no_time_near_it_is_reported(tmp_path):
+    doc = tmp_path / "list.md"
+    doc.write_text("# Speakers\n\n- Ana Ruiz, Senior Lecturer\n", encoding="utf-8")
+    row = {"name": "Ana Ruiz", "title": "Senior Lecturer", "start": "10:30"}
+    assert _kinds(_check(doc, {"event_source": [row]})) == [("time_missing", "start", 1)]
+    assert _check(doc, {"event_source": [row], "event_fields": ["name", "title"]}).status == CheckStatus.PASS
+
+
+def test_without_the_name_the_entry_is_found_by_its_session(tmp_path):
+    doc = _csv(tmp_path, "10:00,10:30,Panel,,,")
+    row = {"name": "Ana Ruiz", "session": "Panel", "start": "09:30"}
+    check = _check(doc, {"event_source": [row], "event_fields": ["session", "start"]})
+    assert _kinds(check) == [("time_mismatch", "start", 1)]
+    nowhere = _csv(tmp_path, "10:00,10:30,Workshop,,,")
+    assert _kinds(_check(nowhere, {"event_source": [row], "event_fields": ["start"]})) == [
+        ("entry_not_found", "session", 1)]
 
 
 def test_a_speaker_with_two_sessions_is_checked_per_session(tmp_path):
