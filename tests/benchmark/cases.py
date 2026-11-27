@@ -59,6 +59,7 @@ FIXTURES_ROOT = "tests/fixtures"
 # Absolute, so the grounding cases do not depend on the working directory.
 _GROUNDING_SOURCE = str(Path(__file__).resolve().parent.parent / "fixtures" / "grounding" / "transcript.txt")
 _LICENCE_RECORDS = str(Path(__file__).resolve().parent.parent / "fixtures" / "credits" / "licences.json")
+_EVENT_SOURCE = str(Path(__file__).resolve().parent.parent / "fixtures" / "event" / "source.csv")
 
 
 @dataclass(frozen=True)
@@ -255,6 +256,11 @@ STRUCTURAL_DEFECT_CASES: list[StructuralDefectCase] = [
         "One CC BY sound effect is not credited; credits_attribution.",
         policy={"licence_records": _LICENCE_RECORDS},
     ),
+    StructuralDefectCase(
+        "event/run_of_show_two_errors.csv", CheckStatus.FAIL,
+        "One 髙/高 swap and one wrong session time against the source list; event_source_match.",
+        policy={"event_source": _EVENT_SOURCE},
+    ),
 ]
 
 EXCEPTION_CASES: list[ExceptionCase] = [
@@ -338,6 +344,17 @@ KNOWN_GOOD_CASES: list[KnownGoodCase] = [
         "credits/end_roll_complete.md", CheckStatus.PASS,
         "Every attribution the assets' licences ask for is in the end roll; credits_attribution.",
         policy={"licence_records": _LICENCE_RECORDS},
+    ),
+    KnownGoodCase("event/source.csv", CheckStatus.PASS, "The organiser's source list the event cases check against is a clean CSV."),
+    KnownGoodCase(
+        "event/run_of_show_ok.csv", CheckStatus.PASS,
+        "Every name, title, affiliation and time matches the source list; event_source_match.",
+        policy={"event_source": _EVENT_SOURCE},
+    ),
+    KnownGoodCase(
+        "event/speaker_list_ok.md", CheckStatus.PASS,
+        "A Markdown speaker list that matches the source list; event_source_match.",
+        policy={"event_source": _EVENT_SOURCE},
     ),
 ]
 
