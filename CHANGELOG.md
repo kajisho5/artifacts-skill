@@ -5,6 +5,11 @@ version section per release. Each entry here is also the source for the
 release announcement text — when this file gets a new version section,
 the announcement text is that section, verbatim or lightly trimmed.
 
+## v0.5.0
+
+### Added
+- check event documents against the organiser's source list (roadmap step 6) (#81)
+
 ## v0.4.0
 
 ### Documentation
